@@ -91,10 +91,11 @@ const createAdmin = async (admin) => {
             role,
             id_document,
             id_document_public_id,
+            id_document_resource_type,
             must_change_password
         )
         VALUES
-        (?,?,?,?,?,?,?,?)
+        (?,?,?,?,?,?,?,?,?)
         `,
         [
             admin.name,
@@ -104,6 +105,7 @@ const createAdmin = async (admin) => {
             admin.role,
             admin.id_document,
             admin.id_document_public_id,
+            admin.id_document_resource_type,
             admin.must_change_password
         ]
     );
@@ -377,6 +379,162 @@ const updatePermissions = async (adminId, permissions) => {
 
 };
 
+const getAdminById = async (adminId) => {
+
+    const [rows] = await db.execute(
+        `
+        SELECT
+
+            a.id,
+            a.name,
+            a.email,
+            a.phone,
+            a.role,
+            a.id_document,
+            a.id_document_public_id,
+            a.id_document_resource_type,
+            a.is_active,
+            a.must_change_password,
+            a.created_at,
+
+            ap.module_name,
+            ap.can_view,
+            ap.can_add,
+            ap.can_edit,
+            ap.can_delete
+
+        FROM admins a
+
+        LEFT JOIN admin_permissions ap
+        ON a.id = ap.admin_id
+
+        WHERE
+            a.id=?
+        AND
+            a.role='admin'
+        `,
+        [adminId]
+    );
+
+    if (!rows.length) {
+
+        return null;
+
+    }
+
+    const admin = {
+
+        id: rows[0].id,
+
+        name: rows[0].name,
+
+        email: rows[0].email,
+
+        phone: rows[0].phone,
+
+        role: rows[0].role,
+
+        id_document: rows[0].id_document,
+
+        id_document_public_id: rows[0].id_document_public_id,
+
+        id_document_resource_type: rows[0].id_document_resource_type,
+
+        is_active: Boolean(rows[0].is_active),
+
+        must_change_password: Boolean(rows[0].must_change_password),
+
+        created_at: rows[0].created_at,
+
+        permissions: {}
+
+    };
+
+    rows.forEach(row => {
+
+        if (row.module_name) {
+
+            admin.permissions[row.module_name] = {
+
+                view: Boolean(row.can_view),
+
+                add: Boolean(row.can_add),
+
+                edit: Boolean(row.can_edit),
+
+                delete: Boolean(row.can_delete)
+
+            };
+
+        }
+
+    });
+
+    return admin;
+
+};
+
+const updateAdmin = async (admin) => {
+
+    await db.execute(
+        `
+        UPDATE admins
+
+        SET
+
+            name=?,
+
+            email=?,
+
+            phone=?,
+
+            id_document=?,
+
+            id_document_public_id=? ,
+
+            id_document_resource_type=?
+
+        WHERE id=?
+        `,
+        [
+
+            admin.name,
+
+            admin.email,
+
+            admin.phone,
+
+            admin.id_document,
+
+            admin.id_document_public_id,
+
+            admin.id_document_resource_type,
+
+            admin.id
+
+        ]
+    );
+
+};
+
+const deleteAdmin = async (id) => {
+
+    await db.execute(
+
+        `
+        DELETE FROM admins
+
+        WHERE id=?
+
+        AND role='admin'
+        `,
+
+        [id]
+
+    );
+
+};
+
 module.exports = {
     findByEmail,
     updateOTP,
@@ -389,5 +547,8 @@ module.exports = {
     createDefaultPermissions,
     getAllAdmins,
     findById,
-    updatePermissions
+    updatePermissions,
+    getAdminById,
+    updateAdmin,
+    deleteAdmin
 };

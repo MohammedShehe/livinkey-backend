@@ -30,6 +30,25 @@ const uploadFile = (file, folder) => {
 
 };
 
+const deleteFile = async (publicId, resourceType) => {
+
+    if (!publicId) {
+        return;
+    }
+
+    await cloudinary.uploader.destroy(
+        publicId,
+        {
+            resource_type: resourceType || "image"
+        }
+    );
+
+};
+
 module.exports = {
-    uploadFile
+
+    uploadFile,
+
+    deleteFile
+
 };

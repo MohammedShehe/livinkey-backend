@@ -32,4 +32,25 @@ router.put(
     adminController.updatePermissions
 );
 
+router.get(
+    "/:id",
+    authMiddleware,
+    roleMiddleware("super_admin"),
+    adminController.getAdmin
+);
+
+router.put(
+    "/:id",
+    authMiddleware,
+    roleMiddleware("super_admin"),
+    upload.single("id_document"),
+    adminController.updateAdmin
+);
+
+router.delete(
+    "/:id",
+    authMiddleware,
+    roleMiddleware("super_admin"),
+    adminController.deleteAdmin
+);
 module.exports = router;
