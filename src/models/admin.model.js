@@ -13,9 +13,14 @@ const findByEmail = async (email) => {
 const updateOTP = async (id, otp, otpExpiry) => {
 
     await db.execute(
-        `UPDATE admins
-        SET otp=?, otp_expiry=?
-        WHERE id=?`,
+        `
+        UPDATE admins
+        SET
+            otp=?,
+            otp_expiry=?,
+            otp_sent_at=NOW()
+        WHERE id=?
+        `,
         [otp, otpExpiry, id]
     );
 

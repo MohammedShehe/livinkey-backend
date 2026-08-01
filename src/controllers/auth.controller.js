@@ -156,3 +156,90 @@ exports.verifyOTP = async (req, res) => {
     }
 
 };
+
+exports.resendOTP = async (req, res) => {
+
+    try {
+
+        const { email } = req.body;
+
+        if (!email) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Email is required."
+            });
+
+        }
+
+        const admin = await Admin.findByEmail(email);
+
+        if (!admin) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Admin not found."
+            });
+
+        }
+
+        if (admin.otp_sent_at) {
+
+            const lastSent = new Date(admin.otp_sent_at);
+
+            const diff = (Date.now() - lastSent.getTime()) / 1000;
+
+            if (diff < 60) {
+
+                return res.status(429).json({
+
+                    success: false,
+
+                    message: `Please wait ${Math.ceil(60 - diff)} seconds before requesting another OTP.`
+
+                });
+
+            }
+
+        }
+
+        const otp = generateOTP();
+
+        const hashedOTP = await hashOTP(otp);
+
+        const expiry = new Date(Date.now() + 5 * 60 * 1000);
+
+        await Admin.updateOTP(
+            admin.id,
+            hashedOTP,
+            expiry
+        );
+
+        await sendOTPEmail(
+            admin.email,
+            otp
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "New OTP sent successfully."
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Internal Server Error"
+
+        });
+
+    }
+
+};
