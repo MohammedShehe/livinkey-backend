@@ -38,8 +38,51 @@ const clearOTP = async (id) => {
 
 };
 
+const findByResetToken = async (token) => {
+
+    const [rows] = await db.execute(
+        `SELECT * FROM admins
+        WHERE reset_token=?
+        LIMIT 1`,
+        [token]
+    );
+
+    return rows[0];
+
+};
+
+const saveResetToken = async (id, token, expiry) => {
+
+    await db.execute(
+        `UPDATE admins
+        SET
+            reset_token=?,
+            reset_token_expiry=?
+        WHERE id=?`,
+        [token, expiry, id]
+    );
+
+};
+
+const updatePassword = async (id, password) => {
+
+    await db.execute(
+        `UPDATE admins
+        SET
+            password=?,
+            reset_token=NULL,
+            reset_token_expiry=NULL
+        WHERE id=?`,
+        [password, id]
+    );
+
+};
+
 module.exports = {
     findByEmail,
     updateOTP,
-    clearOTP
+    clearOTP,
+    findByResetToken,
+    saveResetToken,
+    updatePassword
 };

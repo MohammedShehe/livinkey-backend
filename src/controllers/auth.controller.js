@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const Admin = require("../models/admin.model");
 
@@ -8,7 +9,8 @@ const {
     generateOTP,
     hashOTP,
     compareOTP,
-    sendOTPEmail
+    sendOTPEmail,
+    generateAndSendOTP
 } = require("../services/otp.service");
 
 const {
@@ -49,11 +51,8 @@ exports.login = async (req, res) => {
             );
         }
 
-        const otp = generateOTP();
-
-        const hashedOTP = await hashOTP(otp);
-
-        const expiry = new Date(Date.now() + 5 * 60 * 1000);
+        // Use the shared OTP generation function
+        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Login");
 
         await Admin.updateOTP(
             admin.id,
@@ -77,10 +76,16 @@ exports.login = async (req, res) => {
 
         console.log(error);
 
+        // Handle rate limiting error
+        if (error.status === 429) {
+            return res.status(429).json(
+                new ApiResponse(false, error.message)
+            );
+        }
+
         return res.status(500).json(
             new ApiResponse(false, "Internal server error.")
         );
-
     }
 
 };
@@ -183,31 +188,8 @@ exports.resendOTP = async (req, res) => {
 
         }
 
-        if (admin.otp_sent_at) {
-
-            const lastSent = new Date(admin.otp_sent_at);
-
-            const diff = (Date.now() - lastSent.getTime()) / 1000;
-
-            if (diff < 60) {
-
-                return res.status(429).json({
-
-                    success: false,
-
-                    message: `Please wait ${Math.ceil(60 - diff)} seconds before requesting another OTP.`
-
-                });
-
-            }
-
-        }
-
-        const otp = generateOTP();
-
-        const hashedOTP = await hashOTP(otp);
-
-        const expiry = new Date(Date.now() + 5 * 60 * 1000);
+        // Use the shared OTP generation function
+        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Resend");
 
         await Admin.updateOTP(
             admin.id,
@@ -232,11 +214,253 @@ exports.resendOTP = async (req, res) => {
 
         console.log(error);
 
+        // Handle rate limiting error
+        if (error.status === 429) {
+            return res.status(429).json({
+                success: false,
+                message: error.message
+            });
+        }
+
         return res.status(500).json({
 
             success: false,
 
             message: "Internal Server Error"
+
+        });
+
+    }
+
+};
+
+exports.forgotPassword = async (req, res) => {
+
+    try {
+
+        const { email } = req.body;
+
+        const admin = await Admin.findByEmail(email);
+
+        if (!admin) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Email not found."
+            });
+
+        }
+
+        // Use the shared OTP generation function
+        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Forgot Password");
+
+        await Admin.updateOTP(
+            admin.id,
+            hashedOTP,
+            expiry
+        );
+
+        await sendOTPEmail(
+            admin.email,
+            otp
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "OTP sent successfully."
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        // Handle rate limiting error
+        if (error.status === 429) {
+            return res.status(429).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Internal server error."
+
+        });
+
+    }
+
+};
+
+exports.resendForgotPasswordOTP = exports.forgotPassword;
+
+exports.verifyForgotPasswordOTP = async (req, res) => {
+
+    try {
+
+        const { email, otp } = req.body;
+
+        const admin = await Admin.findByEmail(email);
+
+        if (!admin) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Admin not found."
+            });
+
+        }
+
+        if (!admin.otp) {
+
+            return res.status(400).json({
+                success: false,
+                message: "OTP not found."
+            });
+
+        }
+
+        if (new Date() > new Date(admin.otp_expiry)) {
+
+            return res.status(400).json({
+                success: false,
+                message: "OTP expired."
+            });
+
+        }
+
+        const valid = await compareOTP(
+            otp.toString(),
+            admin.otp
+        );
+
+        if (!valid) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP."
+            });
+
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("hex");
+
+        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+        await Admin.saveResetToken(
+            admin.id,
+            resetToken,
+            expiry
+        );
+
+        await Admin.clearOTP(admin.id);
+
+        return res.json({
+
+            success: true,
+
+            message: "OTP verified.",
+
+            resetToken
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Internal server error."
+
+        });
+
+    }
+
+};
+
+exports.resetPassword = async (req, res) => {
+
+    try {
+
+        const {
+            resetToken,
+            password,
+            confirmPassword
+        } = req.body;
+
+        if (password !== confirmPassword) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Passwords do not match."
+
+            });
+
+        }
+
+        const admin = await Admin.findByResetToken(resetToken);
+
+        if (!admin) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Invalid reset token."
+
+            });
+
+        }
+
+        if (new Date() > new Date(admin.reset_token_expiry)) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Reset token expired."
+
+            });
+
+        }
+
+        const hashedPassword = await bcrypt.hash(
+            password,
+            12
+        );
+
+        await Admin.updatePassword(
+            admin.id,
+            hashedPassword
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "Password changed successfully."
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Internal server error."
 
         });
 
