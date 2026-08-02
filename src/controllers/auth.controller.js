@@ -6,11 +6,8 @@ const Admin = require("../models/admin.model");
 const ApiResponse = require("../utils/ApiResponse");
 
 const {
-    generateOTP,
-    hashOTP,
-    compareOTP,
-    sendOTPEmail,
-    generateAndSendOTP
+    generateAndSendOTP,
+    compareOTP  // <-- ADD THIS IMPORT
 } = require("../services/otp.service");
 
 const {
@@ -58,11 +55,6 @@ exports.login = async (req, res) => {
             admin.id,
             hashedOTP,
             expiry
-        );
-
-        await sendOTPEmail(
-            admin.email,
-            otp
         );
 
         return res.json(
@@ -197,11 +189,6 @@ exports.resendOTP = async (req, res) => {
             expiry
         );
 
-        await sendOTPEmail(
-            admin.email,
-            otp
-        );
-
         return res.json({
 
             success: true,
@@ -258,11 +245,6 @@ exports.forgotPassword = async (req, res) => {
             admin.id,
             hashedOTP,
             expiry
-        );
-
-        await sendOTPEmail(
-            admin.email,
-            otp
         );
 
         return res.json({

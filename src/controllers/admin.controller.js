@@ -1,11 +1,12 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-
-const transporter = require("../config/mail");
+const db = require("../config/db");
+const adminService = require("../services/admin.service");
 
 const Admin = require("../models/admin.model");
 
 const { uploadFile, deleteFile } = require("../services/upload.service");
+const { sendWelcomeAdminEmail } = require("../services/mail.service");
 
 exports.createAdmin = async (req, res) => {
 
@@ -88,7 +89,7 @@ exports.createAdmin = async (req, res) => {
                 12
             );
 
-        const adminId = await Admin.createAdmin({
+        const adminId = await adminService.createAdmin({
 
             name,
 
@@ -110,47 +111,12 @@ exports.createAdmin = async (req, res) => {
 
         });
 
-        await Admin.createDefaultPermissions(adminId);
-
-        await transporter.sendMail({
-
-            from: `"Livinkey" <${process.env.EMAIL_USER}>`,
-
-            to: email,
-
-            subject: "Your Livinkey Admin Account",
-
-            html: `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-
-                    <h2>Welcome to Livinkey</h2>
-
-                    <p>Hello <strong>${name}</strong>,</p>
-
-                    <p>Your administrator account has been created successfully.</p>
-
-                    <p><strong>Email:</strong> ${email}</p>
-
-                    <p><strong>Temporary Password:</strong> ${temporaryPassword}</p>
-
-                    <p>
-                        Please log in using the above credentials.
-                    </p>
-
-                    <p>
-                        You will be required to change your password after your first login.
-                    </p>
-
-                    <br>
-
-                    <p>Regards,</p>
-
-                    <p><strong>Livinkey Team</strong></p>
-
-                </div>
-            `
-
-        });
+        // Send welcome email
+        await sendWelcomeAdminEmail(
+            email,
+            name,
+            temporaryPassword
+        );
 
         return res.status(201).json({
 
@@ -182,7 +148,9 @@ exports.getAllAdmins = async (req, res) => {
 
     try {
 
-        const admins = await Admin.getAllAdmins();
+        const { search } = req.query;
+
+        const admins = await Admin.getAllAdmins(search);
 
         return res.status(200).json({
 
@@ -256,7 +224,7 @@ exports.updatePermissions = async (req, res) => {
 
         }
 
-        await Admin.updatePermissions(
+        await adminService.updatePermissions(
             adminId,
             permissions
         );
@@ -406,6 +374,7 @@ exports.updateAdmin = async (req, res) => {
         const oldPublicId = admin.id_document_public_id;
         const oldResourceType = admin.id_document_resource_type;
 
+        // Check if there's a new file uploaded
         if (req.file) {
 
             const upload = await uploadFile(
@@ -417,6 +386,14 @@ exports.updateAdmin = async (req, res) => {
             publicId = upload.public_id;
             resourceType = upload.resource_type;
 
+        } else {
+            // If no file uploaded and there was an old document, 
+            // set fields to null to remove it
+            if (oldPublicId) {
+                idDocument = null;
+                publicId = null;
+                resourceType = null;
+            }
         }
 
         await Admin.updateAdmin({
@@ -438,13 +415,14 @@ exports.updateAdmin = async (req, res) => {
         });
 
         // Delete old file only after successful DB update
-        if (req.file && oldPublicId) {
-
-            await deleteFile(
-                oldPublicId,
-                oldResourceType
-            );
-
+        if (oldPublicId) {
+            // If new file uploaded OR no file uploaded (meaning we're removing it)
+            if (req.file || !req.file) {
+                await deleteFile(
+                    oldPublicId,
+                    oldResourceType
+                );
+            }
         }
 
         return res.status(200).json({
@@ -489,15 +467,23 @@ exports.deleteAdmin = async (req, res) => {
 
         }
 
+        // Delete from Cloudinary first
         if (admin.id_document_public_id) {
 
-            await deleteFile(
-                admin.id_document_public_id,
-                admin.id_document_resource_type
-            );
+            try {
+                await deleteFile(
+                    admin.id_document_public_id,
+                    admin.id_document_resource_type
+                );
+            } catch (cloudinaryError) {
+                console.error("Cloudinary deletion failed:", cloudinaryError);
+                // Continue with database deletion even if Cloudinary fails
+                // Log the error for manual cleanup later
+            }
 
         }
 
+        // Then delete from database
         await Admin.deleteAdmin(req.params.id);
 
         return res.status(200).json({

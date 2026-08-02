@@ -78,9 +78,9 @@ const updatePassword = async (id, password) => {
 
 };
 
-const createAdmin = async (admin) => {
+const createAdmin = async (connection, admin) => {
 
-    const [result] = await db.execute(
+    const [result] = await connection.execute(
         `
         INSERT INTO admins
         (
@@ -130,7 +130,7 @@ const findByPhone = async (phone) => {
 
 };
 
-const createDefaultPermissions = async (adminId) => {
+const createDefaultPermissions = async (connection, adminId) => {
 
     const modules = [
         "tenants",
@@ -151,7 +151,7 @@ const createDefaultPermissions = async (adminId) => {
         false
     ]);
 
-    await db.query(
+    await connection.query(
         `
         INSERT INTO admin_permissions
         (
@@ -169,10 +169,9 @@ const createDefaultPermissions = async (adminId) => {
 
 };
 
-const getAllAdmins = async () => {
+const getAllAdmins = async (search = null) => {
 
-    const [rows] = await db.execute(
-        `
+    let query = `
         SELECT
 
             a.id,
@@ -197,10 +196,25 @@ const getAllAdmins = async () => {
         ON a.id = ap.admin_id
 
         WHERE a.role='admin'
+    `;
 
-        ORDER BY a.created_at DESC
-        `
-    );
+    const params = [];
+
+    if (search) {
+        query += `
+            AND (
+                a.name LIKE ?
+                OR a.email LIKE ?
+                OR a.phone LIKE ?
+            )
+        `;
+        const searchPattern = `%${search}%`;
+        params.push(searchPattern, searchPattern, searchPattern);
+    }
+
+    query += ` ORDER BY a.created_at DESC`;
+
+    const [rows] = await db.execute(query, params);
 
     const adminsMap = {};
 
@@ -274,108 +288,54 @@ const findById = async (id) => {
 
 };
 
+const updatePermission = async (
+    connection,
+    adminId,
+    moduleName,
+    permission
+) => {
 
-const updatePermissions = async (adminId, permissions) => {
+    const canView = Boolean(permission.view);
 
-    const connection = await db.getConnection();
+    const canAdd =
+        moduleName === "feedbacks"
+            ? false
+            : Boolean(permission.add);
 
-    try {
+    const canEdit =
+        moduleName === "feedbacks"
+            ? false
+            : Boolean(permission.edit);
 
-        await connection.beginTransaction();
+    const canDelete =
+        moduleName === "feedbacks"
+            ? false
+            : Boolean(permission.delete);
 
-        const validModules = [
+    const [result] = await connection.execute(
+        `
+        UPDATE admin_permissions
+        SET
+            can_view=?,
+            can_add=?,
+            can_edit=?,
+            can_delete=?
+        WHERE
+            admin_id=?
+        AND
+            module_name=?
+        `,
+        [
+            canView,
+            canAdd,
+            canEdit,
+            canDelete,
+            adminId,
+            moduleName
+        ]
+    );
 
-            "tenants",
-
-            "guests",
-
-            "bills",
-
-            "pgs",
-
-            "maintenance",
-
-            "documents",
-
-            "feedbacks"
-
-        ];
-
-        for (const moduleName of Object.keys(permissions)) {
-
-            if (!validModules.includes(moduleName)) {
-
-                throw new Error(
-                    `Invalid module: ${moduleName}`
-                );
-
-            }
-
-            const permission = permissions[moduleName];
-
-            const canView = Boolean(permission.view);
-
-            const canAdd =
-                moduleName === "feedbacks"
-                    ? false
-                    : Boolean(permission.add);
-
-            const canEdit =
-                moduleName === "feedbacks"
-                    ? false
-                    : Boolean(permission.edit);
-
-            const canDelete =
-                moduleName === "feedbacks"
-                    ? false
-                    : Boolean(permission.delete);
-
-            const [result] = await connection.execute(
-                `
-                UPDATE admin_permissions
-                SET
-                    can_view=?,
-                    can_add=?,
-                    can_edit=?,
-                    can_delete=?
-                WHERE
-                    admin_id=?
-                AND
-                    module_name=?
-                `,
-                [
-                    canView,
-                    canAdd,
-                    canEdit,
-                    canDelete,
-                    adminId,
-                    moduleName
-                ]
-            );
-
-            if (result.affectedRows === 0) {
-
-                throw new Error(
-                    `Permission row not found for ${moduleName}`
-                );
-
-            }
-
-        }
-
-        await connection.commit();
-
-    } catch (error) {
-
-        await connection.rollback();
-
-        throw error;
-
-    } finally {
-
-        connection.release();
-
-    }
+    return result;
 
 };
 
@@ -547,7 +507,7 @@ module.exports = {
     createDefaultPermissions,
     getAllAdmins,
     findById,
-    updatePermissions,
+    updatePermission,
     getAdminById,
     updateAdmin,
     deleteAdmin
