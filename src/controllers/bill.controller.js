@@ -1,0 +1,163 @@
+const billService = require("../services/bill.service");
+
+const createBill = async (req, res) => {
+    try {
+        const {
+            tenant_id,
+            rent_amount,
+            electricity_amount,
+            maintenance_amount,
+            other_charges
+        } = req.body;
+
+        // Validation
+        if (!tenant_id || !rent_amount) {
+            return res.status(400).json({
+                success: false,
+                message: "Tenant ID and rent amount are required"
+            });
+        }
+
+        // Prepare data
+        const billData = {
+            tenant_id: parseInt(tenant_id),
+            rent_amount: parseFloat(rent_amount),
+            electricity_amount: parseFloat(electricity_amount || 0),
+            maintenance_amount: parseFloat(maintenance_amount || 0),
+            other_charges: parseFloat(other_charges || 0),
+            created_by: req.admin.id
+        };
+
+        // Prepare files
+        const files = {
+            meterImage: req.files?.meterImage || [],
+            paymentQr: req.files?.paymentQr || []
+        };
+
+        const bill = await billService.createBill(billData, files);
+
+        return res.status(201).json({
+            success: true,
+            message: "Bill created and sent successfully",
+            data: bill
+        });
+
+    } catch (error) {
+        console.error("Create Bill Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const getUnpaidTenants = async (req, res) => {
+    try {
+        const tenants = await billService.getUnpaidTenants();
+
+        return res.status(200).json({
+            success: true,
+            count: tenants.length,
+            data: tenants
+        });
+
+    } catch (error) {
+        console.error("Get Unpaid Tenants Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const getBillById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const bill = await billService.getBillById(id);
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "Bill not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: bill
+        });
+
+    } catch (error) {
+        console.error("Get Bill By ID Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const getBillsByTenant = async (req, res) => {
+    try {
+        const { tenantId } = req.params;
+        const bills = await billService.getBillsByTenant(tenantId);
+
+        return res.status(200).json({
+            success: true,
+            count: bills.length,
+            data: bills
+        });
+
+    } catch (error) {
+        console.error("Get Bills By Tenant Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const getBillStats = async (req, res) => {
+    try {
+        const stats = await billService.getBillStats();
+
+        return res.status(200).json({
+            success: true,
+            data: stats
+        });
+
+    } catch (error) {
+        console.error("Get Bill Stats Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const processDelayedPayments = async (req, res) => {
+    try {
+        const processedCount = await billService.processDelayedPayments();
+
+        return res.status(200).json({
+            success: true,
+            message: `Processed ${processedCount} delayed bill(s)`,
+            processed_count: processedCount
+        });
+
+    } catch (error) {
+        console.error("Process Delayed Payments Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+module.exports = {
+    createBill,
+    getUnpaidTenants,
+    getBillById,
+    getBillsByTenant,
+    getBillStats,
+    processDelayedPayments
+};

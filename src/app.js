@@ -7,7 +7,8 @@ const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const pgRoutes = require("./routes/pg.routes");
-const tenantRoutes = require("./routes/tenant.routes"); // NEW
+const tenantRoutes = require("./routes/tenant.routes"); 
+const billRoutes = require("./routes/bill.routes"); 
 
 const app = express();
 
@@ -41,5 +42,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admins", adminRoutes);
 app.use("/api/pgs", pgRoutes);
 app.use("/api/tenants", tenantRoutes); 
+app.use("/api/bills", billRoutes); 
 
 module.exports = app;

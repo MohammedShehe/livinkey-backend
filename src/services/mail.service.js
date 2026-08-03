@@ -734,10 +734,233 @@ const sendPasswordResetEmail = async (email, name) => {
     });
 };
 
+const sendBillEmail = async (email, tenantName, billData, qrCodeUrl, partialQrUrl, meterImageUrl = null, adminQrUrl = null) => {
+    const totalAmount = parseFloat(billData.total_amount) || 0;
+    const fineAmount = parseFloat(billData.fine_amount) || 0;
+    const grandTotal = totalAmount + fineAmount;
+    const partialAmount = grandTotal * 0.5;
+
+    console.log("sendBillEmail - Full QR URL:", qrCodeUrl);
+    console.log("sendBillEmail - Partial QR URL:", partialQrUrl);
+    console.log("sendBillEmail - Meter Image URL:", meterImageUrl);
+    console.log("sendBillEmail - Admin QR URL:", adminQrUrl);
+
+    await transporter.sendMail({
+        from: `"Livinkey" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `📄 New Bill Generated - Livinkey`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>New Bill - Livinkey</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #92C24A; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">📄 Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">NEW BILL GENERATED</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${tenantName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        A new bill has been generated for your stay at <strong>${billData.pg_name}</strong>, Room <strong>${billData.room_number}</strong>.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                                            💰 Bill Details
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <table width="100%" style="border-collapse: collapse;">
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Rent</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${parseFloat(billData.rent_amount).toFixed(2)}</td>
+                                                </tr>
+                                                ${parseFloat(billData.electricity_amount || 0) > 0 ? `
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Electricity</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${parseFloat(billData.electricity_amount).toFixed(2)}</td>
+                                                </tr>` : ''}
+                                                ${parseFloat(billData.maintenance_amount || 0) > 0 ? `
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Maintenance</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${parseFloat(billData.maintenance_amount).toFixed(2)}</td>
+                                                </tr>` : ''}
+                                                ${parseFloat(billData.other_charges || 0) > 0 ? `
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Other Charges</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${parseFloat(billData.other_charges).toFixed(2)}</td>
+                                                </tr>` : ''}
+                                                ${fineAmount > 0 ? `
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #e74c3c;">Late Fee</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #e74c3c;">₹${fineAmount.toFixed(2)}</td>
+                                                </tr>` : ''}
+                                                <tr>
+                                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #000000;">Total Amount</td>
+                                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A; font-size: 18px;">₹${grandTotal.toFixed(2)}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    ${meterImageUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 20px; text-align: center;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">⚡ Electricity Meter Image</p>
+                                        <img src="${meterImageUrl}" alt="Electricity Meter" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #e8ecf1;">
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="padding: 16px 20px; text-align: center;">
+                                        <p style="color: #4a5568; font-size: 14px; margin: 0 0 8px 0;">
+                                            <strong>📅 Valid Until:</strong> ${new Date(billData.valid_until).toLocaleString()}
+                                        </p>
+                                        <p style="color: #e74c3c; font-size: 13px; margin: 0;">
+                                            ⚠️ If not paid within 7 days, a late fee of ₹100 will be applied daily.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    ${adminQrUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">
+                                            📱 Admin Provided QR Code
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${adminQrUrl}" alt="Admin QR Code" style="width: 200px; height: 200px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 14px; margin-top: 12px; margin-bottom: 0;">
+                                            Scan this QR code to pay the full amount of <strong>₹${grandTotal.toFixed(2)}</strong>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    ${qrCodeUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">
+                                            📱 Auto-Generated Payment QR
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${qrCodeUrl}" alt="Payment QR Code" style="width: 200px; height: 200px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 14px; margin-top: 12px; margin-bottom: 0;">
+                                            Scan this QR code to pay the full amount of <strong>₹${grandTotal.toFixed(2)}</strong>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    ${partialQrUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                                            💳 Auto-Generated Partial Payment QR (50%)
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${partialQrUrl}" alt="Partial Payment QR Code" style="width: 150px; height: 150px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 13px; margin-top: 10px; margin-bottom: 0;">
+                                            Scan to pay 50% (<strong>₹${partialAmount.toFixed(2)}</strong>)
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · Bill Management
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message, please do not reply.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
     sendWelcomeTenantEmail,
     sendGuestMessageEmail,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    sendBillEmail
 };

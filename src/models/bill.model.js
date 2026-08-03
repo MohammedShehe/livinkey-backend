@@ -1,0 +1,253 @@
+const db = require("../config/db");
+
+const createBill = async (connection, billData) => {
+    const [result] = await connection.execute(
+        `
+        INSERT INTO bills (
+            tenant_id,
+            rent_amount,
+            electricity_amount,
+            electricity_meter_image,
+            electricity_meter_public_id,
+            electricity_meter_resource_type,
+            maintenance_amount,
+            other_charges,
+            total_amount,
+            payment_qr,
+            payment_qr_public_id,
+            payment_qr_resource_type,
+            partial_payment_qr,
+            partial_payment_qr_public_id,
+            partial_payment_qr_resource_type,
+            sent_at,
+            valid_until,
+            created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+            billData.tenant_id,
+            billData.rent_amount,
+            billData.electricity_amount || 0,
+            billData.electricity_meter_image || null,
+            billData.electricity_meter_public_id || null,
+            billData.electricity_meter_resource_type || null,
+            billData.maintenance_amount || 0,
+            billData.other_charges || 0,
+            billData.total_amount,
+            billData.payment_qr || null,
+            billData.payment_qr_public_id || null,
+            billData.payment_qr_resource_type || null,
+            billData.partial_payment_qr || null,
+            billData.partial_payment_qr_public_id || null,
+            billData.partial_payment_qr_resource_type || null,
+            billData.sent_at,
+            billData.valid_until,
+            billData.created_by
+        ]
+    );
+    return result.insertId;
+};
+
+const getUnpaidTenants = async () => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            t.id,
+            t.full_name,
+            t.email,
+            t.phone,
+            t.role,
+            td.rent,
+            td.paid_till,
+            td.payment_date,
+            td.pg_id,
+            p.name as pg_name,
+            r.room_number
+        FROM tenants t
+        INNER JOIN tenant_details td ON t.id = td.tenant_id
+        INNER JOIN pgs p ON td.pg_id = p.id
+        INNER JOIN rooms r ON td.room_id = r.id
+        WHERE t.role = 'tenant'
+        AND td.paid_till < CURDATE()
+        AND td.payment_date <= DAY(CURDATE())
+        ORDER BY t.full_name ASC
+        `
+    );
+    return rows;
+};
+
+const getBillById = async (billId) => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            b.*,
+            t.full_name as tenant_name,
+            t.email as tenant_email,
+            t.phone as tenant_phone,
+            t.nationality as tenant_nationality,
+            td.rent as monthly_rent,
+            td.pg_id,
+            td.room_id,
+            p.name as pg_name,
+            r.room_number,
+            COALESCE(
+                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 0), 
+                0
+            ) as total_paid,
+            COALESCE(
+                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
+                0
+            ) as total_partial_paid
+        FROM bills b
+        INNER JOIN tenants t ON b.tenant_id = t.id
+        INNER JOIN tenant_details td ON t.id = td.tenant_id
+        INNER JOIN pgs p ON td.pg_id = p.id
+        INNER JOIN rooms r ON td.room_id = r.id
+        WHERE b.id = ?
+        `,
+        [billId]
+    );
+    return rows[0] || null;
+};
+
+const getBillsByTenant = async (tenantId) => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            b.*,
+            COALESCE(
+                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id), 
+                0
+            ) as total_paid
+        FROM bills b
+        WHERE b.tenant_id = ?
+        ORDER BY b.created_at DESC
+        `,
+        [tenantId]
+    );
+    return rows;
+};
+
+const updateBillStatus = async (connection, billId, status, paidAmount = null) => {
+    let query = `UPDATE bills SET status = ?`;
+    const params = [status];
+    
+    if (paidAmount !== null) {
+        query += `, paid_amount = paid_amount + ?`;
+        params.push(paidAmount);
+    }
+    
+    query += ` WHERE id = ?`;
+    params.push(billId);
+    
+    const [result] = await connection.execute(query, params);
+    return result.affectedRows;
+};
+
+const updateBillFine = async (connection, billId, fineAmount, validUntil) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills
+        SET 
+            fine_amount = ?,
+            valid_until = ?,
+            status = 'delayed'
+        WHERE id = ?
+        `,
+        [fineAmount, validUntil, billId]
+    );
+    return result.affectedRows;
+};
+
+const createBillPayment = async (connection, paymentData) => {
+    const [result] = await connection.execute(
+        `
+        INSERT INTO bill_payments (
+            bill_id,
+            amount,
+            payment_method,
+            transaction_id,
+            is_partial
+        ) VALUES (?, ?, ?, ?, ?)
+        `,
+        [
+            paymentData.bill_id,
+            paymentData.amount,
+            paymentData.payment_method || 'qr_code',
+            paymentData.transaction_id || null,
+            paymentData.is_partial || 0
+        ]
+    );
+    return result.insertId;
+};
+
+const getOverdueBills = async () => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            b.*,
+            t.full_name as tenant_name,
+            t.email as tenant_email
+        FROM bills b
+        INNER JOIN tenants t ON b.tenant_id = t.id
+        WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
+        AND b.valid_until < NOW()
+        AND b.sent_at IS NOT NULL
+        ORDER BY b.valid_until ASC
+        `
+    );
+    return rows;
+};
+
+const getBillStats = async () => {
+    const [totalResult] = await db.execute(
+        `SELECT COUNT(*) as total FROM bills`
+    );
+    const total = totalResult[0].total;
+
+    const [unpaidResult] = await db.execute(
+        `SELECT COUNT(*) as unpaid FROM bills WHERE status = 'unpaid'`
+    );
+    const unpaid = unpaidResult[0].unpaid;
+
+    const [partiallyPaidResult] = await db.execute(
+        `SELECT COUNT(*) as partially_paid FROM bills WHERE status = 'partially_paid'`
+    );
+    const partially_paid = partiallyPaidResult[0].partially_paid;
+
+    const [paidResult] = await db.execute(
+        `SELECT COUNT(*) as paid FROM bills WHERE status = 'paid'`
+    );
+    const paid = paidResult[0].paid;
+
+    const [delayedResult] = await db.execute(
+        `SELECT COUNT(*) as delayed FROM bills WHERE status = 'delayed'`
+    );
+    const delayed = delayedResult[0].delayed;
+
+    const [overdueResult] = await db.execute(
+        `SELECT COUNT(*) as overdue FROM bills WHERE status = 'overdue'`
+    );
+    const overdue = overdueResult[0].overdue;
+
+    return {
+        total,
+        unpaid,
+        partially_paid,
+        paid,
+        delayed,
+        overdue
+    };
+};
+
+module.exports = {
+    createBill,
+    getUnpaidTenants,
+    getBillById,
+    getBillsByTenant,
+    updateBillStatus,
+    updateBillFine,
+    createBillPayment,
+    getOverdueBills,
+    getBillStats
+};
