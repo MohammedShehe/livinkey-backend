@@ -1,9 +1,5 @@
 const db = require("../config/db");
 
-// =============================================
-// Tenant Model - Pure SQL Operations
-// =============================================
-
 const createTenant = async (connection, tenantData) => {
     const [result] = await connection.execute(
         `
@@ -15,8 +11,9 @@ const createTenant = async (connection, tenantData) => {
             country_code,
             phone,
             gender,
+            password,
             created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             tenantData.role,
@@ -26,6 +23,7 @@ const createTenant = async (connection, tenantData) => {
             tenantData.country_code,
             tenantData.phone,
             tenantData.gender,
+            tenantData.password,
             tenantData.created_by
         ]
     );
@@ -93,16 +91,16 @@ const createTenantDocument = async (connection, tenantId, documentUrl, publicId,
 };
 
 const findByEmail = async (email, excludeId = null) => {
-    let query = `SELECT id, full_name, email FROM tenants WHERE email = ?`;
+    let query = `SELECT id, full_name, email, password FROM tenants WHERE email = ?`;
     const params = [email];
-
+    
     if (excludeId) {
         query += ` AND id != ?`;
         params.push(excludeId);
     }
-
+    
     query += ` LIMIT 1`;
-
+    
     const [rows] = await db.execute(query, params);
     return rows[0] || null;
 };
@@ -110,21 +108,21 @@ const findByEmail = async (email, excludeId = null) => {
 const findByPhone = async (phone, excludeId = null) => {
     let query = `SELECT id, full_name, phone FROM tenants WHERE phone = ?`;
     const params = [phone];
-
+    
     if (excludeId) {
         query += ` AND id != ?`;
         params.push(excludeId);
     }
-
+    
     query += ` LIMIT 1`;
-
+    
     const [rows] = await db.execute(query, params);
     return rows[0] || null;
 };
 
 const findAll = async (search = null, role = null, gender = null, bill_status = null) => {
     let query = `
-        SELECT
+        SELECT 
             t.id,
             t.role,
             t.full_name,
@@ -150,7 +148,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             td.document_url,
             p.name as pg_name,
             r.room_number,
-            CASE
+            CASE 
                 WHEN td.paid_till < CURDATE() THEN 'unpaid'
                 WHEN td.paid_from <= CURDATE() AND td.paid_till >= CURDATE() THEN 'paid'
                 WHEN td.paid_from > CURDATE() THEN 'unpaid'
@@ -199,7 +197,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
 const findById = async (id) => {
     const [rows] = await db.execute(
         `
-        SELECT
+        SELECT 
             t.id,
             t.role,
             t.full_name,
@@ -208,6 +206,7 @@ const findById = async (id) => {
             t.country_code,
             t.phone,
             t.gender,
+            t.password,
             t.created_at,
             t.updated_at,
             td.pg_id,
@@ -229,7 +228,7 @@ const findById = async (id) => {
             r.room_number,
             r.capacity,
             COALESCE(ro.occupied_count, 0) as occupied_count,
-            CASE
+            CASE 
                 WHEN td.paid_till < CURDATE() THEN 'unpaid'
                 WHEN td.paid_from <= CURDATE() AND td.paid_till >= CURDATE() THEN 'paid'
                 WHEN td.paid_from > CURDATE() THEN 'unpaid'
@@ -269,7 +268,7 @@ const getTenantDocuments = async (tenantId) => {
 const getTenantWithDocuments = async (tenantId) => {
     const tenant = await findById(tenantId);
     if (!tenant) return null;
-
+    
     const documents = await getTenantDocuments(tenantId);
     return {
         ...tenant,
@@ -278,32 +277,38 @@ const getTenantWithDocuments = async (tenantId) => {
 };
 
 const getStats = async () => {
-    const [totalResult] = await db.execute(`SELECT COUNT(*) as total FROM tenants`);
+    const [totalResult] = await db.execute(
+        `SELECT COUNT(*) as total FROM tenants`
+    );
     const total = totalResult[0].total;
 
     const [nationalResult] = await db.execute(
-        `SELECT COUNT(*) as national FROM tenants t
-         JOIN tenant_details td ON t.id = td.tenant_id
+        `SELECT COUNT(*) as national FROM tenants t 
+         JOIN tenant_details td ON t.id = td.tenant_id 
          WHERE td.residency = 'national'`
     );
     const national = nationalResult[0].national;
 
     const [internationalResult] = await db.execute(
-        `SELECT COUNT(*) as international FROM tenants t
-         JOIN tenant_details td ON t.id = td.tenant_id
+        `SELECT COUNT(*) as international FROM tenants t 
+         JOIN tenant_details td ON t.id = td.tenant_id 
          WHERE td.residency = 'international'`
     );
     const international = internationalResult[0].international;
 
-    const [maleResult] = await db.execute(`SELECT COUNT(*) as male FROM tenants WHERE gender = 'male'`);
+    const [maleResult] = await db.execute(
+        `SELECT COUNT(*) as male FROM tenants WHERE gender = 'male'`
+    );
     const male = maleResult[0].male;
 
-    const [femaleResult] = await db.execute(`SELECT COUNT(*) as female FROM tenants WHERE gender = 'female'`);
+    const [femaleResult] = await db.execute(
+        `SELECT COUNT(*) as female FROM tenants WHERE gender = 'female'`
+    );
     const female = femaleResult[0].female;
 
     const [paidResult] = await db.execute(
         `
-        SELECT COUNT(*) as paid
+        SELECT COUNT(*) as paid 
         FROM tenants t
         JOIN tenant_details td ON t.id = td.tenant_id
         WHERE td.paid_from <= CURDATE() AND td.paid_till >= CURDATE()
@@ -313,7 +318,7 @@ const getStats = async () => {
 
     const [unpaidResult] = await db.execute(
         `
-        SELECT COUNT(*) as unpaid
+        SELECT COUNT(*) as unpaid 
         FROM tenants t
         JOIN tenant_details td ON t.id = td.tenant_id
         WHERE td.paid_till < CURDATE() OR td.paid_from > CURDATE()
@@ -323,7 +328,7 @@ const getStats = async () => {
 
     const [partiallyPaidResult] = await db.execute(
         `
-        SELECT COUNT(*) as partially_paid
+        SELECT COUNT(*) as partially_paid 
         FROM tenants t
         JOIN tenant_details td ON t.id = td.tenant_id
         WHERE td.paid_from <= CURDATE() AND td.paid_till = CURDATE()
@@ -365,6 +370,18 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             tenantData.gender,
             tenantId
         ]
+    );
+    return result.affectedRows;
+};
+
+const updateTenantPassword = async (connection, tenantId, hashedPassword) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE tenants
+        SET password = ?
+        WHERE id = ?
+        `,
+        [hashedPassword, tenantId]
     );
     return result.affectedRows;
 };
@@ -418,14 +435,11 @@ const deleteTenant = async (connection, tenantId) => {
     return result.affectedRows;
 };
 
-// NOTE: this read is now always called from within a transaction that
-// has already taken a `SELECT ... FOR UPDATE` lock on the room row
-// (see tenant.service.js), so the capacity check below is race-safe.
 const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
     try {
         const [rows] = await db.execute(
             `
-            SELECT
+            SELECT 
                 r.capacity,
                 COALESCE(ro.occupied_count, 0) as occupied_count
             FROM rooms r
@@ -434,33 +448,38 @@ const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
             `,
             [roomId]
         );
-
+        
         if (rows.length === 0) {
             return { available: false, message: "Room not found" };
         }
-
+        
         const room = rows[0];
         const available = room.capacity - room.occupied_count;
-
+        
         if (available < additionalOccupants) {
             return {
                 available: false,
                 message: `Only ${available} spot(s) available in this room`
             };
         }
-
+        
         return { available: true, available_spots: available };
     } catch (error) {
         if (error.code === 'ER_NO_SUCH_TABLE') {
             const [rows] = await db.execute(
-                `SELECT r.capacity FROM rooms r WHERE r.id = ?`,
+                `
+                SELECT 
+                    r.capacity
+                FROM rooms r
+                WHERE r.id = ?
+                `,
                 [roomId]
             );
-
+            
             if (rows.length === 0) {
                 return { available: false, message: "Room not found" };
             }
-
+            
             const room = rows[0];
             if (room.capacity < additionalOccupants) {
                 return {
@@ -468,9 +487,9 @@ const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
                     message: `Room capacity is ${room.capacity}, but you're adding ${additionalOccupants} tenant(s)`
                 };
             }
-
-            return {
-                available: true,
+            
+            return { 
+                available: true, 
                 available_spots: room.capacity,
                 warning: "Room occupancy tracking is not set up. Please ensure room_occupancy table exists."
             };
@@ -491,6 +510,7 @@ module.exports = {
     getTenantWithDocuments,
     getStats,
     updateTenant,
+    updateTenantPassword,
     updateTenantDetails,
     deleteTenantDocuments,
     deleteTenant,

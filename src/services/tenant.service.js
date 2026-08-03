@@ -1,28 +1,29 @@
 const db = require("../config/db");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
+const { sendWelcomeTenantEmail } = require("./mail.service");
 
-// =============================================
-// Tenant Service - Business Logic & Transactions
-// =============================================
-//
-// KEY FIX: room_occupancy is now updated with a single atomic SQL
-// statement (`occupied_count = occupied_count + ?`) instead of a
-// "SELECT current value, add in JS, then UPDATE" pattern.
-//
-// The old pattern had a race window: two near-simultaneous requests
-// (double-click submit, a retried request, etc.) could both read the
-// same "current" value before either had written back, so both would
-// compute newCount = current + 1 and the room would end up +2 for a
-// single logical tenant. Doing the increment inside the SQL statement
-// itself removes that window entirely — MySQL serializes the update.
-//
-// We also now surface duplicate-key races (two submissions with the
-// same email/phone landing at the same time) as a clean 409-style
-// error instead of letting both silently succeed and double-book a
-// room. This requires a UNIQUE constraint on tenants.email and
-// tenants.phone at the DB level — see the note at the bottom of this
-// file if those constraints don't exist yet.
+const generatePassword = () => {
+    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const lowercase = "abcdefghijklmnopqrstuvwxyz";
+    const numbers = "0123456789";
+    const specials = "!@#$%^&*";
+    const all = uppercase + lowercase + numbers + specials;
+    
+    let password = "";
+    password += uppercase[Math.floor(Math.random() * uppercase.length)];
+    password += lowercase[Math.floor(Math.random() * lowercase.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += specials[Math.floor(Math.random() * specials.length)];
+    
+    for (let i = 4; i < 12; i++) {
+        password += all[Math.floor(Math.random() * all.length)];
+    }
+    
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+};
 
 const normalizeNumberOfTenants = (value) => {
     const parsed = parseInt(value, 10);
@@ -58,9 +59,6 @@ const createTenant = async (tenantData, files = {}) => {
     try {
         await connection.beginTransaction();
 
-        // Lock the target room row for the duration of this transaction
-        // so two concurrent submissions can't both pass the availability
-        // check before either commits.
         if (tenantData.role === 'tenant') {
             await connection.execute(
                 `SELECT id FROM rooms WHERE id = ? FOR UPDATE`,
@@ -68,9 +66,6 @@ const createTenant = async (tenantData, files = {}) => {
             );
         }
 
-        // Check for duplicate email / phone (still useful for a fast,
-        // friendly error message; the DB unique constraint below is the
-        // real guarantee against races)
         const existingEmail = await TenantModel.findByEmail(tenantData.email);
         if (existingEmail) {
             throw new Error(`Email "${tenantData.email}" is already registered`);
@@ -94,7 +89,10 @@ const createTenant = async (tenantData, files = {}) => {
             }
         }
 
-        // Create tenant
+        // Generate password
+        const plainPassword = generatePassword();
+        const hashedPassword = await bcrypt.hash(plainPassword, 12);
+
         const tenantId = await TenantModel.createTenant(connection, {
             role: tenantData.role,
             full_name: tenantData.full_name,
@@ -103,11 +101,11 @@ const createTenant = async (tenantData, files = {}) => {
             country_code: tenantData.country_code,
             phone: tenantData.phone,
             gender: tenantData.gender,
+            password: hashedPassword,
             created_by: tenantData.created_by
         });
 
         if (tenantData.role === 'tenant') {
-            // Upload document if provided
             let documentUrl = null;
             let documentPublicId = null;
             let documentResourceType = null;
@@ -143,7 +141,6 @@ const createTenant = async (tenantData, files = {}) => {
                 document_resource_type: documentResourceType
             });
 
-            // Atomic occupancy increment - see incrementRoomOccupancy() above
             try {
                 await incrementRoomOccupancy(connection, tenantData.room_id, numberOfTenants);
             } catch (occupancyError) {
@@ -154,7 +151,6 @@ const createTenant = async (tenantData, files = {}) => {
                 }
             }
 
-            // Upload additional documents if provided
             if (files.otherDocuments && files.otherDocuments.length > 0) {
                 for (const file of files.otherDocuments) {
                     const uploadResult = await uploadFile(
@@ -177,19 +173,44 @@ const createTenant = async (tenantData, files = {}) => {
 
         await connection.commit();
 
+        // Get PG and Room details for email
+        let pgName = null;
+        let roomNumber = null;
+        if (tenantData.role === 'tenant') {
+            const [pgResult] = await connection.execute(
+                `SELECT name FROM pgs WHERE id = ?`,
+                [tenantData.pg_id]
+            );
+            pgName = pgResult[0]?.name || null;
+
+            const [roomResult] = await connection.execute(
+                `SELECT room_number FROM rooms WHERE id = ?`,
+                [tenantData.room_id]
+            );
+            roomNumber = roomResult[0]?.room_number || null;
+        }
+
+        // Send welcome email
+        try {
+            await sendWelcomeTenantEmail(
+                tenantData.email,
+                tenantData.full_name,
+                tenantData.role,
+                plainPassword,
+                pgName,
+                roomNumber
+            );
+        } catch (emailError) {
+            console.error("Failed to send welcome email:", emailError);
+        }
+
         const createdTenant = await TenantModel.getTenantWithDocuments(tenantId);
         return createdTenant;
 
     } catch (error) {
         await connection.rollback();
 
-        // A duplicate-key race (two simultaneous submissions with the
-        // same email/phone both getting past the pre-check) surfaces
-        // here. Because everything above happened in one transaction,
-        // rolling back also undoes the occupancy increment for the
-        // request that loses the race - so occupancy never over-counts.
         if (error.code === 'ER_DUP_ENTRY') {
-            console.error("Tenant Creation Error (duplicate race):", error.message);
             throw new Error("This tenant (email or phone) was already just registered.");
         }
 
@@ -248,7 +269,6 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             const roomChanged = existingTenant.room_id !== tenantData.room_id;
 
             if (roomChanged) {
-                // Lock both rooms' occupancy rows for this transaction
                 await connection.execute(
                     `SELECT id FROM rooms WHERE id IN (?, ?) FOR UPDATE`,
                     [existingTenant.room_id, tenantData.room_id]
@@ -375,7 +395,6 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
         await connection.rollback();
 
         if (error.code === 'ER_DUP_ENTRY') {
-            console.error("Tenant Update Error (duplicate race):", error.message);
             throw new Error("This tenant (email or phone) was already just updated elsewhere.");
         }
 
@@ -453,17 +472,3 @@ module.exports = {
     updateTenant,
     deleteTenant
 };
-
-// -------------------------------------------------------------------
-// IMPORTANT DB NOTE:
-// For the duplicate-submission race guard (ER_DUP_ENTRY handling above)
-// to actually kick in, `tenants.email` and `tenants.phone` need a
-// UNIQUE constraint in the schema. If you haven't added these yet:
-//
-//   ALTER TABLE tenants ADD UNIQUE KEY uq_tenants_email (email);
-//   ALTER TABLE tenants ADD UNIQUE KEY uq_tenants_phone (phone);
-//
-// Without a DB-level unique constraint, two simultaneous requests can
-// both pass the JS pre-check and both insert successfully - which is
-// exactly the kind of race that was doubling your occupancy count.
-// -------------------------------------------------------------------

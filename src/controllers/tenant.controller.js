@@ -1,9 +1,5 @@
 const tenantService = require("../services/tenant.service");
 
-// =============================================
-// Tenant Controller - Request/Response Handling
-// =============================================
-
 const createTenant = async (req, res) => {
     try {
         const {
@@ -92,8 +88,6 @@ const createTenant = async (req, res) => {
             tenantData.paid_from = paid_from;
             tenantData.paid_till = paid_till;
             tenantData.arrival_date = arrival_date;
-            // Normalized again (defensively) in tenant.service.js -
-            // kept here too so validation errors surface as early as possible.
             const parsedCount = parseInt(number_of_tenants);
             tenantData.number_of_tenants = (isNaN(parsedCount) || parsedCount <= 0) ? 1 : parsedCount;
         }
@@ -123,7 +117,6 @@ const createTenant = async (req, res) => {
 const getAllTenants = async (req, res) => {
     try {
         const { search, role, gender, bill_status } = req.query;
-
         const tenants = await tenantService.getAllTenants(search, role, gender, bill_status);
 
         return res.status(200).json({
@@ -162,7 +155,6 @@ const getTenantStats = async (req, res) => {
 const getTenantById = async (req, res) => {
     try {
         const { id } = req.params;
-
         const tenant = await tenantService.getTenantById(id);
 
         if (!tenant) {
@@ -303,7 +295,6 @@ const updateTenant = async (req, res) => {
 const deleteTenant = async (req, res) => {
     try {
         const { id } = req.params;
-
         await tenantService.deleteTenant(id);
 
         return res.status(200).json({
