@@ -106,7 +106,7 @@ CREATE TABLE `floors` (
   UNIQUE KEY `unique_pg_floor` (`pg_id`,`floor_number`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_floors_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -115,7 +115,7 @@ CREATE TABLE `floors` (
 
 LOCK TABLES `floors` WRITE;
 /*!40000 ALTER TABLE `floors` DISABLE KEYS */;
-INSERT INTO `floors` VALUES (4,2,1,'2026-08-02 19:23:14','2026-08-02 19:23:14');
+INSERT INTO `floors` VALUES (1,1,1,'2026-08-03 08:46:40','2026-08-03 08:46:40');
 /*!40000 ALTER TABLE `floors` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -135,7 +135,7 @@ CREATE TABLE `pg_amenities` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_amenities_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -144,7 +144,7 @@ CREATE TABLE `pg_amenities` (
 
 LOCK TABLES `pg_amenities` WRITE;
 /*!40000 ALTER TABLE `pg_amenities` DISABLE KEYS */;
-INSERT INTO `pg_amenities` VALUES (7,2,'Free WiFi',0,'2026-08-02 19:23:10'),(8,2,'Swimming Pool',1,'2026-08-02 19:23:10');
+INSERT INTO `pg_amenities` VALUES (1,1,'Free WiFi',0,'2026-08-03 08:46:40');
 /*!40000 ALTER TABLE `pg_amenities` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -166,7 +166,7 @@ CREATE TABLE `pg_images` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_images_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -175,7 +175,6 @@ CREATE TABLE `pg_images` (
 
 LOCK TABLES `pg_images` WRITE;
 /*!40000 ALTER TABLE `pg_images` DISABLE KEYS */;
-INSERT INTO `pg_images` VALUES (10,2,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785698591/livinkey/pgs/images/cwap5bha7oawaght3azr.png','livinkey/pgs/images/cwap5bha7oawaght3azr','image',0,'2026-08-02 19:23:11'),(11,2,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785698592/livinkey/pgs/images/e5hxv5mukqmhjpevs58r.png','livinkey/pgs/images/e5hxv5mukqmhjpevs58r','image',1,'2026-08-02 19:23:13'),(12,2,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785698593/livinkey/pgs/images/yieusskobochedxvdhsy.png','livinkey/pgs/images/yieusskobochedxvdhsy','image',2,'2026-08-02 19:23:14');
 /*!40000 ALTER TABLE `pg_images` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -201,7 +200,7 @@ CREATE TABLE `pgs` (
   PRIMARY KEY (`id`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_pgs_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -210,8 +209,36 @@ CREATE TABLE `pgs` (
 
 LOCK TABLES `pgs` WRITE;
 /*!40000 ALTER TABLE `pgs` DISABLE KEYS */;
-INSERT INTO `pgs` VALUES (2,'Happy Living','123 Main Street, Bangalore',4,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785698589/livinkey/pgs/qr/grdw8yumdunrxfigb7jv.png','livinkey/pgs/qr/grdw8yumdunrxfigb7jv','image',1,1,'2026-08-02 19:23:10','2026-08-02 19:23:10');
+INSERT INTO `pgs` VALUES (1,'Happy Living PG','123 Main Street, Bangalore',1,NULL,NULL,NULL,1,1,'2026-08-03 08:46:40','2026-08-03 08:46:40');
 /*!40000 ALTER TABLE `pgs` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `room_occupancy`
+--
+
+DROP TABLE IF EXISTS `room_occupancy`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `room_occupancy` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `room_id` int(11) NOT NULL,
+  `occupied_count` int(11) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_room_occupancy` (`room_id`),
+  CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `room_occupancy`
+--
+
+LOCK TABLES `room_occupancy` WRITE;
+/*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
+INSERT INTO `room_occupancy` VALUES (5,1,2,'2026-08-03 09:06:24');
+/*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -233,7 +260,7 @@ CREATE TABLE `rooms` (
   UNIQUE KEY `unique_floor_room` (`floor_id`,`room_number`),
   KEY `idx_floor_id` (`floor_id`),
   CONSTRAINT `fk_rooms_floor_id` FOREIGN KEY (`floor_id`) REFERENCES `floors` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -242,8 +269,122 @@ CREATE TABLE `rooms` (
 
 LOCK TABLES `rooms` WRITE;
 /*!40000 ALTER TABLE `rooms` DISABLE KEYS */;
-INSERT INTO `rooms` VALUES (4,4,'101',2,1,'2026-08-02 19:23:14','2026-08-02 19:23:14');
+INSERT INTO `rooms` VALUES (1,1,'101',2,1,'2026-08-03 08:46:40','2026-08-03 08:46:40');
 /*!40000 ALTER TABLE `rooms` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `tenant_details`
+--
+
+DROP TABLE IF EXISTS `tenant_details`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant_details` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `pg_id` int(11) NOT NULL,
+  `room_id` int(11) NOT NULL,
+  `residency` enum('national','international') NOT NULL,
+  `aadhaar_id` varchar(20) DEFAULT NULL,
+  `father_aadhaar_id` varchar(20) DEFAULT NULL,
+  `c_form_number` varchar(50) DEFAULT NULL,
+  `rent` decimal(10,2) NOT NULL,
+  `security_fee` decimal(10,2) NOT NULL,
+  `payment_date` int(11) NOT NULL COMMENT 'Day of month (1-31)',
+  `paid_from` date NOT NULL,
+  `paid_till` date NOT NULL,
+  `arrival_date` date NOT NULL,
+  `document_url` varchar(500) DEFAULT NULL,
+  `document_public_id` varchar(255) DEFAULT NULL,
+  `document_resource_type` varchar(20) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_tenant` (`tenant_id`),
+  KEY `idx_pg_id` (`pg_id`),
+  KEY `idx_room_id` (`room_id`),
+  CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenant_details`
+--
+
+LOCK TABLES `tenant_details` WRITE;
+/*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
+INSERT INTO `tenant_details` VALUES (1,1,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-08-13','2026-09-29','2026-07-22',NULL,NULL,NULL,'2026-08-03 08:48:17','2026-08-03 08:48:17'),(2,2,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-08-13','2026-09-29','2026-07-22',NULL,NULL,NULL,'2026-08-03 08:57:15','2026-08-03 08:57:15'),(3,3,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-08-13','2026-09-29','2026-07-22',NULL,NULL,NULL,'2026-08-03 09:04:18','2026-08-03 09:04:18'),(4,4,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-08-13','2026-09-29','2026-07-22',NULL,NULL,NULL,'2026-08-03 09:06:24','2026-08-03 09:06:24');
+/*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `tenant_documents`
+--
+
+DROP TABLE IF EXISTS `tenant_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant_documents` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `document_url` varchar(500) NOT NULL,
+  `document_public_id` varchar(255) NOT NULL,
+  `document_resource_type` varchar(20) DEFAULT 'image',
+  `document_type` varchar(50) DEFAULT 'id_proof',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant_id` (`tenant_id`),
+  CONSTRAINT `fk_tenant_documents_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenant_documents`
+--
+
+LOCK TABLES `tenant_documents` WRITE;
+/*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `tenants`
+--
+
+DROP TABLE IF EXISTS `tenants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenants` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `role` enum('tenant','guest') NOT NULL,
+  `full_name` varchar(255) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `nationality` varchar(100) NOT NULL,
+  `country_code` varchar(10) NOT NULL,
+  `phone` varchar(20) NOT NULL,
+  `gender` enum('male','female','other') NOT NULL,
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tenants_email` (`email`),
+  UNIQUE KEY `uq_tenants_phone` (`phone`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenants`
+--
+
+LOCK TABLES `tenants` WRITE;
+/*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
+INSERT INTO `tenants` VALUES (1,'tenant','Raj Kumar','raj.kumar71@example.com','Tanzanian','+91','9876553216','male',1,'2026-08-03 08:48:17','2026-08-03 08:48:17'),(2,'tenant','Raj Kumar','raj.kumar712@example.com','Tanzanian','+91','98765532161','male',1,'2026-08-03 08:57:15','2026-08-03 08:57:15'),(3,'tenant','Raj Kumar','raj.kumar7Q12@example.com','Tanzanian','+91','9876553211','male',1,'2026-08-03 09:04:18','2026-08-03 09:04:18'),(4,'tenant','Raj Kumar','raj.kumar7Q1G2@example.com','Tanzanian','+91','9876593211','male',1,'2026-08-03 09:06:24','2026-08-03 09:06:24');
+/*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -255,4 +396,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-03  1:07:46
+-- Dump completed on 2026-08-03 14:37:18

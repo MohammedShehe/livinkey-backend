@@ -12,6 +12,12 @@ const createPG = async (pgData, files = {}) => {
     try {
         await connection.beginTransaction();
 
+        // Check for duplicate PG name
+        const existingPG = await PGModel.findByName(pgData.name);
+        if (existingPG) {
+            throw new Error(`PG with name "${pgData.name}" already exists`);
+        }
+
         // 1. Upload Payment QR if provided
         let paymentQr = null;
         let paymentQrPublicId = null;
@@ -142,6 +148,12 @@ const updatePG = async (pgId, pgData, files = {}) => {
         const existingPG = await PGModel.findById(pgId);
         if (!existingPG) {
             throw new Error("PG not found");
+        }
+
+        // Check for duplicate PG name (excluding current PG)
+        const duplicatePG = await PGModel.findByName(pgData.name, pgId);
+        if (duplicatePG) {
+            throw new Error(`PG with name "${pgData.name}" already exists`);
         }
 
         // 1. Handle Payment QR update

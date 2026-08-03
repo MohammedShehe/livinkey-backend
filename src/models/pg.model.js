@@ -74,6 +74,22 @@ const createRoom = async (connection, floorId, roomNumber, capacity) => {
     return result.insertId;
 };
 
+// Check if PG name already exists
+const findByName = async (name, excludeId = null) => {
+    let query = `SELECT id, name FROM pgs WHERE name = ?`;
+    const params = [name];
+    
+    if (excludeId) {
+        query += ` AND id != ?`;
+        params.push(excludeId);
+    }
+    
+    query += ` LIMIT 1`;
+    
+    const [rows] = await db.execute(query, params);
+    return rows[0] || null;
+};
+
 const findById = async (pgId) => {
     const [rows] = await db.execute(
         `
@@ -150,13 +166,15 @@ const getRoomsByFloorId = async (floorId) => {
     const [rows] = await db.execute(
         `
         SELECT
-            id,
-            room_number,
-            capacity,
-            is_active
-        FROM rooms
-        WHERE floor_id = ?
-        ORDER BY room_number ASC
+            r.id,
+            r.room_number,
+            r.capacity,
+            r.is_active,
+            COALESCE(ro.occupied_count, 0) as occupied_count
+        FROM rooms r
+        LEFT JOIN room_occupancy ro ON r.id = ro.room_id
+        WHERE r.floor_id = ?
+        ORDER BY r.room_number ASC
         `,
         [floorId]
     );
@@ -171,56 +189,115 @@ const getPGWithDetails = async (pgId) => {
     const images = await getImagesByPGId(pgId);
     const floors = await getFloorsByPGId(pgId);
 
+    // Calculate total rooms and total occupancy
+    let totalRooms = 0;
+    let totalOccupied = 0;
+    let totalCapacity = 0;
+
     const floorsWithRooms = await Promise.all(
         floors.map(async (floor) => {
             const rooms = await getRoomsByFloorId(floor.id);
+            
+            // Calculate floor totals
+            let floorTotalRooms = 0;
+            let floorOccupied = 0;
+            let floorCapacity = 0;
+            
+            const roomsWithDetails = rooms.map(room => {
+                floorTotalRooms++;
+                floorOccupied += room.occupied_count || 0;
+                floorCapacity += room.capacity || 0;
+                
+                return {
+                    ...room,
+                    is_full: (room.occupied_count || 0) >= room.capacity,
+                    available: room.capacity - (room.occupied_count || 0)
+                };
+            });
+            
+            totalRooms += floorTotalRooms;
+            totalOccupied += floorOccupied;
+            totalCapacity += floorCapacity;
+            
             return {
                 ...floor,
-                rooms
+                rooms: roomsWithDetails,
+                floor_summary: {
+                    total_rooms: floorTotalRooms,
+                    occupied: floorOccupied,
+                    capacity: floorCapacity,
+                    occupancy_percentage: floorCapacity > 0 ? Math.round((floorOccupied / floorCapacity) * 100) : 0
+                }
             };
         })
     );
 
+    // Get all amenities as a simple array for summary
+    const amenityNames = amenities.map(a => a.amenity_name);
+
     return {
         ...pg,
         amenities,
+        amenity_names: amenityNames,
         images,
-        floors: floorsWithRooms
+        floors: floorsWithRooms,
+        summary: {
+            total_rooms: totalRooms,
+            total_capacity: totalCapacity,
+            total_occupied: totalOccupied,
+            occupancy_percentage: totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0,
+            occupancy_text: `${totalOccupied}/${totalCapacity}`
+        }
     };
 };
 
 const getAllPGs = async (search = null, isActive = null) => {
     let query = `
         SELECT
-            id,
-            name,
-            location,
-            number_of_floors,
-            payment_qr,
-            is_active,
-            created_by,
-            created_at,
-            updated_at
-        FROM pgs
+            p.id,
+            p.name,
+            p.location,
+            p.number_of_floors,
+            p.payment_qr,
+            p.is_active,
+            p.created_by,
+            p.created_at,
+            p.updated_at,
+            COUNT(DISTINCT r.id) as total_rooms,
+            COALESCE(SUM(r.capacity), 0) as total_capacity,
+            COALESCE(SUM(ro.occupied_count), 0) as total_occupied,
+            GROUP_CONCAT(DISTINCT pa.amenity_name) as amenity_names
+        FROM pgs p
+        LEFT JOIN floors f ON p.id = f.pg_id
+        LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
+        LEFT JOIN room_occupancy ro ON r.id = ro.room_id
+        LEFT JOIN pg_amenities pa ON p.id = pa.pg_id
         WHERE 1=1
     `;
     const params = [];
 
     if (search) {
-        query += ` AND (name LIKE ? OR location LIKE ?)`;
+        query += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
         const searchPattern = `%${search}%`;
         params.push(searchPattern, searchPattern);
     }
 
     if (isActive !== null) {
-        query += ` AND is_active = ?`;
+        query += ` AND p.is_active = ?`;
         params.push(isActive);
     }
 
-    query += ` ORDER BY created_at DESC`;
+    query += ` GROUP BY p.id ORDER BY p.created_at DESC`;
 
     const [rows] = await db.execute(query, params);
-    return rows;
+    
+    // Process results to format occupancy text
+    return rows.map(row => ({
+        ...row,
+        occupancy_text: `${row.total_occupied || 0}/${row.total_capacity || 0}`,
+        occupancy_percentage: row.total_capacity > 0 ? Math.round(((row.total_occupied || 0) / row.total_capacity) * 100) : 0,
+        amenity_names: row.amenity_names ? row.amenity_names.split(',') : []
+    }));
 };
 
 const getPGStats = async () => {
@@ -230,7 +307,7 @@ const getPGStats = async () => {
     );
     const totalPGs = totalResult[0].total;
 
-    // Get all PGs with their room counts and capacities
+    // Get all PGs with their room counts, capacities, and occupancy
     const [pgData] = await db.execute(
         `
         SELECT 
@@ -238,29 +315,21 @@ const getPGStats = async () => {
             p.name,
             p.is_active,
             COUNT(DISTINCT r.id) as total_rooms,
-            COALESCE(SUM(r.capacity), 0) as total_capacity
+            COALESCE(SUM(r.capacity), 0) as total_capacity,
+            COALESCE(SUM(ro.occupied_count), 0) as total_occupied
         FROM pgs p
         LEFT JOIN floors f ON p.id = f.pg_id
         LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
+        LEFT JOIN room_occupancy ro ON r.id = ro.room_id
         WHERE p.is_active = 1
         GROUP BY p.id, p.name, p.is_active
         `
     );
 
-    // Get occupied rooms count (rooms that have tenants - we'll use a placeholder)
-    // Since we don't have tenants table yet, we'll use a simpler approach
-    // For now, we'll consider a PG as "occupied" if it has rooms with capacity
-    // This will be updated when tenants table is implemented
-    
     let fullyOccupied = 0;
     let partiallyOccupied = 0;
     let vacant = 0;
 
-    // For each PG, calculate occupancy status
-    // Since we don't have actual tenant data yet, we'll use a placeholder logic
-    // We'll mark PGs with rooms but no occupancy data as "vacant" for now
-    // This will be improved when tenants table is added
-    
     for (const pg of pgData) {
         // If PG has no rooms, it's vacant
         if (pg.total_rooms === 0) {
@@ -268,10 +337,16 @@ const getPGStats = async () => {
             continue;
         }
 
-        // For now, we'll use a simple logic:
-        // If total_rooms > 0 but we don't have occupancy data, mark as partially occupied
-        // This will be refined when tenants are implemented
-        partiallyOccupied++;
+        // Calculate occupancy percentage
+        const occupancyPercentage = pg.total_capacity > 0 ? (pg.total_occupied / pg.total_capacity) * 100 : 0;
+        
+        if (occupancyPercentage === 100) {
+            fullyOccupied++;
+        } else if (occupancyPercentage > 0) {
+            partiallyOccupied++;
+        } else {
+            vacant++;
+        }
     }
 
     return {
@@ -357,6 +432,7 @@ module.exports = {
     createPGImage,
     createFloor,
     createRoom,
+    findByName,
     findById,
     getAmenitiesByPGId,
     getImagesByPGId,
