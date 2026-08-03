@@ -348,6 +348,56 @@ const getStats = async () => {
     };
 };
 
+const getGuestStats = async () => {
+    // Total guests
+    const [totalResult] = await db.execute(
+        `SELECT COUNT(*) as total_guests FROM tenants WHERE role = 'guest'`
+    );
+    const total_guests = totalResult[0].total_guests;
+
+    // This month guests (created in current month)
+    const [thisMonthResult] = await db.execute(
+        `
+        SELECT COUNT(*) as this_month_guests 
+        FROM tenants 
+        WHERE role = 'guest' 
+        AND MONTH(created_at) = MONTH(CURDATE()) 
+        AND YEAR(created_at) = YEAR(CURDATE())
+        `
+    );
+    const this_month_guests = thisMonthResult[0].this_month_guests;
+
+    // Last month guests
+    const [lastMonthResult] = await db.execute(
+        `
+        SELECT COUNT(*) as last_month_guests 
+        FROM tenants 
+        WHERE role = 'guest' 
+        AND MONTH(created_at) = MONTH(CURDATE() - INTERVAL 1 MONTH) 
+        AND YEAR(created_at) = YEAR(CURDATE() - INTERVAL 1 MONTH)
+        `
+    );
+    const last_month_guests = lastMonthResult[0].last_month_guests;
+
+    // Today's guests
+    const [todayResult] = await db.execute(
+        `
+        SELECT COUNT(*) as today_guests 
+        FROM tenants 
+        WHERE role = 'guest' 
+        AND DATE(created_at) = CURDATE()
+        `
+    );
+    const today_guests = todayResult[0].today_guests;
+
+    return {
+        total_guests,
+        this_month_guests,
+        last_month_guests,
+        today_guests
+    };
+};
+
 const updateTenant = async (connection, tenantId, tenantData) => {
     const [result] = await connection.execute(
         `
@@ -509,6 +559,7 @@ module.exports = {
     getTenantDocuments,
     getTenantWithDocuments,
     getStats,
+    getGuestStats,
     updateTenant,
     updateTenantPassword,
     updateTenantDetails,

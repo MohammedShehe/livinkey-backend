@@ -1,4 +1,5 @@
 const tenantService = require("../services/tenant.service");
+const { sendGuestMessageEmail } = require("../services/mail.service");
 
 const createTenant = async (req, res) => {
     try {
@@ -145,6 +146,24 @@ const getTenantStats = async (req, res) => {
 
     } catch (error) {
         console.error("Get Tenant Stats Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const getGuestStats = async (req, res) => {
+    try {
+        const stats = await tenantService.getGuestStats();
+
+        return res.status(200).json({
+            success: true,
+            data: stats
+        });
+
+    } catch (error) {
+        console.error("Get Guest Stats Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error"
@@ -311,11 +330,64 @@ const deleteTenant = async (req, res) => {
     }
 };
 
+const sendMessage = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { message, subject } = req.body;
+
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                message: "Message content is required"
+            });
+        }
+
+        const tenant = await tenantService.getTenantById(id);
+        if (!tenant) {
+            return res.status(404).json({
+                success: false,
+                message: "Tenant not found"
+            });
+        }
+
+        if (tenant.role !== 'guest') {
+            return res.status(400).json({
+                success: false,
+                message: "Messages can only be sent to guests"
+            });
+        }
+
+        const adminName = req.admin.name || 'Livinkey Admin';
+
+        await sendGuestMessageEmail(
+            tenant.email,
+            tenant.full_name,
+            adminName,
+            message,
+            subject || null
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Message sent successfully to guest"
+        });
+
+    } catch (error) {
+        console.error("Send Message Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createTenant,
     getAllTenants,
     getTenantStats,
+    getGuestStats,
     getTenantById,
     updateTenant,
-    deleteTenant
+    deleteTenant,
+    sendMessage
 };

@@ -6,16 +6,13 @@ const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const upload = require("../middleware/upload.middleware");
 
-// Configure multer for multiple files
 const uploadFields = upload.fields([
     { name: 'document', maxCount: 1 },
     { name: 'otherDocuments', maxCount: 5 }
 ]);
 
-// All routes require authentication
 router.use(authMiddleware);
 
-// Routes
 router.post(
     "/",
     roleMiddleware("super_admin", "admin"),
@@ -36,6 +33,12 @@ router.get(
 );
 
 router.get(
+    "/stats/guests",
+    roleMiddleware("super_admin", "admin"),
+    tenantController.getGuestStats
+);
+
+router.get(
     "/:id",
     roleMiddleware("super_admin", "admin"),
     tenantController.getTenantById
@@ -52,6 +55,12 @@ router.delete(
     "/:id",
     roleMiddleware("super_admin", "admin"),
     tenantController.deleteTenant
+);
+
+router.post(
+    "/:id/send-message",
+    roleMiddleware("super_admin", "admin"),
+    tenantController.sendMessage
 );
 
 module.exports = router;

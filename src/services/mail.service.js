@@ -447,6 +447,147 @@ const sendWelcomeTenantEmail = async (email, name, role, password, pgName = null
     });
 };
 
+const sendGuestMessageEmail = async (email, guestName, adminName, message, subject = null) => {
+    const emailSubject = subject || `📩 Message from Livinkey Admin`;
+
+    await transporter.sendMail({
+        from: `"Livinkey Admin" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: emailSubject,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Message from Livinkey Admin</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #92C24A; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">📩 Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">MESSAGE FROM ADMIN</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${guestName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        You have received a message from <strong>${adminName}</strong> regarding your stay at Livinkey.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 12px 0; text-align: center;">
+                                            📝 Message
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #e8ecf1; min-height: 80px;">
+                                            <p style="color: #4a5568; font-size: 15px; line-height: 1.8; margin: 0; white-space: pre-wrap;">
+                                                ${message}
+                                            </p>
+                                        </div>
+                                        <p style="color: #718096; font-size: 13px; margin-top: 12px; margin-bottom: 0; text-align: center;">
+                                            Sent on: ${new Date().toLocaleString()}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 8px; border-left: 4px solid #92C24A;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <div style="display: flex; align-items: flex-start;">
+                                            <span style="font-size: 18px; margin-right: 12px;">💡</span>
+                                            <div>
+                                                <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">
+                                                    Need Help?
+                                                </p>
+                                                <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin: 0;">
+                                                    If you have any questions, please reply to this email or contact the Livinkey support team.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · Guest Communication
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message from the Livinkey admin panel.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 16px;">
+                                        <table align="center" border="0" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="padding: 0 8px;">
+                                                    <a href="#" style="color: #4a5568; text-decoration: none; font-size: 12px; font-weight: 500;">Support</a>
+                                                </td>
+                                                <td style="color: #dce1e8; padding: 0 4px;">·</td>
+                                                <td style="padding: 0 8px;">
+                                                    <a href="#" style="color: #4a5568; text-decoration: none; font-size: 12px; font-weight: 500;">Privacy</a>
+                                                </td>
+                                                <td style="color: #dce1e8; padding: 0 4px;">·</td>
+                                                <td style="padding: 0 8px;">
+                                                    <a href="#" style="color: #4a5568; text-decoration: none; font-size: 12px; font-weight: 500;">Terms</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 const sendPasswordResetEmail = async (email, name) => {
     await transporter.sendMail({
         from: `"Livinkey" <${process.env.EMAIL_USER}>`,
@@ -597,5 +738,6 @@ module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
     sendWelcomeTenantEmail,
+    sendGuestMessageEmail,
     sendPasswordResetEmail
 };

@@ -1,6 +1,5 @@
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
-const crypto = require("crypto");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const { sendWelcomeTenantEmail } = require("./mail.service");
@@ -89,7 +88,6 @@ const createTenant = async (tenantData, files = {}) => {
             }
         }
 
-        // Generate password
         const plainPassword = generatePassword();
         const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
@@ -173,7 +171,6 @@ const createTenant = async (tenantData, files = {}) => {
 
         await connection.commit();
 
-        // Get PG and Room details for email
         let pgName = null;
         let roomNumber = null;
         if (tenantData.role === 'tenant') {
@@ -190,7 +187,6 @@ const createTenant = async (tenantData, files = {}) => {
             roomNumber = roomResult[0]?.room_number || null;
         }
 
-        // Send welcome email
         try {
             await sendWelcomeTenantEmail(
                 tenantData.email,
@@ -232,6 +228,10 @@ const getTenantById = async (tenantId) => {
 
 const getTenantStats = async () => {
     return await TenantModel.getStats();
+};
+
+const getGuestStats = async () => {
+    return await TenantModel.getGuestStats();
 };
 
 const updateTenant = async (tenantId, tenantData, files = {}) => {
@@ -469,6 +469,7 @@ module.exports = {
     getAllTenants,
     getTenantById,
     getTenantStats,
+    getGuestStats,
     updateTenant,
     deleteTenant
 };
