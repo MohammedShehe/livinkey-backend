@@ -101,12 +101,19 @@ const getBills = async (filters = {}) => {
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
                 0
             ) as total_partial_paid,
+            COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
+                0
+            ) as total_cash_paid,
             DATEDIFF(NOW(), b.sent_at) as days_since_sent,
             CASE 
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
-            END as qr_status
+            END as qr_status,
+            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
+            )) as due_amount
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
@@ -169,12 +176,23 @@ const getBillById = async (billId) => {
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
                 0
             ) as total_partial_paid,
+            COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
+                0
+            ) as total_cash_paid,
             DATEDIFF(NOW(), b.sent_at) as days_since_sent,
             CASE 
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
-            END as qr_status
+            END as qr_status,
+            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
+            )) as due_amount,
+            b.cash_payment_otp,
+            b.cash_payment_otp_expiry,
+            b.cash_payment_verified,
+            b.cash_payment_requested_at
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         INNER JOIN tenant_details td ON t.id = td.tenant_id
@@ -196,11 +214,18 @@ const getBillsByTenant = async (tenantId) => {
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id), 
                 0
             ) as total_paid,
+            COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
+                0
+            ) as total_cash_paid,
             CASE 
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
-            END as qr_status
+            END as qr_status,
+            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
+                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
+            )) as due_amount
         FROM bills b
         WHERE b.tenant_id = ?
         ORDER BY b.created_at DESC
@@ -263,6 +288,78 @@ const createBillPayment = async (connection, paymentData) => {
         ]
     );
     return result.insertId;
+};
+
+const createCashPayment = async (connection, paymentData) => {
+    const [result] = await connection.execute(
+        `
+        INSERT INTO cash_payments (
+            bill_id,
+            tenant_id,
+            amount,
+            paid_from,
+            paid_till,
+            verified_by,
+            otp,
+            status,
+            notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+            paymentData.bill_id,
+            paymentData.tenant_id,
+            paymentData.amount,
+            paymentData.paid_from,
+            paymentData.paid_till,
+            paymentData.verified_by,
+            paymentData.otp,
+            'verified',
+            paymentData.notes || null
+        ]
+    );
+    return result.insertId;
+};
+
+const getCashPayments = async (filters = {}) => {
+    let query = `
+        SELECT 
+            cp.*,
+            t.full_name as tenant_name,
+            t.email as tenant_email,
+            t.phone as tenant_phone,
+            p.name as pg_name,
+            r.room_number,
+            a.name as verified_by_name
+        FROM cash_payments cp
+        INNER JOIN tenants t ON cp.tenant_id = t.id
+        LEFT JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        LEFT JOIN admins a ON cp.verified_by = a.id
+        WHERE 1=1
+    `;
+    const params = [];
+
+    if (filters.tenant_id) {
+        query += ` AND cp.tenant_id = ?`;
+        params.push(filters.tenant_id);
+    }
+
+    if (filters.status) {
+        query += ` AND cp.status = ?`;
+        params.push(filters.status);
+    }
+
+    if (filters.search) {
+        query += ` AND (t.full_name LIKE ? OR t.email LIKE ? OR t.phone LIKE ?)`;
+        const searchPattern = `%${filters.search}%`;
+        params.push(searchPattern, searchPattern, searchPattern);
+    }
+
+    query += ` ORDER BY cp.created_at DESC`;
+
+    const [rows] = await db.execute(query, params);
+    return rows;
 };
 
 const getOverdueBills = async () => {
@@ -390,6 +487,70 @@ const getActiveCustomMessage = async (billId) => {
     return rows[0] || null;
 };
 
+// Cash payment OTP functions
+const setCashPaymentOTP = async (connection, billId, otp, expiry) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills 
+        SET 
+            cash_payment_otp = ?,
+            cash_payment_otp_expiry = ?,
+            cash_payment_verified = 0,
+            cash_payment_requested_at = NOW()
+        WHERE id = ?
+        `,
+        [otp, expiry, billId]
+    );
+    return result.affectedRows;
+};
+
+const verifyCashPaymentOTP = async (connection, billId, otp) => {
+    const [rows] = await connection.execute(
+        `
+        SELECT id, cash_payment_otp, cash_payment_otp_expiry, cash_payment_verified
+        FROM bills
+        WHERE id = ?
+        AND cash_payment_otp = ?
+        AND cash_payment_verified = 0
+        AND cash_payment_otp_expiry > NOW()
+        `,
+        [billId, otp]
+    );
+    
+    if (rows.length === 0) {
+        return { valid: false, message: "Invalid or expired OTP" };
+    }
+    
+    await connection.execute(
+        `
+        UPDATE bills 
+        SET 
+            cash_payment_verified = 1,
+            cash_payment_verified_at = NOW()
+        WHERE id = ?
+        `,
+        [billId]
+    );
+    
+    return { valid: true, message: "OTP verified successfully" };
+};
+
+const clearCashPaymentOTP = async (connection, billId) => {
+    await connection.execute(
+        `
+        UPDATE bills 
+        SET 
+            cash_payment_otp = NULL,
+            cash_payment_otp_expiry = NULL,
+            cash_payment_verified = 0,
+            cash_payment_requested_at = NULL
+        WHERE id = ?
+        `,
+        [billId]
+    );
+    return true;
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -399,9 +560,14 @@ module.exports = {
     updateBillStatus,
     updateBillFine,
     createBillPayment,
+    createCashPayment,
+    getCashPayments,
     getOverdueBills,
     getBillStats,
     updateInitialEmailSent,
     updateCustomMessage,
-    getActiveCustomMessage
+    getActiveCustomMessage,
+    setCashPaymentOTP,
+    verifyCashPaymentOTP,
+    clearCashPaymentOTP
 };

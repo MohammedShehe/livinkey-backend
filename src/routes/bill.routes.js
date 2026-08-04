@@ -9,7 +9,7 @@ const upload = require("../middleware/upload.middleware");
 const uploadFields = upload.fields([
     { name: 'meterImage', maxCount: 1 },
     { name: 'paymentQr', maxCount: 1 },
-    { name: 'adminQr', maxCount: 1 }  // For custom messages
+    { name: 'adminQr', maxCount: 1 }
 ]);
 
 router.use(authMiddleware);
@@ -37,6 +37,12 @@ router.get(
     "/",
     roleMiddleware("super_admin", "admin"),
     billController.getBills
+);
+
+router.get(
+    "/cash-payments",
+    roleMiddleware("super_admin", "admin"),
+    billController.getCashPayments
 );
 
 router.get(
@@ -68,6 +74,19 @@ router.post(
     roleMiddleware("super_admin", "admin"),
     upload.fields([{ name: 'adminQr', maxCount: 1 }]),
     billController.sendCustomMessage
+);
+
+// Cash Payment Routes
+router.post(
+    "/:id/cash-payment/request-otp",
+    roleMiddleware("super_admin", "admin"),
+    billController.requestCashPaymentOTP
+);
+
+router.post(
+    "/:id/cash-payment/verify",
+    roleMiddleware("super_admin", "admin"),
+    billController.verifyCashPayment
 );
 
 module.exports = router;

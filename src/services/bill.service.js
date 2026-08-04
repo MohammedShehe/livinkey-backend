@@ -1,11 +1,12 @@
 const db = require("../config/db");
 const BillModel = require("../models/bill.model");
 const { uploadFile, deleteFile, deleteMultipleFiles } = require("./upload.service");
-const { sendBillEmail, sendFineNotificationEmail, sendCustomBillMessageEmail } = require("./mail.service");
+const { sendBillEmail, sendFineNotificationEmail, sendCustomBillMessageEmail, sendCashPaymentOTPEmail } = require("./mail.service");
 const QRCode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const crypto = require("crypto");
 
 const generateQRCode = async (data, folder) => {
     const tempDir = os.tmpdir();
@@ -42,12 +43,14 @@ const cleanupUploadedFiles = async (uploadedFiles) => {
     }
 };
 
+const generateOTP = () => {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+};
+
 const getQRExpiryTime = (existingExpiry = null) => {
     if (existingExpiry && new Date(existingExpiry) > new Date()) {
-        // If there's an existing valid expiry, use it
         return new Date(existingExpiry);
     }
-    // Otherwise, set to 24 hours from now
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
 };
 
@@ -273,6 +276,10 @@ const getOverdueBills = async () => {
     return await BillModel.getOverdueBills();
 };
 
+const getCashPayments = async (filters = {}) => {
+    return await BillModel.getCashPayments(filters);
+};
+
 const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
     const connection = await db.getConnection();
     const uploadedCloudFiles = [];
@@ -290,24 +297,21 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
             throw new Error("Cannot send message to a paid bill");
         }
 
-        // Check if there's an active QR code
         const activeMessage = await BillModel.getActiveCustomMessage(billId);
         let qrCodeUrl = null;
         let qrCodePublicId = null;
         let qrCodeResourceType = null;
         let qrExpiresAt = null;
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0);
+        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
 
         if (activeMessage && activeMessage.qr_expires_at && new Date(activeMessage.qr_expires_at) > new Date()) {
-            // Use existing QR code and expiry
             qrCodeUrl = activeMessage.custom_message_qr;
             qrCodePublicId = activeMessage.custom_message_qr_public_id;
             qrCodeResourceType = activeMessage.custom_message_qr_resource_type;
             qrExpiresAt = activeMessage.qr_expires_at;
             console.log("Reusing existing QR code, expires at:", qrExpiresAt);
         } else if (totalDue > 0) {
-            // Generate new QR code with 24 hours validity (end of day)
             const endOfDay = new Date();
             endOfDay.setHours(23, 59, 59, 999);
             qrExpiresAt = endOfDay;
@@ -336,7 +340,6 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
             }
         }
 
-        // Upload admin's custom QR if provided
         let adminQrUrl = null;
         let adminQrPublicId = null;
         let adminQrResourceType = null;
@@ -354,7 +357,6 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
             }
         }
 
-        // Update bill with message data
         await BillModel.updateCustomMessage(connection, billId, {
             qr_code_url: qrCodeUrl,
             qr_code_public_id: qrCodePublicId,
@@ -368,7 +370,6 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
 
         await connection.commit();
 
-        // Send email
         try {
             const updatedBill = await BillModel.getBillById(billId);
             const adminName = messageData.admin_name || 'Livinkey Admin';
@@ -412,6 +413,131 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
     }
 };
 
+// Cash Payment Functions
+const requestCashPaymentOTP = async (billId, paymentData) => {
+    const connection = await db.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const bill = await BillModel.getBillById(billId);
+        if (!bill) {
+            throw new Error("Bill not found");
+        }
+
+        if (bill.status === 'paid') {
+            throw new Error("Bill is already fully paid");
+        }
+
+        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        
+        if (paymentData.amount > totalDue) {
+            throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
+        }
+
+        // Generate 4-digit OTP
+        const otp = generateOTP();
+        const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+
+        await BillModel.setCashPaymentOTP(connection, billId, otp, expiry);
+
+        await connection.commit();
+
+        // Send OTP email to tenant
+        try {
+            await sendCashPaymentOTPEmail(
+                bill.tenant_email,
+                bill.tenant_name,
+                otp,
+                paymentData.amount,
+                bill.pg_name,
+                bill.room_number
+            );
+        } catch (emailError) {
+            console.error("Failed to send OTP email:", emailError);
+        }
+
+        return { 
+            success: true, 
+            message: "OTP sent to tenant's email",
+            bill_id: billId,
+            amount: paymentData.amount
+        };
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Request Cash Payment OTP Error:", error);
+        throw error;
+
+    } finally {
+        connection.release();
+    }
+};
+
+const verifyCashPayment = async (billId, otp, paymentData) => {
+    const connection = await db.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const bill = await BillModel.getBillById(billId);
+        if (!bill) {
+            throw new Error("Bill not found");
+        }
+
+        // Verify OTP
+        const verification = await BillModel.verifyCashPaymentOTP(connection, billId, otp);
+        if (!verification.valid) {
+            throw new Error(verification.message);
+        }
+
+        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        
+        if (paymentData.amount > totalDue) {
+            throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
+        }
+
+        // Create cash payment record
+        await BillModel.createCashPayment(connection, {
+            bill_id: billId,
+            tenant_id: bill.tenant_id,
+            amount: paymentData.amount,
+            paid_from: paymentData.paid_from,
+            paid_till: paymentData.paid_till,
+            verified_by: paymentData.verified_by,
+            otp: otp,
+            notes: paymentData.notes || null
+        });
+
+        // Update bill paid amount
+        const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
+        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount - parseFloat(bill.total_cash_paid || 0);
+
+        let newStatus = 'paid';
+        if (remainingAmount > 0) {
+            newStatus = 'partially_paid';
+        }
+
+        await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
+
+        // Clear OTP
+        await BillModel.clearCashPaymentOTP(connection, billId);
+
+        await connection.commit();
+
+        const updatedBill = await BillModel.getBillById(billId);
+        return updatedBill;
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Verify Cash Payment Error:", error);
+        throw error;
+
+    } finally {
+        connection.release();
+    }
+};
+
 const processDelayedPayments = async () => {
     const connection = await db.getConnection();
     let processedCount = 0;
@@ -444,7 +570,7 @@ const processDelayedPayments = async () => {
             let shouldApplyFine = false;
             let fineAmount = bill.fine_amount || 0;
             
-            const hasPartialPayment = bill.total_partial_paid > 0;
+            const hasPartialPayment = bill.total_partial_paid > 0 || bill.total_cash_paid > 0;
             
             if (hasPartialPayment) {
                 if (daysSinceSent > 14) {
@@ -620,7 +746,7 @@ const addPayment = async (billId, paymentData) => {
             throw new Error("Bill is already fully paid");
         }
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0);
+        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
         
         if (paymentData.amount > totalDue) {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
@@ -635,7 +761,7 @@ const addPayment = async (billId, paymentData) => {
         });
 
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
-        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
+        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount - parseFloat(bill.total_cash_paid || 0);
 
         let newStatus = 'paid';
         if (remainingAmount > 0) {
@@ -671,7 +797,10 @@ module.exports = {
     getBillsByTenant,
     getBillStats,
     getOverdueBills,
+    getCashPayments,
     sendCustomMessageToTenant,
+    requestCashPaymentOTP,
+    verifyCashPayment,
     processDelayedPayments,
     addPayment
 };

@@ -256,6 +256,130 @@ const sendCustomMessage = async (req, res) => {
     }
 };
 
+// Cash Payment Controllers
+const requestCashPaymentOTP = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { amount, paid_from, paid_till, notes } = req.body;
+
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid payment amount is required"
+            });
+        }
+
+        if (!paid_from || !paid_till) {
+            return res.status(400).json({
+                success: false,
+                message: "Paid from and paid till dates are required"
+            });
+        }
+
+        const result = await billService.requestCashPaymentOTP(
+            parseInt(id),
+            {
+                amount: parseFloat(amount),
+                paid_from,
+                paid_till,
+                notes: notes || null,
+                verified_by: req.admin.id
+            }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "OTP sent to tenant's email. Please ask tenant for the 4-digit OTP.",
+            data: result
+        });
+
+    } catch (error) {
+        console.error("Request Cash Payment OTP Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const verifyCashPayment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { otp, amount, paid_from, paid_till, notes } = req.body;
+
+        if (!otp) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP is required"
+            });
+        }
+
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid payment amount is required"
+            });
+        }
+
+        if (!paid_from || !paid_till) {
+            return res.status(400).json({
+                success: false,
+                message: "Paid from and paid till dates are required"
+            });
+        }
+
+        const bill = await billService.verifyCashPayment(
+            parseInt(id),
+            otp,
+            {
+                amount: parseFloat(amount),
+                paid_from,
+                paid_till,
+                notes: notes || null,
+                verified_by: req.admin.id
+            }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Cash payment verified and recorded successfully",
+            data: bill
+        });
+
+    } catch (error) {
+        console.error("Verify Cash Payment Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const getCashPayments = async (req, res) => {
+    try {
+        const { tenant_id, status, search } = req.query;
+
+        const payments = await billService.getCashPayments({
+            tenant_id: tenant_id ? parseInt(tenant_id) : null,
+            status: status || 'verified',
+            search
+        });
+
+        return res.status(200).json({
+            success: true,
+            count: payments.length,
+            data: payments
+        });
+
+    } catch (error) {
+        console.error("Get Cash Payments Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -265,5 +389,8 @@ module.exports = {
     getBillStats,
     processDelayedPayments,
     addPayment,
-    sendCustomMessage
+    sendCustomMessage,
+    requestCashPaymentOTP,
+    verifyCashPayment,
+    getCashPayments
 };
