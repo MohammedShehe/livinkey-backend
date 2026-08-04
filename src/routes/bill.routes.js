@@ -53,4 +53,10 @@ router.post(
     billController.processDelayedPayments
 );
 
+router.post(
+    "/:id/payment",
+    roleMiddleware("super_admin", "admin"),
+    billController.addPayment
+);
+
 module.exports = router;

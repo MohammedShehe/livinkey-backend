@@ -153,11 +153,50 @@ const processDelayedPayments = async (req, res) => {
     }
 };
 
+const addPayment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { amount, payment_method, transaction_id, is_partial } = req.body;
+
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid payment amount is required"
+            });
+        }
+
+        const payment = await billService.addPayment(
+            parseInt(id),
+            {
+                amount: parseFloat(amount),
+                payment_method: payment_method || 'qr_code',
+                transaction_id: transaction_id || null,
+                is_partial: is_partial === true || is_partial === 'true' ? 1 : 0,
+                created_by: req.admin.id
+            }
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: "Payment recorded successfully",
+            data: payment
+        });
+
+    } catch (error) {
+        console.error("Add Payment Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
     getBillById,
     getBillsByTenant,
     getBillStats,
-    processDelayedPayments
+    processDelayedPayments,
+    addPayment
 };

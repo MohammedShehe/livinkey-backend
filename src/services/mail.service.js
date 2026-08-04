@@ -956,11 +956,198 @@ const sendBillEmail = async (email, tenantName, billData, qrCodeUrl, partialQrUr
     });
 };
 
+const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount, daysDelayed, hasPartialPayment, fullQrUrl, partialQrUrl) => {
+    const totalAmount = parseFloat(billData.total_amount) || 0;
+    const previousFine = parseFloat(billData.fine_amount) || 0;
+    const newTotal = totalAmount + fineAmount;
+    const fineAdded = fineAmount - previousFine;
+    const partialAmount = newTotal * 0.5;
+    
+    const daysOverdue = daysDelayed;
+
+    // Use new QR codes or fallback to existing
+    const qrFull = fullQrUrl || billData.payment_qr;
+    const qrPartial = partialQrUrl || billData.partial_payment_qr;
+
+    await transporter.sendMail({
+        from: `"Livinkey" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `⚠️ Late Payment Fee Applied - Livinkey`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Late Payment Fee - Livinkey</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #e74c3c; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">⚠️ Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">LATE PAYMENT FEE</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${tenantName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        Your bill payment is <strong style="color: #e74c3c;">${daysOverdue} days overdue</strong>. A late payment fee has been applied.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                                            💰 Updated Bill Details
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <table width="100%" style="border-collapse: collapse;">
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Original Bill Amount</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${totalAmount.toFixed(2)}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Previous Late Fees</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${previousFine.toFixed(2)}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #e74c3c; font-weight: 600;">New Late Fee Added</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #e74c3c;">+ ₹${fineAdded.toFixed(2)}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #000000;">Total Amount Due</td>
+                                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #e74c3c; font-size: 18px;">₹${newTotal.toFixed(2)}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 13px; margin-top: 12px; margin-bottom: 0; text-align: center;">
+                                            ${hasPartialPayment ? '⚠️ You have made a partial payment. Additional fees apply after 14 days.' : '⚠️ ₹100 late fee added for each day beyond the 7-day grace period.'}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">
+                                            📱 Scan to Pay Full Amount
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${qrFull}" alt="Payment QR Code" style="width: 200px; height: 200px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 14px; margin-top: 12px; margin-bottom: 0;">
+                                            Scan this QR code to pay the full amount of <strong>₹${newTotal.toFixed(2)}</strong>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                                            💳 Partial Payment (50%)
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${qrPartial}" alt="Partial Payment QR Code" style="width: 150px; height: 150px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 13px; margin-top: 10px; margin-bottom: 0;">
+                                            Scan to pay 50% (<strong>₹${partialAmount.toFixed(2)}</strong>)
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 8px; border-left: 4px solid #e74c3c;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <div style="display: flex; align-items: flex-start;">
+                                            <span style="font-size: 18px; margin-right: 12px;">⏰</span>
+                                            <div>
+                                                <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">
+                                                    Action Required
+                                                </p>
+                                                <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin: 0;">
+                                                    Please pay your outstanding bill as soon as possible to avoid additional late fees. 
+                                                    New QR codes have been generated with the updated total amount.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · Bill Management
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message, please do not reply.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
     sendWelcomeTenantEmail,
     sendGuestMessageEmail,
     sendPasswordResetEmail,
-    sendBillEmail
+    sendBillEmail,
+    sendFineNotificationEmail
 };

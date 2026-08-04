@@ -21,8 +21,11 @@ const createBill = async (connection, billData) => {
             partial_payment_qr_resource_type,
             sent_at,
             valid_until,
-            created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_by,
+            fine_applied_days,
+            last_fine_email_sent,
+            initial_email_sent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
@@ -42,7 +45,10 @@ const createBill = async (connection, billData) => {
             billData.partial_payment_qr_resource_type || null,
             billData.sent_at,
             billData.valid_until,
-            billData.created_by
+            billData.created_by,
+            billData.fine_applied_days || 0,
+            billData.last_fine_email_sent || null,
+            billData.initial_email_sent || 0
         ]
     );
     return result.insertId;
@@ -97,7 +103,8 @@ const getBillById = async (billId) => {
             COALESCE(
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
                 0
-            ) as total_partial_paid
+            ) as total_partial_paid,
+            DATEDIFF(NOW(), b.sent_at) as days_since_sent
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         INNER JOIN tenant_details td ON t.id = td.tenant_id
@@ -144,17 +151,19 @@ const updateBillStatus = async (connection, billId, status, paidAmount = null) =
     return result.affectedRows;
 };
 
-const updateBillFine = async (connection, billId, fineAmount, validUntil) => {
+const updateBillFine = async (connection, billId, fineAmount, validUntil, fineAppliedDays, lastFineEmailSent) => {
     const [result] = await connection.execute(
         `
         UPDATE bills
         SET 
             fine_amount = ?,
             valid_until = ?,
-            status = 'delayed'
+            status = 'delayed',
+            fine_applied_days = ?,
+            last_fine_email_sent = ?
         WHERE id = ?
         `,
-        [fineAmount, validUntil, billId]
+        [fineAmount, validUntil, fineAppliedDays, lastFineEmailSent, billId]
     );
     return result.affectedRows;
 };
@@ -187,12 +196,14 @@ const getOverdueBills = async () => {
         SELECT 
             b.*,
             t.full_name as tenant_name,
-            t.email as tenant_email
+            t.email as tenant_email,
+            DATEDIFF(NOW(), b.sent_at) as days_since_sent
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
         AND b.valid_until < NOW()
         AND b.sent_at IS NOT NULL
+        AND b.initial_email_sent = 1
         ORDER BY b.valid_until ASC
         `
     );
@@ -221,12 +232,12 @@ const getBillStats = async () => {
     const paid = paidResult[0].paid;
 
     const [delayedResult] = await db.execute(
-        `SELECT COUNT(*) as delayed FROM bills WHERE status = 'delayed'`
+        `SELECT COUNT(*) as 'delayed' FROM bills WHERE status = 'delayed'`
     );
     const delayed = delayedResult[0].delayed;
 
     const [overdueResult] = await db.execute(
-        `SELECT COUNT(*) as overdue FROM bills WHERE status = 'overdue'`
+        `SELECT COUNT(*) as 'overdue' FROM bills WHERE status = 'overdue'`
     );
     const overdue = overdueResult[0].overdue;
 
@@ -240,6 +251,16 @@ const getBillStats = async () => {
     };
 };
 
+const updateInitialEmailSent = async (connection, billId) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills SET initial_email_sent = 1 WHERE id = ?
+        `,
+        [billId]
+    );
+    return result.affectedRows;
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -249,5 +270,6 @@ module.exports = {
     updateBillFine,
     createBillPayment,
     getOverdueBills,
-    getBillStats
+    getBillStats,
+    updateInitialEmailSent
 };
