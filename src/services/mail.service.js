@@ -449,6 +449,9 @@ const sendWelcomeTenantEmail = async (email, name, role, password, pgName = null
 
 const sendGuestMessageEmail = async (email, guestName, adminName, message, subject = null) => {
     const emailSubject = subject || `📩 Message from Livinkey Admin`;
+    
+    // Convert \n to <br> for proper line breaks
+    const formattedMessage = message.replace(/\n/g, '<br>');
 
     await transporter.sendMail({
         from: `"Livinkey Admin" <${process.env.EMAIL_USER}>`,
@@ -511,7 +514,7 @@ const sendGuestMessageEmail = async (email, guestName, adminName, message, subje
                                         </p>
                                         <div style="background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #e8ecf1; min-height: 80px;">
                                             <p style="color: #4a5568; font-size: 15px; line-height: 1.8; margin: 0; white-space: pre-wrap;">
-                                                ${message}
+                                                ${formattedMessage}
                                             </p>
                                         </div>
                                         <p style="color: #718096; font-size: 13px; margin-top: 12px; margin-bottom: 0; text-align: center;">
@@ -965,7 +968,6 @@ const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount
     
     const daysOverdue = daysDelayed;
 
-    // Use new QR codes or fallback to existing
     const qrFull = fullQrUrl || billData.payment_qr;
     const qrPartial = partialQrUrl || billData.partial_payment_qr;
 
@@ -1142,6 +1144,147 @@ const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount
     });
 };
 
+const sendCustomBillMessageEmail = async (email, tenantName, adminName, subject, message, qrCodeUrl, adminQrUrl, totalDue, pgName, roomNumber, qrExpiresAt) => {
+    const expiryDate = qrExpiresAt ? new Date(qrExpiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expiryFormatted = expiryDate.toLocaleString();
+
+    // Convert \n to <br> for proper line breaks in HTML
+    const formattedMessage = message.replace(/\n/g, '<br>');
+
+    await transporter.sendMail({
+        from: `"Livinkey Admin" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `📩 ${subject}`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${subject}</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #92C24A; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">📩 Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">CUSTOM MESSAGE</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${tenantName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        You have received a message from <strong>${adminName}</strong> regarding your stay at <strong>${pgName || 'Livinkey'}</strong> (Room ${roomNumber || 'N/A'}).
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">
+                                            📝 Message
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <p style="color: #4a5568; font-size: 15px; line-height: 1.8; margin: 0; white-space: pre-wrap;">
+                                                ${formattedMessage}
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    ${adminQrUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 20px; text-align: center;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                                            📱 Admin Provided QR Code
+                                        </p>
+                                        <img src="${adminQrUrl}" alt="Admin QR Code" style="max-width: 200px; height: auto; border-radius: 8px; border: 1px solid #e8ecf1;">
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    ${qrCodeUrl ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 20px; text-align: center;">
+                                        <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                                            💳 Auto-Generated Payment QR Code
+                                        </p>
+                                        <img src="${qrCodeUrl}" alt="Payment QR Code" style="max-width: 200px; height: auto; border-radius: 8px; border: 1px solid #e8ecf1;">
+                                        <p style="color: #4a5568; font-size: 13px; margin-top: 8px; margin-bottom: 0;">
+                                            Amount Due: <strong>₹${totalDue.toFixed(2)}</strong>
+                                        </p>
+                                        <p style="color: #e74c3c; font-size: 12px; margin-top: 4px; margin-bottom: 0;">
+                                            ⚠️ This QR code is valid until <strong>${expiryFormatted}</strong>
+                                        </p>
+                                        <p style="color: #e74c3c; font-size: 12px; margin-top: 2px; margin-bottom: 0;">
+                                            ⚠️ If the QR code has already expired, please request a new one.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · Bill Management
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message from the Livinkey admin panel.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -1149,5 +1292,6 @@ module.exports = {
     sendGuestMessageEmail,
     sendPasswordResetEmail,
     sendBillEmail,
-    sendFineNotificationEmail
+    sendFineNotificationEmail,
+    sendCustomBillMessageEmail
 };

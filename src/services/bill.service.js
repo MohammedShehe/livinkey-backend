@@ -1,7 +1,7 @@
 const db = require("../config/db");
 const BillModel = require("../models/bill.model");
 const { uploadFile, deleteFile, deleteMultipleFiles } = require("./upload.service");
-const { sendBillEmail, sendFineNotificationEmail } = require("./mail.service");
+const { sendBillEmail, sendFineNotificationEmail, sendCustomBillMessageEmail } = require("./mail.service");
 const QRCode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
@@ -23,7 +23,6 @@ const generateQRCode = async (data, folder) => {
         });
         return filePath;
     } catch (error) {
-        // Clean up temp file if generation fails
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
@@ -41,6 +40,15 @@ const cleanupUploadedFiles = async (uploadedFiles) => {
     if (toDelete.length > 0) {
         await deleteMultipleFiles(toDelete);
     }
+};
+
+const getQRExpiryTime = (existingExpiry = null) => {
+    if (existingExpiry && new Date(existingExpiry) > new Date()) {
+        // If there's an existing valid expiry, use it
+        return new Date(existingExpiry);
+    }
+    // Otherwise, set to 24 hours from now
+    return new Date(Date.now() + 24 * 60 * 60 * 1000);
 };
 
 const createBill = async (billData, files = {}) => {
@@ -79,7 +87,6 @@ const createBill = async (billData, files = {}) => {
             }
         }
 
-        // Generate auto full payment QR code
         let paymentQrPath = null;
         let paymentQr = null;
         let paymentQrPublicId = null;
@@ -110,12 +117,10 @@ const createBill = async (billData, files = {}) => {
             paymentQrResourceType = paymentQrUpload.resource_type;
             uploadedCloudFiles.push({ public_id: paymentQrPublicId, resource_type: paymentQrResourceType });
         } catch (qrError) {
-            // Clean up meter image if QR generation fails
             await cleanupUploadedFiles(uploadedCloudFiles);
             throw qrError;
         }
 
-        // Generate auto partial payment QR code (50%)
         let partialQrPath = null;
         let partialQr = null;
         let partialQrPublicId = null;
@@ -147,12 +152,10 @@ const createBill = async (billData, files = {}) => {
             partialQrResourceType = partialQrUpload.resource_type;
             uploadedCloudFiles.push({ public_id: partialQrPublicId, resource_type: partialQrResourceType });
         } catch (qrError) {
-            // Clean up all uploaded files
             await cleanupUploadedFiles(uploadedCloudFiles);
             throw qrError;
         }
 
-        // Upload admin's custom QR if provided
         let adminQr = null;
         let adminQrPublicId = null;
         let adminQrResourceType = null;
@@ -206,7 +209,6 @@ const createBill = async (billData, files = {}) => {
 
         await connection.commit();
 
-        // Send initial bill email
         let emailSent = false;
         try {
             const tenant = await BillModel.getBillById(billId);
@@ -229,11 +231,7 @@ const createBill = async (billData, files = {}) => {
 
     } catch (error) {
         await connection.rollback();
-        
-        // Clean up all uploaded cloud files
         await cleanupUploadedFiles(uploadedCloudFiles);
-        
-        // Clean up all temp files
         for (const tempFile of tempFiles) {
             if (fs.existsSync(tempFile)) {
                 try {
@@ -243,7 +241,6 @@ const createBill = async (billData, files = {}) => {
                 }
             }
         }
-        
         console.error("Bill Creation Error:", error);
         throw error;
 
@@ -254,6 +251,10 @@ const createBill = async (billData, files = {}) => {
 
 const getUnpaidTenants = async () => {
     return await BillModel.getUnpaidTenants();
+};
+
+const getBills = async (filters = {}) => {
+    return await BillModel.getBills(filters);
 };
 
 const getBillById = async (billId) => {
@@ -272,6 +273,145 @@ const getOverdueBills = async () => {
     return await BillModel.getOverdueBills();
 };
 
+const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
+    const connection = await db.getConnection();
+    const uploadedCloudFiles = [];
+    let tempFiles = [];
+
+    try {
+        await connection.beginTransaction();
+
+        const bill = await BillModel.getBillById(billId);
+        if (!bill) {
+            throw new Error("Bill not found");
+        }
+
+        if (bill.status === 'paid') {
+            throw new Error("Cannot send message to a paid bill");
+        }
+
+        // Check if there's an active QR code
+        const activeMessage = await BillModel.getActiveCustomMessage(billId);
+        let qrCodeUrl = null;
+        let qrCodePublicId = null;
+        let qrCodeResourceType = null;
+        let qrExpiresAt = null;
+
+        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0);
+
+        if (activeMessage && activeMessage.qr_expires_at && new Date(activeMessage.qr_expires_at) > new Date()) {
+            // Use existing QR code and expiry
+            qrCodeUrl = activeMessage.custom_message_qr;
+            qrCodePublicId = activeMessage.custom_message_qr_public_id;
+            qrCodeResourceType = activeMessage.custom_message_qr_resource_type;
+            qrExpiresAt = activeMessage.qr_expires_at;
+            console.log("Reusing existing QR code, expires at:", qrExpiresAt);
+        } else if (totalDue > 0) {
+            // Generate new QR code with 24 hours validity (end of day)
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+            qrExpiresAt = endOfDay;
+
+            const qrData = {
+                billId: bill.id,
+                tenantId: bill.tenant_id,
+                amount: totalDue,
+                type: 'custom_message_payment',
+                validUntil: qrExpiresAt.toISOString()
+            };
+
+            const qrPath = await generateQRCode(JSON.stringify(qrData), 'custom');
+            tempFiles.push(qrPath);
+
+            const qrUpload = await uploadFile(
+                { buffer: fs.readFileSync(qrPath), originalname: 'qr_custom_message.png' },
+                "livinkey/bills/custom_qr"
+            );
+
+            if (qrUpload && qrUpload.secure_url) {
+                qrCodeUrl = qrUpload.secure_url;
+                qrCodePublicId = qrUpload.public_id;
+                qrCodeResourceType = qrUpload.resource_type;
+                uploadedCloudFiles.push({ public_id: qrCodePublicId, resource_type: qrCodeResourceType });
+            }
+        }
+
+        // Upload admin's custom QR if provided
+        let adminQrUrl = null;
+        let adminQrPublicId = null;
+        let adminQrResourceType = null;
+
+        if (files.adminQr && files.adminQr.length > 0) {
+            const uploadResult = await uploadFile(
+                files.adminQr[0],
+                "livinkey/bills/admin_qr"
+            );
+            if (uploadResult && uploadResult.secure_url) {
+                adminQrUrl = uploadResult.secure_url;
+                adminQrPublicId = uploadResult.public_id;
+                adminQrResourceType = uploadResult.resource_type;
+                uploadedCloudFiles.push({ public_id: adminQrPublicId, resource_type: adminQrResourceType });
+            }
+        }
+
+        // Update bill with message data
+        await BillModel.updateCustomMessage(connection, billId, {
+            qr_code_url: qrCodeUrl,
+            qr_code_public_id: qrCodePublicId,
+            qr_code_resource_type: qrCodeResourceType,
+            admin_qr_url: adminQrUrl,
+            admin_qr_public_id: adminQrPublicId,
+            admin_qr_resource_type: adminQrResourceType,
+            message: messageData.message,
+            qr_expires_at: qrExpiresAt
+        });
+
+        await connection.commit();
+
+        // Send email
+        try {
+            const updatedBill = await BillModel.getBillById(billId);
+            const adminName = messageData.admin_name || 'Livinkey Admin';
+            await sendCustomBillMessageEmail(
+                bill.tenant_email,
+                bill.tenant_name,
+                adminName,
+                messageData.subject,
+                messageData.message,
+                qrCodeUrl,
+                adminQrUrl,
+                totalDue,
+                bill.pg_name,
+                bill.room_number,
+                qrExpiresAt
+            );
+        } catch (emailError) {
+            console.error("Failed to send custom message email:", emailError);
+        }
+
+        const updatedBill = await BillModel.getBillById(billId);
+        return updatedBill;
+
+    } catch (error) {
+        await connection.rollback();
+        await cleanupUploadedFiles(uploadedCloudFiles);
+        for (const tempFile of tempFiles) {
+            if (fs.existsSync(tempFile)) {
+                try {
+                    fs.unlinkSync(tempFile);
+                } catch (unlinkError) {
+                    console.error("Failed to delete temp file:", unlinkError);
+                }
+            }
+        }
+        console.error("Send Custom Message Error:", error);
+        throw error;
+
+    } finally {
+        connection.release();
+    }
+};
+
 const processDelayedPayments = async () => {
     const connection = await db.getConnection();
     let processedCount = 0;
@@ -281,7 +421,6 @@ const processDelayedPayments = async () => {
     try {
         await connection.beginTransaction();
 
-        // Lock overdue bills to prevent race conditions
         const overdueBills = await connection.execute(
             `
             SELECT 
@@ -300,7 +439,6 @@ const processDelayedPayments = async () => {
         );
 
         for (const bill of overdueBills[0]) {
-            // Calculate days since sent
             const daysSinceSent = Math.floor((Date.now() - new Date(bill.sent_at).getTime()) / (1000 * 60 * 60 * 24));
             
             let shouldApplyFine = false;
@@ -341,7 +479,6 @@ const processDelayedPayments = async () => {
                 let partialQrPath = null;
 
                 try {
-                    // Generate new full payment QR with fine included
                     const fullPaymentData = {
                         billId: bill.id,
                         tenantId: bill.tenant_id,
@@ -362,7 +499,6 @@ const processDelayedPayments = async () => {
                         uploadedCloudFiles.push({ public_id: fullQrUpload.public_id, resource_type: fullQrUpload.resource_type });
                     }
                     
-                    // Generate new partial payment QR with fine included (50% of total with fine)
                     const partialAmount = totalWithFine * 0.5;
                     const partialPaymentData = {
                         billId: bill.id,
@@ -384,13 +520,10 @@ const processDelayedPayments = async () => {
                         uploadedCloudFiles.push({ public_id: partialQrUpload.public_id, resource_type: partialQrUpload.resource_type });
                     }
                 } catch (qrError) {
-                    // Clean up uploaded files if QR generation failed
                     await cleanupUploadedFiles(uploadedCloudFiles);
                     console.error("QR generation failed for bill", bill.id, qrError);
-                    // Continue with existing QR codes if new ones fail
                 }
                 
-                // Update bill with new QR codes
                 await connection.execute(
                     `
                     UPDATE bills 
@@ -415,7 +548,6 @@ const processDelayedPayments = async () => {
                     ]
                 );
                 
-                // Send fine notification email with new QR codes
                 if (shouldSendEmail) {
                     try {
                         const updatedBill = await BillModel.getBillById(bill.id);
@@ -441,7 +573,6 @@ const processDelayedPayments = async () => {
         
         await connection.commit();
 
-        // Clean up temp files after successful commit
         for (const tempFile of tempFiles) {
             if (fs.existsSync(tempFile)) {
                 try {
@@ -456,11 +587,7 @@ const processDelayedPayments = async () => {
         
     } catch (error) {
         await connection.rollback();
-        
-        // Clean up uploaded cloud files on error
         await cleanupUploadedFiles(uploadedCloudFiles);
-        
-        // Clean up temp files
         for (const tempFile of tempFiles) {
             if (fs.existsSync(tempFile)) {
                 try {
@@ -470,7 +597,6 @@ const processDelayedPayments = async () => {
                 }
             }
         }
-        
         console.error("Process Delayed Payments Error:", error);
         throw error;
         
@@ -540,10 +666,12 @@ const addPayment = async (billId, paymentData) => {
 module.exports = {
     createBill,
     getUnpaidTenants,
+    getBills,
     getBillById,
     getBillsByTenant,
     getBillStats,
     getOverdueBills,
+    sendCustomMessageToTenant,
     processDelayedPayments,
     addPayment
 };

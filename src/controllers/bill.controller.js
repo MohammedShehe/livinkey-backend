@@ -10,7 +10,6 @@ const createBill = async (req, res) => {
             other_charges
         } = req.body;
 
-        // Validation
         if (!tenant_id || !rent_amount) {
             return res.status(400).json({
                 success: false,
@@ -18,7 +17,6 @@ const createBill = async (req, res) => {
             });
         }
 
-        // Prepare data
         const billData = {
             tenant_id: parseInt(tenant_id),
             rent_amount: parseFloat(rent_amount),
@@ -28,7 +26,6 @@ const createBill = async (req, res) => {
             created_by: req.admin.id
         };
 
-        // Prepare files
         const files = {
             meterImage: req.files?.meterImage || [],
             paymentQr: req.files?.paymentQr || []
@@ -63,6 +60,31 @@ const getUnpaidTenants = async (req, res) => {
 
     } catch (error) {
         console.error("Get Unpaid Tenants Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const getBills = async (req, res) => {
+    try {
+        const { status, tenant_id, search } = req.query;
+
+        const bills = await billService.getBills({
+            status,
+            tenant_id: tenant_id ? parseInt(tenant_id) : null,
+            search
+        });
+
+        return res.status(200).json({
+            success: true,
+            count: bills.length,
+            data: bills
+        });
+
+    } catch (error) {
+        console.error("Get Bills Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error"
@@ -191,12 +213,57 @@ const addPayment = async (req, res) => {
     }
 };
 
+const sendCustomMessage = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { subject, message } = req.body;
+
+        if (!subject || !message) {
+            return res.status(400).json({
+                success: false,
+                message: "Subject and message are required"
+            });
+        }
+
+        const messageData = {
+            admin_name: req.admin.name || 'Livinkey Admin',
+            subject,
+            message
+        };
+
+        const files = {
+            adminQr: req.files?.adminQr || []
+        };
+
+        const bill = await billService.sendCustomMessageToTenant(
+            parseInt(id),
+            messageData,
+            files
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Custom message sent successfully",
+            data: bill
+        });
+
+    } catch (error) {
+        console.error("Send Custom Message Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
+    getBills,
     getBillById,
     getBillsByTenant,
     getBillStats,
     processDelayedPayments,
-    addPayment
+    addPayment,
+    sendCustomMessage
 };

@@ -70,9 +70,13 @@ const createTenant = async (tenantData, files = {}) => {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
-        const existingPhone = await TenantModel.findByPhone(tenantData.phone);
+        // FIXED: Check phone with country code
+        const existingPhone = await TenantModel.findByPhone(
+            tenantData.country_code, 
+            tenantData.phone
+        );
         if (existingPhone) {
-            throw new Error(`Phone number "${tenantData.phone}" is already registered`);
+            throw new Error(`Phone number "${tenantData.country_code}${tenantData.phone}" is already registered`);
         }
 
         const numberOfTenants = normalizeNumberOfTenants(tenantData.number_of_tenants);
@@ -250,9 +254,14 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
-        const existingPhone = await TenantModel.findByPhone(tenantData.phone, tenantId);
+        // FIXED: Check phone with country code
+        const existingPhone = await TenantModel.findByPhone(
+            tenantData.country_code, 
+            tenantData.phone, 
+            tenantId
+        );
         if (existingPhone) {
-            throw new Error(`Phone number "${tenantData.phone}" is already registered`);
+            throw new Error(`Phone number "${tenantData.country_code}${tenantData.phone}" is already registered`);
         }
 
         await TenantModel.updateTenant(connection, tenantId, {

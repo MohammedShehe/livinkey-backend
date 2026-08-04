@@ -105,8 +105,25 @@ const findByEmail = async (email, excludeId = null) => {
     return rows[0] || null;
 };
 
-const findByPhone = async (phone, excludeId = null) => {
-    let query = `SELECT id, full_name, phone FROM tenants WHERE phone = ?`;
+// FIXED: Check phone with country code combination
+const findByPhone = async (country_code, phone, excludeId = null) => {
+    let query = `SELECT id, full_name, phone, country_code FROM tenants WHERE country_code = ? AND phone = ?`;
+    const params = [country_code, phone];
+    
+    if (excludeId) {
+        query += ` AND id != ?`;
+        params.push(excludeId);
+    }
+    
+    query += ` LIMIT 1`;
+    
+    const [rows] = await db.execute(query, params);
+    return rows[0] || null;
+};
+
+// Helper function to check if phone exists with any country code (for additional validation if needed)
+const findPhoneInAnyCountry = async (phone, excludeId = null) => {
+    let query = `SELECT id, full_name, phone, country_code FROM tenants WHERE phone = ?`;
     const params = [phone];
     
     if (excludeId) {
@@ -554,6 +571,7 @@ module.exports = {
     createTenantDocument,
     findByEmail,
     findByPhone,
+    findPhoneInAnyCountry,
     findAll,
     findById,
     getTenantDocuments,

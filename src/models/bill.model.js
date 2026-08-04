@@ -24,8 +24,9 @@ const createBill = async (connection, billData) => {
             created_by,
             fine_applied_days,
             last_fine_email_sent,
-            initial_email_sent
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            initial_email_sent,
+            qr_expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
@@ -48,7 +49,8 @@ const createBill = async (connection, billData) => {
             billData.created_by,
             billData.fine_applied_days || 0,
             billData.last_fine_email_sent || null,
-            billData.initial_email_sent || 0
+            billData.initial_email_sent || 0,
+            billData.qr_expires_at || null
         ]
     );
     return result.insertId;
@@ -82,6 +84,69 @@ const getUnpaidTenants = async () => {
     return rows;
 };
 
+const getBills = async (filters = {}) => {
+    let query = `
+        SELECT 
+            b.*,
+            t.full_name as tenant_name,
+            t.email as tenant_email,
+            t.phone as tenant_phone,
+            p.name as pg_name,
+            r.room_number,
+            COALESCE(
+                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 0), 
+                0
+            ) as total_paid,
+            COALESCE(
+                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
+                0
+            ) as total_partial_paid,
+            DATEDIFF(NOW(), b.sent_at) as days_since_sent,
+            CASE 
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
+                ELSE 'none'
+            END as qr_status
+        FROM bills b
+        INNER JOIN tenants t ON b.tenant_id = t.id
+        LEFT JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        WHERE 1=1
+    `;
+    const params = [];
+
+    if (filters.status) {
+        if (filters.status === 'unpaid') {
+            query += ` AND b.status = 'unpaid'`;
+        } else if (filters.status === 'partially_paid') {
+            query += ` AND b.status = 'partially_paid'`;
+        } else if (filters.status === 'paid') {
+            query += ` AND b.status = 'paid'`;
+        } else if (filters.status === 'delayed') {
+            query += ` AND b.status = 'delayed'`;
+        } else if (filters.status === 'overdue') {
+            query += ` AND b.status = 'overdue'`;
+        }
+    }
+
+    if (filters.tenant_id) {
+        query += ` AND b.tenant_id = ?`;
+        params.push(filters.tenant_id);
+    }
+
+    if (filters.search) {
+        query += ` AND (t.full_name LIKE ? OR t.email LIKE ? OR t.phone LIKE ?)`;
+        const searchPattern = `%${filters.search}%`;
+        params.push(searchPattern, searchPattern, searchPattern);
+    }
+
+    query += ` ORDER BY b.created_at DESC`;
+
+    const [rows] = await db.execute(query, params);
+    return rows;
+};
+
 const getBillById = async (billId) => {
     const [rows] = await db.execute(
         `
@@ -104,7 +169,12 @@ const getBillById = async (billId) => {
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
                 0
             ) as total_partial_paid,
-            DATEDIFF(NOW(), b.sent_at) as days_since_sent
+            DATEDIFF(NOW(), b.sent_at) as days_since_sent,
+            CASE 
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
+                ELSE 'none'
+            END as qr_status
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         INNER JOIN tenant_details td ON t.id = td.tenant_id
@@ -125,7 +195,12 @@ const getBillsByTenant = async (tenantId) => {
             COALESCE(
                 (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id), 
                 0
-            ) as total_paid
+            ) as total_paid,
+            CASE 
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
+                WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
+                ELSE 'none'
+            END as qr_status
         FROM bills b
         WHERE b.tenant_id = ?
         ORDER BY b.created_at DESC
@@ -261,9 +336,64 @@ const updateInitialEmailSent = async (connection, billId) => {
     return result.affectedRows;
 };
 
+const updateCustomMessage = async (connection, billId, messageData) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills 
+        SET 
+            custom_message_qr = ?,
+            custom_message_qr_public_id = ?,
+            custom_message_qr_resource_type = ?,
+            custom_message_admin_qr = ?,
+            custom_message_admin_qr_public_id = ?,
+            custom_message_admin_qr_resource_type = ?,
+            last_custom_message = ?,
+            last_message_sent = NOW(),
+            qr_expires_at = ?
+        WHERE id = ?
+        `,
+        [
+            messageData.qr_code_url || null,
+            messageData.qr_code_public_id || null,
+            messageData.qr_code_resource_type || null,
+            messageData.admin_qr_url || null,
+            messageData.admin_qr_public_id || null,
+            messageData.admin_qr_resource_type || null,
+            messageData.message || null,
+            messageData.qr_expires_at || null,
+            billId
+        ]
+    );
+    return result.affectedRows;
+};
+
+const getActiveCustomMessage = async (billId) => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            custom_message_qr,
+            custom_message_qr_public_id,
+            custom_message_qr_resource_type,
+            custom_message_admin_qr,
+            custom_message_admin_qr_public_id,
+            custom_message_admin_qr_resource_type,
+            last_custom_message,
+            qr_expires_at,
+            last_message_sent
+        FROM bills
+        WHERE id = ?
+        AND qr_expires_at > NOW()
+        AND status != 'paid'
+        `,
+        [billId]
+    );
+    return rows[0] || null;
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
+    getBills,
     getBillById,
     getBillsByTenant,
     updateBillStatus,
@@ -271,5 +401,7 @@ module.exports = {
     createBillPayment,
     getOverdueBills,
     getBillStats,
-    updateInitialEmailSent
+    updateInitialEmailSent,
+    updateCustomMessage,
+    getActiveCustomMessage
 };

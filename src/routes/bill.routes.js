@@ -6,16 +6,14 @@ const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const upload = require("../middleware/upload.middleware");
 
-// Configure multer for multiple files
 const uploadFields = upload.fields([
     { name: 'meterImage', maxCount: 1 },
-    { name: 'paymentQr', maxCount: 1 }
+    { name: 'paymentQr', maxCount: 1 },
+    { name: 'adminQr', maxCount: 1 }  // For custom messages
 ]);
 
-// All routes require authentication
 router.use(authMiddleware);
 
-// Routes
 router.post(
     "/",
     roleMiddleware("super_admin", "admin"),
@@ -33,6 +31,12 @@ router.get(
     "/stats",
     roleMiddleware("super_admin", "admin"),
     billController.getBillStats
+);
+
+router.get(
+    "/",
+    roleMiddleware("super_admin", "admin"),
+    billController.getBills
 );
 
 router.get(
@@ -57,6 +61,13 @@ router.post(
     "/:id/payment",
     roleMiddleware("super_admin", "admin"),
     billController.addPayment
+);
+
+router.post(
+    "/:id/send-message",
+    roleMiddleware("super_admin", "admin"),
+    upload.fields([{ name: 'adminQr', maxCount: 1 }]),
+    billController.sendCustomMessage
 );
 
 module.exports = router;
