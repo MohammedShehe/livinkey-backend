@@ -1602,6 +1602,330 @@ const sendPaymentLinkEmail = async (email, tenantName, billData, paymentOptions,
     });
 };
 
+// NEW: Send e-FRRO expiry notification to tenant
+const sendEFRROExpiryTenantEmail = async (email, tenantName, tenantData) => {
+    const daysUntilExpiry = tenantData.days_until_expiry;
+    const expiryDate = new Date(tenantData.efrro_till).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+    
+    let urgencyLevel = '⚠️';
+    let urgencyColor = '#e67e22';
+    let urgencyMessage = `Your e-FRRO is expiring in ${daysUntilExpiry} day${daysUntilExpiry > 1 ? 's' : ''}.`;
+    
+    if (daysUntilExpiry <= 7) {
+        urgencyLevel = '🚨';
+        urgencyColor = '#e74c3c';
+        urgencyMessage = `URGENT: Your e-FRRO is expiring in just ${daysUntilExpiry} day${daysUntilExpiry > 1 ? 's' : ''}!`;
+    } else if (daysUntilExpiry <= 14) {
+        urgencyLevel = '🔴';
+        urgencyColor = '#e67e22';
+        urgencyMessage = `Your e-FRRO is expiring in ${daysUntilExpiry} days. Please renew soon.`;
+    }
+
+    await transporter.sendMail({
+        from: `"Livinkey" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `⚠️ e-FRRO Expiry Alert - ${daysUntilExpiry} days remaining`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>e-FRRO Expiry Alert</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: ${urgencyColor}; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">${urgencyLevel} Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">e-FRRO EXPIRY ALERT</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${tenantName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        <strong style="color: ${urgencyColor};">${urgencyMessage}</strong>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                                            📋 e-FRRO Details
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <table width="100%" style="border-collapse: collapse;">
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">PG</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">${tenantData.pg_name || 'N/A'}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Room</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">${tenantData.room_number || 'N/A'}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Valid From</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">${tenantData.efrro_from ? new Date(tenantData.efrro_from).toLocaleDateString('en-IN') : 'N/A'}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Valid Till</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 600; color: ${urgencyColor};">${expiryDate}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Days Remaining</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 700; color: ${urgencyColor}; font-size: 18px;">${daysUntilExpiry} days</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 8px; border-left: 4px solid ${urgencyColor};">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <div style="display: flex; align-items: flex-start;">
+                                            <span style="font-size: 18px; margin-right: 12px;">📌</span>
+                                            <div>
+                                                <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">
+                                                    Action Required
+                                                </p>
+                                                <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin: 0;">
+                                                    Please renew your e-FRRO before the expiry date to avoid any legal complications. 
+                                                    Contact the Livinkey admin for assistance with the renewal process.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · e-FRRO Management
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message, please do not reply.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
+// NEW: Send e-FRRO expiry notification to Super Admin
+const sendEFRROExpiryAdminEmail = async (adminEmail, adminName, expiringTenants) => {
+    // Build tenant list table
+    let tenantRows = '';
+    expiringTenants.forEach((tenant, index) => {
+        const days = tenant.days_until_expiry;
+        let urgencyColor = '#e67e22';
+        let urgencyBadge = '⚠️';
+        if (days <= 7) {
+            urgencyColor = '#e74c3c';
+            urgencyBadge = '🚨 URGENT';
+        } else if (days <= 14) {
+            urgencyColor = '#e67e22';
+            urgencyBadge = '🔴 Soon';
+        } else {
+            urgencyColor = '#92C24A';
+            urgencyBadge = '🟡 Upcoming';
+        }
+        
+        tenantRows += `
+            <tr style="${index % 2 === 0 ? 'background: #f8faf5;' : ''}">
+                <td style="padding: 10px 8px; color: #000000; font-weight: 500;">${tenant.full_name}</td>
+                <td style="padding: 10px 8px; color: #4a5568;">${tenant.pg_name || 'N/A'}</td>
+                <td style="padding: 10px 8px; color: #4a5568;">${tenant.room_number || 'N/A'}</td>
+                <td style="padding: 10px 8px; color: #4a5568;">${tenant.email}</td>
+                <td style="padding: 10px 8px; color: #4a5568;">${tenant.phone || 'N/A'}</td>
+                <td style="padding: 10px 8px; text-align: center; color: ${urgencyColor}; font-weight: 600;">${days} days</td>
+                <td style="padding: 10px 8px; text-align: center;"><span style="background: ${urgencyColor}; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">${urgencyBadge}</span></td>
+            </tr>
+        `;
+    });
+
+    await transporter.sendMail({
+        from: `"Livinkey System" <${process.env.EMAIL_USER}>`,
+        to: adminEmail,
+        subject: `🚨 e-FRRO Expiry Alert - ${expiringTenants.length} tenant(s) expiring soon`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>e-FRRO Expiry Alert - Admin</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 700px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #e74c3c; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">🚨 Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">e-FRRO EXPIRY REPORT</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${adminName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        <strong style="color: #e74c3c;">${expiringTenants.length} tenant(s)</strong> have e-FRRO documents expiring within the next 30 days.
+                                        Please review the list below and take appropriate action.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                                            📋 Expiring e-FRRO List
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 10px; border: 1px solid #e8ecf1; overflow-x: auto;">
+                                            <table width="100%" style="border-collapse: collapse; font-size: 13px;">
+                                                <thead>
+                                                    <tr style="background: #92C24A; color: #ffffff;">
+                                                        <th style="padding: 10px 8px; text-align: left;">Name</th>
+                                                        <th style="padding: 10px 8px; text-align: left;">PG</th>
+                                                        <th style="padding: 10px 8px; text-align: left;">Room</th>
+                                                        <th style="padding: 10px 8px; text-align: left;">Email</th>
+                                                        <th style="padding: 10px 8px; text-align: left;">Phone</th>
+                                                        <th style="padding: 10px 8px; text-align: center;">Days Left</th>
+                                                        <th style="padding: 10px 8px; text-align: center;">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${tenantRows}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 8px; border-left: 4px solid #e74c3c;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <div style="display: flex; align-items: flex-start;">
+                                            <span style="font-size: 18px; margin-right: 12px;">📌</span>
+                                            <div>
+                                                <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">
+                                                    Recommended Actions
+                                                </p>
+                                                <ul style="color: #4a5568; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px;">
+                                                    <li>Contact tenants with <strong style="color: #e74c3c;">7 or fewer days</strong> remaining immediately</li>
+                                                    <li>Assist tenants with the e-FRRO renewal process</li>
+                                                    <li>Verify updated e-FRRO documents after renewal</li>
+                                                    <li>Update the system with new e-FRRO expiry dates</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · e-FRRO Management
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated system alert.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -1612,5 +1936,7 @@ module.exports = {
     sendFineNotificationEmail,
     sendCustomBillMessageEmail,
     sendCashPaymentOTPEmail,
-    sendPaymentLinkEmail
+    sendPaymentLinkEmail,
+    sendEFRROExpiryTenantEmail,
+    sendEFRROExpiryAdminEmail
 };

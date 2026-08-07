@@ -2,7 +2,7 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
-const { sendWelcomeTenantEmail } = require("./mail.service");
+const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
 
 const generatePassword = () => {
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -475,6 +475,85 @@ const deleteTenant = async (tenantId) => {
     }
 };
 
+// NEW: Check and send e-FRRO expiry notifications
+const checkAndSendEFRROExpiryNotifications = async () => {
+    try {
+        console.log("Checking e-FRRO expiry notifications...");
+        
+        // Get all tenants with e-FRRO expiring within 30 days
+        const expiringTenants = await TenantModel.getTenantsWithExpiringEFRRO();
+        
+        if (expiringTenants.length === 0) {
+            console.log("No tenants with e-FRRO expiring within 30 days.");
+            return { sent: 0, message: "No tenants with e-FRRO expiring soon." };
+        }
+
+        console.log(`Found ${expiringTenants.length} tenant(s) with e-FRRO expiring within 30 days.`);
+        
+        // Send email to each tenant
+        let tenantEmailsSent = 0;
+        let tenantEmailErrors = 0;
+        
+        for (const tenant of expiringTenants) {
+            try {
+                await sendEFRROExpiryTenantEmail(
+                    tenant.email,
+                    tenant.full_name,
+                    tenant
+                );
+                tenantEmailsSent++;
+                console.log(`e-FRRO expiry email sent to ${tenant.full_name} (${tenant.email})`);
+            } catch (error) {
+                tenantEmailErrors++;
+                console.error(`Failed to send e-FRRO expiry email to ${tenant.full_name}:`, error.message);
+            }
+        }
+
+        // Send consolidated report to all super admins
+        const superAdmins = await TenantModel.getSuperAdmins();
+        let adminEmailsSent = 0;
+        let adminEmailErrors = 0;
+
+        if (superAdmins.length > 0) {
+            for (const admin of superAdmins) {
+                try {
+                    await sendEFRROExpiryAdminEmail(
+                        admin.email,
+                        admin.full_name,
+                        expiringTenants
+                    );
+                    adminEmailsSent++;
+                    console.log(`e-FRRO expiry report sent to super admin ${admin.full_name} (${admin.email})`);
+                } catch (error) {
+                    adminEmailErrors++;
+                    console.error(`Failed to send e-FRRO expiry report to super admin ${admin.full_name}:`, error.message);
+                }
+            }
+        } else {
+            console.warn("No super admins found to send e-FRRO expiry report.");
+        }
+
+        return {
+            sent: tenantEmailsSent + adminEmailsSent,
+            tenantEmailsSent,
+            tenantEmailErrors,
+            adminEmailsSent,
+            adminEmailErrors,
+            totalTenants: expiringTenants.length,
+            tenantDetails: expiringTenants.map(t => ({
+                name: t.full_name,
+                email: t.email,
+                daysUntilExpiry: t.days_until_expiry,
+                expiryDate: t.efrro_till
+            }))
+        };
+
+    } catch (error) {
+        console.error("Error in checkAndSendEFRROExpiryNotifications:", error);
+        throw error;
+    }
+};
+
 module.exports = {
     createTenant,
     getAllTenants,
@@ -482,5 +561,6 @@ module.exports = {
     getTenantStats,
     getGuestStats,
     updateTenant,
-    deleteTenant
+    deleteTenant,
+    checkAndSendEFRROExpiryNotifications
 };

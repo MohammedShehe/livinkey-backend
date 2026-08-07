@@ -571,6 +571,89 @@ const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
     }
 };
 
+// NEW: Get tenants with e-FRRO expiring within the next month
+const getTenantsWithExpiringEFRRO = async () => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            t.id,
+            t.full_name,
+            t.email,
+            t.nationality,
+            t.country_code,
+            t.phone,
+            t.gender,
+            td.efrro_from,
+            td.efrro_till,
+            td.pg_id,
+            td.room_id,
+            td.residency,
+            p.name as pg_name,
+            r.room_number,
+            DATEDIFF(td.efrro_till, CURDATE()) as days_until_expiry
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till > CURDATE()
+            AND DATEDIFF(td.efrro_till, CURDATE()) <= 30
+        ORDER BY td.efrro_till ASC
+        `,
+        []
+    );
+    return rows;
+};
+
+// NEW: Get super admins for notifications
+const getSuperAdmins = async () => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            id,
+            full_name,
+            email
+        FROM admins
+        WHERE role = 'super_admin'
+        `
+    );
+    return rows;
+};
+
+// NEW: Get tenant by ID for notification
+const getTenantForNotification = async (tenantId) => {
+    const [rows] = await db.execute(
+        `
+        SELECT 
+            t.id,
+            t.full_name,
+            t.email,
+            t.nationality,
+            t.country_code,
+            t.phone,
+            t.gender,
+            td.efrro_from,
+            td.efrro_till,
+            td.pg_id,
+            td.room_id,
+            p.name as pg_name,
+            r.room_number,
+            DATEDIFF(td.efrro_till, CURDATE()) as days_until_expiry
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        WHERE t.id = ?
+        `,
+        [tenantId]
+    );
+    return rows[0] || null;
+};
+
 module.exports = {
     createTenant,
     createTenantDetails,
@@ -589,5 +672,8 @@ module.exports = {
     updateTenantDetails,
     deleteTenantDocuments,
     deleteTenant,
-    checkRoomAvailability
+    checkRoomAvailability,
+    getTenantsWithExpiringEFRRO,
+    getSuperAdmins,
+    getTenantForNotification
 };
