@@ -11,16 +11,20 @@ const createPG = async (connection, pgData) => {
             name,
             location,
             number_of_floors,
+            rent,
+            security_fee,
             payment_qr,
             payment_qr_public_id,
             payment_qr_resource_type,
             created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             pgData.name,
             pgData.location,
             pgData.number_of_floors,
+            pgData.rent || 0,
+            pgData.security_fee || 0,
             pgData.payment_qr || null,
             pgData.payment_qr_public_id || null,
             pgData.payment_qr_resource_type || null,
@@ -63,13 +67,13 @@ const createFloor = async (connection, pgId, floorNumber) => {
     return result.insertId;
 };
 
-const createRoom = async (connection, floorId, roomNumber, capacity) => {
+const createRoom = async (connection, floorId, roomNumber, capacity, rent = null) => {
     const [result] = await connection.execute(
         `
-        INSERT INTO rooms (floor_id, room_number, capacity)
-        VALUES (?, ?, ?)
+        INSERT INTO rooms (floor_id, room_number, capacity, rent)
+        VALUES (?, ?, ?, ?)
         `,
-        [floorId, roomNumber, capacity]
+        [floorId, roomNumber, capacity, rent]
     );
     return result.insertId;
 };
@@ -98,6 +102,8 @@ const findById = async (pgId) => {
             name,
             location,
             number_of_floors,
+            rent,
+            security_fee,
             payment_qr,
             payment_qr_public_id,
             payment_qr_resource_type,
@@ -169,6 +175,7 @@ const getRoomsByFloorId = async (floorId) => {
             r.id,
             r.room_number,
             r.capacity,
+            r.rent,
             r.is_active,
             COALESCE(ro.occupied_count, 0) as occupied_count
         FROM rooms r
@@ -258,6 +265,8 @@ const getAllPGs = async (search = null, isActive = null) => {
             p.name,
             p.location,
             p.number_of_floors,
+            p.rent,
+            p.security_fee,
             p.payment_qr,
             p.is_active,
             p.created_by,
@@ -365,6 +374,8 @@ const updatePG = async (connection, pgId, pgData) => {
             name = ?,
             location = ?,
             number_of_floors = ?,
+            rent = ?,
+            security_fee = ?,
             payment_qr = ?,
             payment_qr_public_id = ?,
             payment_qr_resource_type = ?
@@ -374,6 +385,8 @@ const updatePG = async (connection, pgId, pgData) => {
             pgData.name,
             pgData.location,
             pgData.number_of_floors,
+            pgData.rent || 0,
+            pgData.security_fee || 0,
             pgData.payment_qr || null,
             pgData.payment_qr_public_id || null,
             pgData.payment_qr_resource_type || null,

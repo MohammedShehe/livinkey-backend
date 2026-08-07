@@ -17,6 +17,8 @@ const createTenant = async (req, res) => {
             aadhaar_id,
             father_aadhaar_id,
             c_form_number,
+            efrro_from,
+            efrro_till,
             rent,
             security_fee,
             payment_date,
@@ -83,6 +85,8 @@ const createTenant = async (req, res) => {
             tenantData.aadhaar_id = aadhaar_id || null;
             tenantData.father_aadhaar_id = father_aadhaar_id || null;
             tenantData.c_form_number = c_form_number || null;
+            tenantData.efrro_from = efrro_from || null;
+            tenantData.efrro_till = efrro_till || null;
             tenantData.rent = parseFloat(rent);
             tenantData.security_fee = parseFloat(security_fee);
             tenantData.payment_date = parseInt(payment_date);
@@ -214,6 +218,8 @@ const updateTenant = async (req, res) => {
             aadhaar_id,
             father_aadhaar_id,
             c_form_number,
+            efrro_from,
+            efrro_till,
             rent,
             security_fee,
             payment_date,
@@ -279,6 +285,8 @@ const updateTenant = async (req, res) => {
             tenantData.aadhaar_id = aadhaar_id || null;
             tenantData.father_aadhaar_id = father_aadhaar_id || null;
             tenantData.c_form_number = c_form_number || null;
+            tenantData.efrro_from = efrro_from || null;
+            tenantData.efrro_till = efrro_till || null;
             tenantData.rent = parseFloat(rent);
             tenantData.security_fee = parseFloat(security_fee);
             tenantData.payment_date = parseInt(payment_date);

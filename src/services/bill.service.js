@@ -1,6 +1,8 @@
 const db = require("../config/db");
 const BillModel = require("../models/bill.model");
 const { uploadFile, deleteFile, deleteMultipleFiles } = require("./upload.service");
+const paymentService = require("./payment.service");
+const { sendPaymentLinkEmail } = require("./mail.service");
 const { sendBillEmail, sendFineNotificationEmail, sendCustomBillMessageEmail, sendCashPaymentOTPEmail } = require("./mail.service");
 const QRCode = require("qrcode");
 const path = require("path");
@@ -789,6 +791,103 @@ const addPayment = async (billId, paymentData) => {
     }
 };
 
+const generateBillPaymentOptions = async (billId) => {
+    const bill = await BillModel.getBillById(billId);
+    if (!bill) {
+        throw new Error("Bill not found");
+    }
+
+    const tenant = await TenantModel.findById(bill.tenant_id);
+    if (!tenant) {
+        throw new Error("Tenant not found");
+    }
+
+    const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
+                     parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+
+    if (totalDue <= 0) {
+        throw new Error("No amount due for this bill");
+    }
+
+    // Generate UPI QR and links
+    const paymentOptions = await paymentService.generatePaymentOptions(bill);
+
+    // Create payment order (for gateway if enabled)
+    let orderData = null;
+    if (process.env.ENABLE_PAYMENT_GATEWAY === 'true') {
+        try {
+            orderData = await paymentService.createPaymentOrder(bill, tenant);
+        } catch (error) {
+            console.error('Payment order creation failed:', error.message);
+        }
+    }
+
+    // Create transaction record
+    const transactionId = await paymentService.createPaymentTransaction(
+        null, // Connection will be handled inside
+        {
+            bill_id: bill.id,
+            tenant_id: tenant.id,
+            amount: totalDue,
+            payment_type: 'upi',
+            gateway: orderData?.gateway || 'upi_qr',
+            gateway_order_id: orderData?.order?.id || paymentOptions.transaction_id,
+            status: 'pending',
+            payment_link: paymentOptions.upi_link,
+            upi_id: process.env.MERCHANT_UPI_ID,
+        }
+    );
+
+    // Update bill with payment info
+    const connection = await db.getConnection();
+    try {
+        await connection.execute(
+            `
+            UPDATE bills 
+            SET 
+                upi_qr_code = ?,
+                upi_qr_public_id = ?,
+                upi_qr_resource_type = ?,
+                payment_link = ?,
+                gateway_order_id = ?
+            WHERE id = ?
+            `,
+            [
+                paymentOptions.qr_code,
+                paymentOptions.qr_code_public_id,
+                paymentOptions.qr_code_resource_type,
+                paymentOptions.upi_link,
+                orderData?.order?.id || paymentOptions.transaction_id,
+                bill.id
+            ]
+        );
+        await connection.commit();
+    } finally {
+        connection.release();
+    }
+
+    // Send payment link email
+    try {
+        await sendPaymentLinkEmail(
+            tenant.email,
+            tenant.full_name,
+            bill,
+            paymentOptions,
+            orderData
+        );
+    } catch (emailError) {
+        console.error('Failed to send payment link email:', emailError);
+    }
+
+    return {
+        bill,
+        tenant,
+        payment_options: paymentOptions,
+        order: orderData,
+        transaction_id: transactionId,
+    };
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -802,5 +901,6 @@ module.exports = {
     requestCashPaymentOTP,
     verifyCashPayment,
     processDelayedPayments,
-    addPayment
+    addPayment,
+    generateBillPaymentOptions
 };

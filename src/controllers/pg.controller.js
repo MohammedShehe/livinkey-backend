@@ -10,6 +10,8 @@ const createPG = async (req, res) => {
             name,
             location,
             number_of_floors,
+            rent,
+            security_fee,
             amenities,
             floors
         } = req.body;
@@ -19,6 +21,14 @@ const createPG = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Name, location and number_of_floors are required."
+            });
+        }
+
+        // Validate rent
+        if (!rent || rent <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Rent is required and must be greater than 0."
             });
         }
 
@@ -78,6 +88,8 @@ const createPG = async (req, res) => {
             name,
             location,
             number_of_floors: parseInt(number_of_floors),
+            rent: parseFloat(rent),
+            security_fee: parseFloat(security_fee) || 0,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             created_by: req.admin.id
@@ -109,7 +121,7 @@ const createPG = async (req, res) => {
         console.error("Create PG Error:", error);
         return res.status(500).json({
             success: false,
-            message: "Internal server error"
+            message: error.message || "Internal server error"
         });
     }
 };
@@ -188,6 +200,8 @@ const updatePG = async (req, res) => {
             name,
             location,
             number_of_floors,
+            rent,
+            security_fee,
             amenities,
             floors,
             remove_qr
@@ -198,6 +212,14 @@ const updatePG = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Name, location and number_of_floors are required."
+            });
+        }
+
+        // Validate rent
+        if (!rent || rent <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Rent is required and must be greater than 0."
             });
         }
 
@@ -257,6 +279,8 @@ const updatePG = async (req, res) => {
             name,
             location,
             number_of_floors: parseInt(number_of_floors),
+            rent: parseFloat(rent),
+            security_fee: parseFloat(security_fee) || 0,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             remove_qr: remove_qr === true || remove_qr === 'true'

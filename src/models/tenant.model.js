@@ -41,6 +41,8 @@ const createTenantDetails = async (connection, detailsData) => {
             aadhaar_id,
             father_aadhaar_id,
             c_form_number,
+            efrro_from,
+            efrro_till,
             rent,
             security_fee,
             payment_date,
@@ -50,7 +52,7 @@ const createTenantDetails = async (connection, detailsData) => {
             document_url,
             document_public_id,
             document_resource_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             detailsData.tenant_id,
@@ -60,6 +62,8 @@ const createTenantDetails = async (connection, detailsData) => {
             detailsData.aadhaar_id || null,
             detailsData.father_aadhaar_id || null,
             detailsData.c_form_number || null,
+            detailsData.efrro_from || null,
+            detailsData.efrro_till || null,
             detailsData.rent,
             detailsData.security_fee,
             detailsData.payment_date,
@@ -105,7 +109,6 @@ const findByEmail = async (email, excludeId = null) => {
     return rows[0] || null;
 };
 
-// FIXED: Check phone with country code combination
 const findByPhone = async (country_code, phone, excludeId = null) => {
     let query = `SELECT id, full_name, phone, country_code FROM tenants WHERE country_code = ? AND phone = ?`;
     const params = [country_code, phone];
@@ -121,7 +124,6 @@ const findByPhone = async (country_code, phone, excludeId = null) => {
     return rows[0] || null;
 };
 
-// Helper function to check if phone exists with any country code (for additional validation if needed)
 const findPhoneInAnyCountry = async (phone, excludeId = null) => {
     let query = `SELECT id, full_name, phone, country_code FROM tenants WHERE phone = ?`;
     const params = [phone];
@@ -156,6 +158,8 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             td.aadhaar_id,
             td.father_aadhaar_id,
             td.c_form_number,
+            td.efrro_from,
+            td.efrro_till,
             td.rent,
             td.security_fee,
             td.payment_date,
@@ -232,6 +236,8 @@ const findById = async (id) => {
             td.aadhaar_id,
             td.father_aadhaar_id,
             td.c_form_number,
+            td.efrro_from,
+            td.efrro_till,
             td.rent,
             td.security_fee,
             td.payment_date,
@@ -366,13 +372,11 @@ const getStats = async () => {
 };
 
 const getGuestStats = async () => {
-    // Total guests
     const [totalResult] = await db.execute(
         `SELECT COUNT(*) as total_guests FROM tenants WHERE role = 'guest'`
     );
     const total_guests = totalResult[0].total_guests;
 
-    // This month guests (created in current month)
     const [thisMonthResult] = await db.execute(
         `
         SELECT COUNT(*) as this_month_guests 
@@ -384,7 +388,6 @@ const getGuestStats = async () => {
     );
     const this_month_guests = thisMonthResult[0].this_month_guests;
 
-    // Last month guests
     const [lastMonthResult] = await db.execute(
         `
         SELECT COUNT(*) as last_month_guests 
@@ -396,7 +399,6 @@ const getGuestStats = async () => {
     );
     const last_month_guests = lastMonthResult[0].last_month_guests;
 
-    // Today's guests
     const [todayResult] = await db.execute(
         `
         SELECT COUNT(*) as today_guests 
@@ -462,6 +464,8 @@ const updateTenantDetails = async (connection, tenantId, detailsData) => {
             aadhaar_id = ?,
             father_aadhaar_id = ?,
             c_form_number = ?,
+            efrro_from = ?,
+            efrro_till = ?,
             rent = ?,
             security_fee = ?,
             payment_date = ?,
@@ -475,6 +479,8 @@ const updateTenantDetails = async (connection, tenantId, detailsData) => {
             detailsData.aadhaar_id || null,
             detailsData.father_aadhaar_id || null,
             detailsData.c_form_number || null,
+            detailsData.efrro_from || null,
+            detailsData.efrro_till || null,
             detailsData.rent,
             detailsData.security_fee,
             detailsData.payment_date,

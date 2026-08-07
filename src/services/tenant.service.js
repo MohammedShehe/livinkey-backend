@@ -70,7 +70,6 @@ const createTenant = async (tenantData, files = {}) => {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
-        // FIXED: Check phone with country code
         const existingPhone = await TenantModel.findByPhone(
             tenantData.country_code, 
             tenantData.phone
@@ -132,6 +131,8 @@ const createTenant = async (tenantData, files = {}) => {
                 aadhaar_id: tenantData.aadhaar_id,
                 father_aadhaar_id: tenantData.father_aadhaar_id,
                 c_form_number: tenantData.c_form_number,
+                efrro_from: tenantData.efrro_from,
+                efrro_till: tenantData.efrro_till,
                 rent: tenantData.rent,
                 security_fee: tenantData.security_fee,
                 payment_date: tenantData.payment_date,
@@ -254,7 +255,6 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
-        // FIXED: Check phone with country code
         const existingPhone = await TenantModel.findByPhone(
             tenantData.country_code, 
             tenantData.phone, 
@@ -324,6 +324,8 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 aadhaar_id: tenantData.aadhaar_id,
                 father_aadhaar_id: tenantData.father_aadhaar_id,
                 c_form_number: tenantData.c_form_number,
+                efrro_from: tenantData.efrro_from,
+                efrro_till: tenantData.efrro_till,
                 rent: tenantData.rent,
                 security_fee: tenantData.security_fee,
                 payment_date: tenantData.payment_date,

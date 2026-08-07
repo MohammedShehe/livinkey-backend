@@ -53,4 +53,5 @@ router.delete(
     roleMiddleware("super_admin"),
     adminController.deleteAdmin
 );
+
 module.exports = router;

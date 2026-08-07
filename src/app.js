@@ -9,6 +9,7 @@ const adminRoutes = require("./routes/admin.routes");
 const pgRoutes = require("./routes/pg.routes");
 const tenantRoutes = require("./routes/tenant.routes"); 
 const billRoutes = require("./routes/bill.routes"); 
+const paymentRoutes = require("./routes/payment.routes");
 
 const app = express();
 
@@ -43,5 +44,6 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/pgs", pgRoutes);
 app.use("/api/tenants", tenantRoutes); 
 app.use("/api/bills", billRoutes); 
+app.use("/api/payments", paymentRoutes);
 
 module.exports = app;

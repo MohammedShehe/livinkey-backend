@@ -1408,6 +1408,200 @@ const sendCashPaymentOTPEmail = async (email, tenantName, otp, amount, pgName, r
     });
 };
 
+const sendPaymentLinkEmail = async (email, tenantName, billData, paymentOptions, orderData) => {
+    const totalDue = parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) - 
+                     parseFloat(billData.paid_amount || 0) - parseFloat(billData.total_cash_paid || 0);
+
+    await transporter.sendMail({
+        from: `"Livinkey Payments" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `💳 Payment Link - Livinkey`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Payment Link - Livinkey</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+                </style>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; margin: 40px auto; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <tr>
+                        <td style="background: #92C24A; padding: 40px 30px 30px; text-align: center;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); padding: 12px 24px; border-radius: 50px; backdrop-filter: blur(10px);">
+                                            <span style="color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px;">💳 Livinkey</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 12px;">
+                                        <span style="color: rgba(255, 255, 255, 0.9); font-size: 14px; font-weight: 400; letter-spacing: 2px;">PAYMENT LINK</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+                                        Hello ${tenantName}!
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+                                        Your payment link is ready for <strong>${billData.pg_name}</strong>, Room <strong>${billData.room_number}</strong>.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                                            💰 Payment Details
+                                        </p>
+                                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <table width="100%" style="border-collapse: collapse;">
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Amount Due</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 700; color: #000000; font-size: 18px;">₹${totalDue.toFixed(2)}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">PG</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">${billData.pg_name}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Room</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">${billData.room_number}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 6px 0; color: #4a5568;">Transaction ID</td>
+                                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000; font-family: monospace;">${paymentOptions.transaction_id}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    ${paymentOptions.qr_code ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                                <tr>
+                                    <td style="padding: 30px; text-align: center;">
+                                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">
+                                            📱 Scan to Pay
+                                        </p>
+                                        <div style="display: inline-block; background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                                            <img src="${paymentOptions.qr_code}" alt="Payment QR Code" style="width: 200px; height: 200px; display: block; margin: 0 auto;">
+                                        </div>
+                                        <p style="color: #4a5568; font-size: 13px; margin-top: 10px; margin-bottom: 0;">
+                                            Scan with any UPI app (PhonePe, Paytm, Google Pay)
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="padding: 10px; text-align: center;">
+                                        <p style="color: #4a5568; font-size: 14px; margin: 0 0 10px 0;">
+                                            <strong>📱 Quick Pay Options</strong>
+                                        </p>
+                                        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                                            <a href="${paymentOptions.app_links.phonepe}" target="_blank" style="display: inline-block; background: #5F259F; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
+                                                PhonePe
+                                            </a>
+                                            <a href="${paymentOptions.app_links.paytm}" target="_blank" style="display: inline-block; background: #00BAF2; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
+                                                Paytm
+                                            </a>
+                                            <a href="${paymentOptions.app_links.googlepay}" target="_blank" style="display: inline-block; background: #4285F4; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
+                                                Google Pay
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    ${orderData && orderData.gateway === 'razorpay' ? `
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="text-align: center; padding: 10px 0;">
+                                        <a href="${process.env.APP_URL}/payment/razorpay/${orderData.order.id}" target="_blank" style="display: inline-block; background-color: #2D3748; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                            Pay with Card / Net Banking
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : ''}
+                    <tr>
+                        <td style="padding: 0 40px 30px;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 8px; border-left: 4px solid #92C24A;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <div style="display: flex; align-items: flex-start;">
+                                            <span style="font-size: 18px; margin-right: 12px;">🔒</span>
+                                            <div>
+                                                <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">
+                                                    Secure Payment
+                                                </p>
+                                                <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin: 0;">
+                                                    Your payment is processed securely through encrypted channels.
+                                                    All transactions are protected.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f8faf5; padding: 30px 40px; border-top: 1px solid #e8ecf1;">
+                            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #4a5568; font-size: 13px; line-height: 1.6;">
+                                        <p style="margin: 0 0 4px 0;">
+                                            <span style="font-weight: 600; color: #000000;">Livinkey</span> · Payment
+                                        </p>
+                                        <p style="margin: 0 0 4px 0; color: #718096; font-size: 12px;">
+                                            This is an automated message, please do not reply.
+                                        </p>
+                                        <p style="margin: 0; color: #a0aec0; font-size: 11px;">
+                                            &copy; ${new Date().getFullYear()} Livinkey. All rights reserved.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -1417,5 +1611,6 @@ module.exports = {
     sendBillEmail,
     sendFineNotificationEmail,
     sendCustomBillMessageEmail,
-    sendCashPaymentOTPEmail
+    sendCashPaymentOTPEmail,
+    sendPaymentLinkEmail
 };

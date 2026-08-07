@@ -40,6 +40,8 @@ const createPG = async (pgData, files = {}) => {
             name: pgData.name,
             location: pgData.location,
             number_of_floors: parseInt(pgData.number_of_floors),
+            rent: pgData.rent || 0,
+            security_fee: pgData.security_fee || 0,
             payment_qr: paymentQr,
             payment_qr_public_id: paymentQrPublicId,
             payment_qr_resource_type: paymentQrResourceType,
@@ -101,7 +103,8 @@ const createPG = async (pgData, files = {}) => {
                     connection,
                     floorId,
                     roomData.room_number,
-                    parseInt(roomData.capacity)
+                    parseInt(roomData.capacity),
+                    roomData.rent || pgData.rent || 0
                 );
             }
         }
@@ -206,6 +209,8 @@ const updatePG = async (pgId, pgData, files = {}) => {
             name: pgData.name,
             location: pgData.location,
             number_of_floors: parseInt(pgData.number_of_floors),
+            rent: pgData.rent || 0,
+            security_fee: pgData.security_fee || 0,
             payment_qr: paymentQr,
             payment_qr_public_id: paymentQrPublicId,
             payment_qr_resource_type: paymentQrResourceType
@@ -273,7 +278,8 @@ const updatePG = async (pgId, pgData, files = {}) => {
                     connection,
                     floorId,
                     roomData.room_number,
-                    parseInt(roomData.capacity)
+                    parseInt(roomData.capacity),
+                    roomData.rent || pgData.rent || 0
                 );
             }
         }
