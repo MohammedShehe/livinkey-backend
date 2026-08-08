@@ -1,9 +1,11 @@
 const db = require("../config/db");
 const BillModel = require("../models/bill.model");
+const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile, deleteMultipleFiles } = require("./upload.service");
 const paymentService = require("./payment.service");
 const { sendPaymentLinkEmail } = require("./mail.service");
 const { sendBillEmail, sendFineNotificationEmail, sendCustomBillMessageEmail, sendCashPaymentOTPEmail } = require("./mail.service");
+const NotificationEventManager = require("../utils/notification.events");
 const QRCode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
@@ -60,6 +62,8 @@ const createBill = async (billData, files = {}) => {
     const connection = await db.getConnection();
     const uploadedCloudFiles = [];
     let tempFiles = [];
+    let createdBill = null;
+    let tenant = null;
 
     try {
         await connection.beginTransaction();
@@ -216,7 +220,7 @@ const createBill = async (billData, files = {}) => {
 
         let emailSent = false;
         try {
-            const tenant = await BillModel.getBillById(billId);
+            tenant = await BillModel.getBillById(billId);
             await sendBillEmail(
                 tenant.tenant_email,
                 tenant.tenant_name,
@@ -231,7 +235,17 @@ const createBill = async (billData, files = {}) => {
             console.error("Failed to send bill email:", emailError);
         }
 
-        const createdBill = await BillModel.getBillById(billId);
+        createdBill = await BillModel.getBillById(billId);
+
+        // Send bill creation notification
+        try {
+            if (tenant) {
+                await NotificationEventManager.onBillCreated(createdBill, tenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send bill notification:", notifError);
+        }
+
         return { ...createdBill, email_sent: emailSent };
 
     } catch (error) {
@@ -528,6 +542,18 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
         await connection.commit();
 
         const updatedBill = await BillModel.getBillById(billId);
+
+        // Send cash payment notification
+        try {
+            const tenant = { 
+                full_name: bill.tenant_name, 
+                id: bill.tenant_id 
+            };
+            await NotificationEventManager.onCashPaymentVerified(updatedBill, tenant);
+        } catch (notifError) {
+            console.error("Failed to send cash payment notification:", notifError);
+        }
+
         return updatedBill;
 
     } catch (error) {
@@ -779,6 +805,23 @@ const addPayment = async (billId, paymentData) => {
         await connection.commit();
 
         const updatedBill = await BillModel.getBillById(billId);
+
+        // Send payment notifications
+        try {
+            const tenant = { 
+                full_name: bill.tenant_name, 
+                id: bill.tenant_id 
+            };
+            
+            if (newStatus === 'paid') {
+                await NotificationEventManager.onBillPaid(updatedBill, tenant);
+            } else if (newStatus === 'partially_paid') {
+                await NotificationEventManager.onBillPartiallyPaid(updatedBill, tenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send payment notification:", notifError);
+        }
+
         return updatedBill;
 
     } catch (error) {

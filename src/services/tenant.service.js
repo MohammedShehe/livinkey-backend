@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
+const NotificationEventManager = require("../utils/notification.events");
 
 const generatePassword = () => {
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -54,6 +55,7 @@ const decrementRoomOccupancy = async (connection, roomId, amount) => {
 
 const createTenant = async (tenantData, files = {}) => {
     const connection = await db.getConnection();
+    let createdTenant = null;
 
     try {
         await connection.beginTransaction();
@@ -205,7 +207,19 @@ const createTenant = async (tenantData, files = {}) => {
             console.error("Failed to send welcome email:", emailError);
         }
 
-        const createdTenant = await TenantModel.getTenantWithDocuments(tenantId);
+        createdTenant = await TenantModel.getTenantWithDocuments(tenantId);
+
+        // Send notifications
+        try {
+            if (tenantData.role === 'tenant') {
+                await NotificationEventManager.onTenantCreated(createdTenant);
+            } else {
+                await NotificationEventManager.onGuestCreated(createdTenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send tenant/guest notification:", notifError);
+        }
+
         return createdTenant;
 
     } catch (error) {

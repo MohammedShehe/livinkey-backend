@@ -428,7 +428,7 @@ CREATE TABLE `room_occupancy` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -437,7 +437,7 @@ CREATE TABLE `room_occupancy` (
 
 LOCK TABLES `room_occupancy` WRITE;
 /*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
-INSERT INTO `room_occupancy` VALUES (1,1,2,'2026-08-06 16:53:50'),(3,2,2,'2026-08-07 18:08:51');
+INSERT INTO `room_occupancy` VALUES (1,1,2,'2026-08-06 16:53:50'),(3,2,3,'2026-08-07 23:56:55');
 /*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -490,6 +490,8 @@ CREATE TABLE `tenant_details` (
   `aadhaar_id` varchar(20) DEFAULT NULL,
   `father_aadhaar_id` varchar(20) DEFAULT NULL,
   `c_form_number` varchar(50) DEFAULT NULL,
+  `efrro_from` date DEFAULT NULL,
+  `efrro_till` date DEFAULT NULL,
   `rent` decimal(10,2) NOT NULL,
   `security_fee` decimal(10,2) NOT NULL,
   `payment_date` int(11) NOT NULL COMMENT 'Day of month (1-31)',
@@ -505,10 +507,11 @@ CREATE TABLE `tenant_details` (
   UNIQUE KEY `unique_tenant` (`tenant_id`),
   KEY `idx_pg_id` (`pg_id`),
   KEY `idx_room_id` (`room_id`),
+  KEY `idx_efrro_till` (`efrro_till`),
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -517,7 +520,7 @@ CREATE TABLE `tenant_details` (
 
 LOCK TABLES `tenant_details` WRITE;
 /*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
-INSERT INTO `tenant_details` VALUES (1,1,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,1,'2026-07-01','2026-07-31','2026-07-22',NULL,NULL,NULL,'2026-08-03 09:22:22','2026-08-03 10:30:46'),(2,12,1,1,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(3,13,1,2,'international',NULL,NULL,'CF123456',11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-07 17:53:34','2026-08-07 17:53:34');
+INSERT INTO `tenant_details` VALUES (1,1,1,1,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,1,'2026-07-01','2026-07-31','2026-07-22',NULL,NULL,NULL,'2026-08-03 09:22:22','2026-08-03 10:30:46'),(2,12,1,1,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(3,13,1,2,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-07 17:53:34','2026-08-07 17:53:34'),(5,16,1,2,'international',NULL,NULL,'CF123456','2026-01-01','2026-08-10',11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-07 23:56:55','2026-08-07 23:56:55');
 /*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -577,7 +580,7 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -586,7 +589,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',1,'$2b$12$gzz0U1i3TnLsshCDUq650eFSPfMABJGY9doUf2SKz.qvIXm2AMHXm',1,'2026-08-03 09:22:22','2026-08-03 09:22:22'),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-03 09:37:09'),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34');
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',1,'$2b$12$gzz0U1i3TnLsshCDUq650eFSPfMABJGY9doUf2SKz.qvIXm2AMHXm',1,'2026-08-03 09:22:22','2026-08-03 09:22:22'),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-03 09:37:09'),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34'),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55');
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -599,4 +602,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-08  5:25:36
+-- Dump completed on 2026-08-08  6:42:46

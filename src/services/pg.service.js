@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const PGModel = require("../models/pg.model");
 const { uploadFile, deleteFile } = require("./upload.service");
+const NotificationEventManager = require("../utils/notification.events");
 
 // =============================================
 // PG Service - Business Logic & Transactions
@@ -8,6 +9,7 @@ const { uploadFile, deleteFile } = require("./upload.service");
 
 const createPG = async (pgData, files = {}) => {
     const connection = await db.getConnection();
+    let createdPG = null;
 
     try {
         await connection.beginTransaction();
@@ -112,7 +114,14 @@ const createPG = async (pgData, files = {}) => {
         await connection.commit();
 
         // Get the complete PG data
-        const createdPG = await PGModel.getPGWithDetails(pgId);
+        createdPG = await PGModel.getPGWithDetails(pgId);
+
+        // Send PG creation notification
+        try {
+            await NotificationEventManager.onPGCreated(createdPG);
+        } catch (notifError) {
+            console.error("Failed to send PG notification:", notifError);
+        }
 
         return createdPG;
 
@@ -143,6 +152,7 @@ const getPGStats = async () => {
 
 const updatePG = async (pgId, pgData, files = {}) => {
     const connection = await db.getConnection();
+    let updatedPG = null;
 
     try {
         await connection.beginTransaction();
@@ -287,7 +297,15 @@ const updatePG = async (pgId, pgData, files = {}) => {
         await connection.commit();
 
         // Get the updated PG data
-        const updatedPG = await PGModel.getPGWithDetails(pgId);
+        updatedPG = await PGModel.getPGWithDetails(pgId);
+
+        // Send PG update notification
+        try {
+            await NotificationEventManager.onPGUpdated(updatedPG);
+        } catch (notifError) {
+            console.error("Failed to send PG update notification:", notifError);
+        }
+
         return updatedPG;
 
     } catch (error) {
@@ -351,7 +369,26 @@ const deletePG = async (pgId) => {
 };
 
 const togglePGStatus = async (pgId, isActive) => {
-    return await PGModel.togglePGStatus(pgId, isActive);
+    try {
+        const result = await PGModel.togglePGStatus(pgId, isActive);
+        
+        if (result > 0) {
+            // Get the PG details for notification
+            const pg = await PGModel.findById(pgId);
+            if (pg) {
+                try {
+                    await NotificationEventManager.onPGStatusChanged(pg, isActive === 1);
+                } catch (notifError) {
+                    console.error("Failed to send PG status notification:", notifError);
+                }
+            }
+        }
+        
+        return result;
+    } catch (error) {
+        console.error("Toggle PG Status Error:", error);
+        throw error;
+    }
 };
 
 module.exports = {
