@@ -39,6 +39,19 @@ router.get(
     tenantController.getGuestStats
 );
 
+// NEW: e-FRRO statistics routes
+router.get(
+    "/stats/efrro",
+    roleMiddleware("super_admin", "admin"),
+    tenantController.getEFRROStats
+);
+
+router.get(
+    "/efrro/expiring",
+    roleMiddleware("super_admin", "admin"),
+    tenantController.getEFRROExpiringList
+);
+
 router.get(
     "/:id",
     roleMiddleware("super_admin", "admin"),
@@ -64,7 +77,7 @@ router.post(
     tenantController.sendMessage
 );
 
-// NEW: Endpoint to manually trigger e-FRRO expiry notifications
+// Endpoint to manually trigger e-FRRO expiry notifications
 router.post(
     "/check-efrro-expiry",
     roleMiddleware("super_admin"),

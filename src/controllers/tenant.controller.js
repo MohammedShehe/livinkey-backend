@@ -389,6 +389,46 @@ const sendMessage = async (req, res) => {
     }
 };
 
+// NEW: Get e-FRRO statistics
+const getEFRROStats = async (req, res) => {
+    try {
+        const stats = await tenantService.getEFRROStats();
+
+        return res.status(200).json({
+            success: true,
+            data: stats
+        });
+
+    } catch (error) {
+        console.error("Get e-FRRO Stats Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+// NEW: Get e-FRRO expiring list
+const getEFRROExpiringList = async (req, res) => {
+    try {
+        const { daysRange } = req.query; // urgent, soon, upcoming, expired, valid, no_efrro
+        const list = await tenantService.getEFRROExpiringList(daysRange || null);
+
+        return res.status(200).json({
+            success: true,
+            count: list.length,
+            data: list
+        });
+
+    } catch (error) {
+        console.error("Get e-FRRO Expiring List Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createTenant,
     getAllTenants,
@@ -397,5 +437,7 @@ module.exports = {
     getTenantById,
     updateTenant,
     deleteTenant,
-    sendMessage
+    sendMessage,
+    getEFRROStats,
+    getEFRROExpiringList
 };

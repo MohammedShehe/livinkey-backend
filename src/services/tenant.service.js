@@ -475,7 +475,7 @@ const deleteTenant = async (tenantId) => {
     }
 };
 
-// NEW: Check and send e-FRRO expiry notifications
+// Check and send e-FRRO expiry notifications
 const checkAndSendEFRROExpiryNotifications = async () => {
     try {
         console.log("Checking e-FRRO expiry notifications...");
@@ -554,6 +554,16 @@ const checkAndSendEFRROExpiryNotifications = async () => {
     }
 };
 
+// NEW: Get e-FRRO statistics
+const getEFRROStats = async () => {
+    return await TenantModel.getEFRROStats();
+};
+
+// NEW: Get e-FRRO expiring list
+const getEFRROExpiringList = async (daysRange = null) => {
+    return await TenantModel.getEFRROExpiringList(daysRange);
+};
+
 module.exports = {
     createTenant,
     getAllTenants,
@@ -562,5 +572,7 @@ module.exports = {
     getGuestStats,
     updateTenant,
     deleteTenant,
-    checkAndSendEFRROExpiryNotifications
+    checkAndSendEFRROExpiryNotifications,
+    getEFRROStats,
+    getEFRROExpiringList
 };

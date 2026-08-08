@@ -571,7 +571,7 @@ const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
     }
 };
 
-// NEW: Get tenants with e-FRRO expiring within the next month
+// Get tenants with e-FRRO expiring within the next month
 const getTenantsWithExpiringEFRRO = async () => {
     const [rows] = await db.execute(
         `
@@ -609,7 +609,7 @@ const getTenantsWithExpiringEFRRO = async () => {
     return rows;
 };
 
-// NEW: Get super admins for notifications
+// Get super admins for notifications
 const getSuperAdmins = async () => {
     const [rows] = await db.execute(
         `
@@ -624,7 +624,7 @@ const getSuperAdmins = async () => {
     return rows;
 };
 
-// NEW: Get tenant by ID for notification
+// Get tenant by ID for notification
 const getTenantForNotification = async (tenantId) => {
     const [rows] = await db.execute(
         `
@@ -654,6 +654,260 @@ const getTenantForNotification = async (tenantId) => {
     return rows[0] || null;
 };
 
+// NEW: Get e-FRRO expiry statistics
+const getEFRROStats = async () => {
+    const [totalInternationalResult] = await db.execute(
+        `SELECT COUNT(*) as total_international FROM tenants t 
+         JOIN tenant_details td ON t.id = td.tenant_id 
+         WHERE td.residency = 'international' AND t.role = 'tenant'`
+    );
+    const totalInternational = totalInternationalResult[0].total_international || 0;
+
+    // Tenants with e-FRRO expiring in 0-7 days (URGENT)
+    const [urgentResult] = await db.execute(
+        `
+        SELECT COUNT(*) as urgent 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till > CURDATE()
+            AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 0 AND 7
+        `
+    );
+    const urgent = urgentResult[0].urgent || 0;
+
+    // Tenants with e-FRRO expiring in 8-14 days (Soon)
+    const [soonResult] = await db.execute(
+        `
+        SELECT COUNT(*) as soon 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till > CURDATE()
+            AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 8 AND 14
+        `
+    );
+    const soon = soonResult[0].soon || 0;
+
+    // Tenants with e-FRRO expiring in 15-30 days (Upcoming)
+    const [upcomingResult] = await db.execute(
+        `
+        SELECT COUNT(*) as upcoming 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till > CURDATE()
+            AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 15 AND 30
+        `
+    );
+    const upcoming = upcomingResult[0].upcoming || 0;
+
+    // Tenants with e-FRRO expiring in more than 30 days (Valid)
+    const [validResult] = await db.execute(
+        `
+        SELECT COUNT(*) as valid 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till > CURDATE()
+            AND DATEDIFF(td.efrro_till, CURDATE()) > 30
+        `
+    );
+    const valid = validResult[0].valid || 0;
+
+    // Tenants with e-FRRO expired (Overdue)
+    const [expiredResult] = await db.execute(
+        `
+        SELECT COUNT(*) as expired 
+        FROM tenants t        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+            AND td.efrro_till <= CURDATE()
+        `
+    );
+    const expired = expiredResult[0].expired || 0;
+
+    // Tenants with e-FRRO not set (No e-FRRO)
+    const [noEfrroResult] = await db.execute(
+        `
+        SELECT COUNT(*) as no_efrro 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND (td.efrro_till IS NULL OR td.efrro_till = '')
+        `
+    );
+    const noEfrro = noEfrroResult[0].no_efrro || 0;
+
+    // Total with e-FRRO set (has e-FRRO date)
+    const [withEfrroResult] = await db.execute(
+        `
+        SELECT COUNT(*) as with_efrro 
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+        `
+    );
+    const withEfrro = withEfrroResult[0].with_efrro || 0;
+
+    return {
+        total_international: totalInternational,
+        with_efrro: withEfrro,
+        no_efrro: noEfrro,
+        expired: expired,
+        expiring_soon: {
+            urgent: urgent,      // 0-7 days
+            soon: soon,          // 8-14 days
+            upcoming: upcoming,  // 15-30 days
+            total: urgent + soon + upcoming
+        },
+        valid: valid,
+        breakdown: {
+            urgent: {
+                count: urgent,
+                percentage: totalInternational > 0 ? Math.round((urgent / totalInternational) * 100) : 0,
+                label: 'URGENT (0-7 days)'
+            },
+            soon: {
+                count: soon,
+                percentage: totalInternational > 0 ? Math.round((soon / totalInternational) * 100) : 0,
+                label: 'Soon (8-14 days)'
+            },
+            upcoming: {
+                count: upcoming,
+                percentage: totalInternational > 0 ? Math.round((upcoming / totalInternational) * 100) : 0,
+                label: 'Upcoming (15-30 days)'
+            },
+            valid: {
+                count: valid,
+                percentage: totalInternational > 0 ? Math.round((valid / totalInternational) * 100) : 0,
+                label: 'Valid (>30 days)'
+            },
+            expired: {
+                count: expired,
+                percentage: totalInternational > 0 ? Math.round((expired / totalInternational) * 100) : 0,
+                label: 'Expired'
+            },
+            no_efrro: {
+                count: noEfrro,
+                percentage: totalInternational > 0 ? Math.round((noEfrro / totalInternational) * 100) : 0,
+                label: 'No e-FRRO Set'
+            }
+        }
+    };
+};
+
+// NEW: Get detailed e-FRRO expiring tenants list
+const getEFRROExpiringList = async (daysRange = null) => {
+    let query = `
+        SELECT 
+            t.id,
+            t.full_name,
+            t.email,
+            t.nationality,
+            t.country_code,
+            t.phone,
+            t.gender,
+            td.efrro_from,
+            td.efrro_till,
+            td.pg_id,
+            td.room_id,
+            td.residency,
+            p.name as pg_name,
+            r.room_number,
+            DATEDIFF(td.efrro_till, CURDATE()) as days_until_expiry
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        WHERE 
+            t.role = 'tenant'
+            AND td.residency = 'international'
+            AND td.efrro_till IS NOT NULL
+            AND td.efrro_till != ''
+    `;
+    
+    const params = [];
+    
+    if (daysRange) {
+        if (daysRange === 'urgent') {
+            query += ` AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 0 AND 7`;
+        } else if (daysRange === 'soon') {
+            query += ` AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 8 AND 14`;
+        } else if (daysRange === 'upcoming') {
+            query += ` AND DATEDIFF(td.efrro_till, CURDATE()) BETWEEN 15 AND 30`;
+        } else if (daysRange === 'expired') {
+            query += ` AND td.efrro_till <= CURDATE()`;
+        } else if (daysRange === 'valid') {
+            query += ` AND DATEDIFF(td.efrro_till, CURDATE()) > 30`;
+        } else if (daysRange === 'no_efrro') {
+            query = `
+                SELECT 
+                    t.id,
+                    t.full_name,
+                    t.email,
+                    t.nationality,
+                    t.country_code,
+                    t.phone,
+                    t.gender,
+                    td.efrro_from,
+                    td.efrro_till,
+                    td.pg_id,
+                    td.room_id,
+                    td.residency,
+                    p.name as pg_name,
+                    r.room_number,
+                    NULL as days_until_expiry
+                FROM tenants t
+                JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE 
+                    t.role = 'tenant'
+                    AND td.residency = 'international'
+                    AND (td.efrro_till IS NULL OR td.efrro_till = '')
+            `;
+        }
+    } else {
+        // Get all international tenants with e-FRRO expiring within 30 days
+        query += ` AND DATEDIFF(td.efrro_till, CURDATE()) <= 30 AND td.efrro_till > CURDATE()`;
+    }
+    
+    if (daysRange !== 'no_efrro' && daysRange !== 'expired') {
+        query += ` ORDER BY td.efrro_till ASC`;
+    } else {
+        query += ` ORDER BY t.full_name ASC`;
+    }
+    
+    const [rows] = await db.execute(query, params);
+    return rows;
+};
+
 module.exports = {
     createTenant,
     createTenantDetails,
@@ -675,5 +929,7 @@ module.exports = {
     checkRoomAvailability,
     getTenantsWithExpiringEFRRO,
     getSuperAdmins,
-    getTenantForNotification
+    getTenantForNotification,
+    getEFRROStats,
+    getEFRROExpiringList
 };
