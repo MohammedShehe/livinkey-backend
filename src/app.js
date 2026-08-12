@@ -32,12 +32,10 @@ app.use(cookieParser());
 app.use(morgan("dev"));
 
 app.get("/", (req, res) => {
-
     res.json({
         success: true,
         message: "Livinkey Backend Running"
     });
-
 });
 
 app.use("/api/auth", authRoutes);

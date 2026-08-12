@@ -2,11 +2,25 @@ const express = require("express");
 const router = express.Router();
 
 const tenantController = require("../controllers/tenant.controller");
+const tenantAuthController = require("../controllers/tenant.auth.controller");
+const tenantProfileController = require("../controllers/tenant.profile.controller");
 const authMiddleware = require("../middleware/auth.middleware");
+const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const upload = require("../middleware/upload.middleware");
-const tenantService = require("../services/tenant.service");
 
+// ============ TENANT AUTH ROUTES (Public) ============
+router.post("/auth/login", tenantAuthController.login);
+router.post("/auth/change-password", tenantAuthController.changePassword);
+router.post("/auth/forgot-password", tenantAuthController.forgotPassword);
+router.post("/auth/verify-otp", tenantAuthController.verifyOTP);
+router.post("/auth/reset-password", tenantAuthController.resetPassword);
+
+// ============ TENANT PROFILE ROUTES (Protected) ============
+router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile);
+// Note: No PUT/UPDATE or DELETE routes for tenant profile
+
+// ============ ADMIN ROUTES (Existing) ============
 const uploadFields = upload.fields([
     { name: 'document', maxCount: 1 },
     { name: 'otherDocuments', maxCount: 5 }
@@ -39,7 +53,6 @@ router.get(
     tenantController.getGuestStats
 );
 
-// NEW: e-FRRO statistics routes
 router.get(
     "/stats/efrro",
     roleMiddleware("super_admin", "admin"),
@@ -77,7 +90,6 @@ router.post(
     tenantController.sendMessage
 );
 
-// Endpoint to manually trigger e-FRRO expiry notifications
 router.post(
     "/check-efrro-expiry",
     roleMiddleware("super_admin"),
