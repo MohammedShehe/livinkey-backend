@@ -6,6 +6,10 @@ const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 
+// ============ PUBLIC ROUTES (No Auth) ============
+// Everyone can see PG reviews
+router.get("/public/pg-reviews", feedbackController.getPublicPGReviews);
+
 // ============ TENANT ROUTES (Protected) ============
 router.use(tenantAuthMiddleware);
 
@@ -19,21 +23,13 @@ router.get("/my-feedback", feedbackController.getMyFeedback);
 router.get("/status", feedbackController.checkFeedbackStatus);
 
 // ============ ADMIN ROUTES (Protected) ============
-// These routes require admin authentication
-const adminRouter = express.Router();
-adminRouter.use(authMiddleware);
-adminRouter.use(roleMiddleware("super_admin", "admin"));
+router.use(authMiddleware);
+router.use(roleMiddleware("super_admin", "admin"));
 
-// Get all feedbacks (with filters)
-adminRouter.get("/admin/all", feedbackController.getAllFeedbacksAdmin);
+// Admin stats
+router.get("/admin/stats", feedbackController.getAdminFeedbackStats);
 
-// Get feedback statistics
-adminRouter.get("/admin/stats", feedbackController.getFeedbackStatsAdmin);
-
-// Get feedbacks for a specific PG
-adminRouter.get("/admin/pg/:pgId", feedbackController.getPGFeedbacks);
-
-// Mount admin routes
-router.use(adminRouter);
+// Admin get all feedbacks with filters
+router.get("/admin/all", feedbackController.getAllFeedbacksAdmin);
 
 module.exports = router;

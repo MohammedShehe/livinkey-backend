@@ -50,7 +50,7 @@ const submitFeedback = async (req, res) => {
             communication_rating,
             amenities_rating,
             technology_handling_rating,
-            comment
+            comment: comment || null
         });
 
         return res.status(201).json({
@@ -124,30 +124,9 @@ const checkFeedbackStatus = async (req, res) => {
 
 // ============ ADMIN FEEDBACK ENDPOINTS ============
 
-const getAllFeedbacksAdmin = async (req, res) => {
+const getAdminFeedbackStats = async (req, res) => {
     try {
-        const { pg_id, search } = req.query;
-        const feedbacks = await feedbackService.getAllFeedbacks(pg_id, search);
-
-        return res.json({
-            success: true,
-            count: feedbacks.length,
-            data: feedbacks
-        });
-
-    } catch (error) {
-        console.error("Get All Feedbacks Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error."
-        });
-    }
-};
-
-const getFeedbackStatsAdmin = async (req, res) => {
-    try {
-        const { pg_id } = req.query;
-        const stats = await feedbackService.getFeedbackStats(pg_id);
+        const stats = await feedbackService.getAdminFeedbackStats();
 
         return res.json({
             success: true,
@@ -155,7 +134,7 @@ const getFeedbackStatsAdmin = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Get Feedback Stats Error:", error);
+        console.error("Get Admin Feedback Stats Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."
@@ -163,10 +142,16 @@ const getFeedbackStatsAdmin = async (req, res) => {
     }
 };
 
-const getPGFeedbacks = async (req, res) => {
+const getAllFeedbacksAdmin = async (req, res) => {
     try {
-        const { pgId } = req.params;
-        const feedbacks = await feedbackService.getFeedbackByPG(pgId);
+        const { type, nationality, gender, pg_id, pg_name } = req.query;
+        const feedbacks = await feedbackService.getAllFeedbacksAdmin({
+            type,
+            nationality,
+            gender,
+            pg_id,
+            pg_name
+        });
 
         return res.json({
             success: true,
@@ -175,7 +160,27 @@ const getPGFeedbacks = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Get PG Feedbacks Error:", error);
+        console.error("Get All Feedbacks Admin Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error."
+        });
+    }
+};
+
+// ============ PUBLIC FEEDBACK ENDPOINTS (No Auth) ============
+
+const getPublicPGReviews = async (req, res) => {
+    try {
+        const reviews = await feedbackService.getPublicPGReviews();
+
+        return res.json({
+            success: true,
+            data: reviews
+        });
+
+    } catch (error) {
+        console.error("Get Public PG Reviews Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."
@@ -187,7 +192,7 @@ module.exports = {
     submitFeedback,
     getMyFeedback,
     checkFeedbackStatus,
+    getAdminFeedbackStats,
     getAllFeedbacksAdmin,
-    getFeedbackStatsAdmin,
-    getPGFeedbacks
+    getPublicPGReviews
 };

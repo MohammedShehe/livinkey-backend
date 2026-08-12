@@ -10,7 +10,10 @@ const createFeedback = async (tenantId, feedbackData) => {
 
         // Check if tenant exists and is active
         const [tenant] = await connection.execute(
-            `SELECT id, role FROM tenants WHERE id = ? AND is_active = 1`,
+            `SELECT t.id, t.role, t.full_name, t.nationality, t.country_code, t.phone, t.gender, td.pg_id 
+             FROM tenants t
+             LEFT JOIN tenant_details td ON t.id = td.tenant_id
+             WHERE t.id = ? AND t.is_active = 1`,
             [tenantId]
         );
 
@@ -28,8 +31,7 @@ const createFeedback = async (tenantId, feedbackData) => {
             throw new Error("You have already submitted feedback. You can only provide feedback once.");
         }
 
-        // Get tenant's PG ID
-        const pgId = await FeedbackModel.getPGIdByTenant(tenantId);
+        const pgId = tenant[0].pg_id;
         if (!pgId) {
             throw new Error("No PG assigned to this tenant.");
         }
@@ -95,27 +97,29 @@ const getFeedbackByTenant = async (tenantId) => {
     return await FeedbackModel.getFeedbackByTenant(tenantId);
 };
 
-const getFeedbackByPG = async (pgId) => {
-    return await FeedbackModel.getFeedbackByPG(pgId);
-};
-
-const getAllFeedbacks = async (pgId = null, search = null) => {
-    return await FeedbackModel.getAllFeedbacks(pgId, search);
-};
-
-const getFeedbackStats = async (pgId = null) => {
-    return await FeedbackModel.getFeedbackStats(pgId);
-};
-
 const hasTenantGivenFeedback = async (tenantId) => {
     return await FeedbackModel.hasTenantGivenFeedback(tenantId);
+};
+
+// Admin functions
+const getAdminFeedbackStats = async () => {
+    return await FeedbackModel.getAdminFeedbackStats();
+};
+
+const getAllFeedbacksAdmin = async (filters = {}) => {
+    return await FeedbackModel.getAllFeedbacksAdmin(filters);
+};
+
+// Public functions (No Auth)
+const getPublicPGReviews = async () => {
+    return await FeedbackModel.getPublicPGReviews();
 };
 
 module.exports = {
     createFeedback,
     getFeedbackByTenant,
-    getFeedbackByPG,
-    getAllFeedbacks,
-    getFeedbackStats,
-    hasTenantGivenFeedback
+    hasTenantGivenFeedback,
+    getAdminFeedbackStats,
+    getAllFeedbacksAdmin,
+    getPublicPGReviews
 };
