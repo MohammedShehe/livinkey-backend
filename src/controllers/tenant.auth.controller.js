@@ -3,7 +3,6 @@ const crypto = require("crypto");
 const db = require("../config/db");
 const { generateToken } = require("../services/token.service");
 const { generateAndSendTenantOTP, compareOTP } = require("../services/otp.service");
-const { sendPasswordResetEmail } = require("../services/mail.service");
 
 exports.login = async (req, res) => {
     try {

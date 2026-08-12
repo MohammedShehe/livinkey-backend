@@ -26,6 +26,7 @@ const uploadFields = upload.fields([
     { name: 'otherDocuments', maxCount: 5 }
 ]);
 
+// All admin routes require authentication and admin role
 router.use(authMiddleware);
 
 router.post(

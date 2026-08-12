@@ -280,6 +280,23 @@ class NotificationEventManager {
             }
         );
     }
+
+    /**
+     * Handle feedback submission event (NEW)
+     */
+    static async onFeedbackSubmitted(feedback) {
+        const messageData = generateNotificationMessages.feedbackSubmitted(feedback);
+        
+        await NotificationService.sendNotificationToAllAdmins(
+            'FEEDBACK_SUBMITTED',
+            {
+                ...messageData,
+                entity_id: feedback.id,
+                entity_type: 'feedback',
+                link: `/feedbacks/${feedback.id}`
+            }
+        );
+    }
 }
 
 module.exports = NotificationEventManager;

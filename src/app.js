@@ -11,6 +11,7 @@ const tenantRoutes = require("./routes/tenant.routes");
 const billRoutes = require("./routes/bill.routes"); 
 const paymentRoutes = require("./routes/payment.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const feedbackRoutes = require("./routes/feedback.routes");
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.get("/", (req, res) => {
     });
 });
 
+// API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/admins", adminRoutes);
 app.use("/api/pgs", pgRoutes);
@@ -45,5 +47,14 @@ app.use("/api/tenants", tenantRoutes);
 app.use("/api/bills", billRoutes); 
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/feedbacks", feedbackRoutes);
+
+// 404 handler for undefined routes
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route not found: ${req.method} ${req.originalUrl}`
+    });
+});
 
 module.exports = app;

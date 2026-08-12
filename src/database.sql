@@ -593,6 +593,45 @@ LOCK TABLES `tenant_documents` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `tenant_feedbacks`
+--
+
+DROP TABLE IF EXISTS `tenant_feedbacks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant_feedbacks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `pg_id` int(11) NOT NULL,
+  `living_experience_rating` decimal(3,1) NOT NULL CHECK (`living_experience_rating` between 1 and 10),
+  `maintenance_handling_rating` decimal(3,1) NOT NULL CHECK (`maintenance_handling_rating` between 1 and 10),
+  `communication_rating` decimal(3,1) NOT NULL CHECK (`communication_rating` between 1 and 10),
+  `amenities_rating` decimal(3,1) NOT NULL CHECK (`amenities_rating` between 1 and 10),
+  `technology_handling_rating` decimal(3,1) NOT NULL CHECK (`technology_handling_rating` between 1 and 10),
+  `overall_rating` decimal(3,1) NOT NULL CHECK (`overall_rating` between 1 and 10),
+  `comment` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_tenant_feedback` (`tenant_id`),
+  KEY `idx_pg_id` (`pg_id`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_rating` (`overall_rating`),
+  CONSTRAINT `tenant_feedbacks_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `tenant_feedbacks_ibfk_2` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenant_feedbacks`
+--
+
+LOCK TABLES `tenant_feedbacks` WRITE;
+/*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `tenants`
 --
 
@@ -613,6 +652,12 @@ CREATE TABLE `tenants` (
   `created_by` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `must_change_password` tinyint(1) DEFAULT 0,
+  `otp` varchar(255) DEFAULT NULL,
+  `otp_expiry` datetime DEFAULT NULL,
+  `otp_sent_at` datetime DEFAULT NULL,
+  `reset_token` varchar(255) DEFAULT NULL,
+  `reset_token_expiry` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tenants_email` (`email`),
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
@@ -627,7 +672,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',1,'$2b$12$gzz0U1i3TnLsshCDUq650eFSPfMABJGY9doUf2SKz.qvIXm2AMHXm',1,'2026-08-03 09:22:22','2026-08-03 09:22:22'),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-03 09:37:09'),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34'),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55');
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',1,'$2b$12$QnvPFIM91qqYQr9iEFxpE.b/sTLY1E9Ay9N0UiFTVeiSoxTB.PbA.',1,'2026-08-03 09:22:22','2026-08-12 08:31:02',0,NULL,NULL,'2026-08-12 13:58:34',NULL,NULL),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-03 09:37:09',0,NULL,NULL,NULL,NULL,NULL),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50',0,NULL,NULL,NULL,NULL,NULL),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34',0,NULL,NULL,NULL,NULL,NULL),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -640,4 +685,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-08  7:33:10
+-- Dump completed on 2026-08-12 14:11:23

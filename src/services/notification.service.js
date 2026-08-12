@@ -124,6 +124,14 @@ const NOTIFICATION_TYPES = {
         linkPrefix: '/admins/'
     },
     
+    // Feedback related (NEW)
+    FEEDBACK_SUBMITTED: {
+        type: 'feedback_submitted',
+        icon: '⭐',
+        color: '#f39c12',
+        linkPrefix: '/feedbacks/'
+    },
+    
     // System
     SYSTEM_ALERT: {
         type: 'system_alert',
@@ -427,6 +435,14 @@ const generateNotificationMessages = {
         message: `Admin "${admin.name}" has been updated`,
         entity_id: admin.id,
         entity_type: 'admin'
+    }),
+    
+    // Feedback events (NEW)
+    feedbackSubmitted: (feedback) => ({
+        title: 'New Feedback Received',
+        message: `${feedback.tenant_name} gave ${feedback.overall_rating}/10 rating for ${feedback.pg_name}`,
+        entity_id: feedback.id,
+        entity_type: 'feedback'
     })
 };
 
