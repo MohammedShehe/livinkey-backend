@@ -4,6 +4,7 @@ const router = express.Router();
 const tenantController = require("../controllers/tenant.controller");
 const tenantAuthController = require("../controllers/tenant.auth.controller");
 const tenantProfileController = require("../controllers/tenant.profile.controller");
+const tenantHomeController = require("../controllers/tenant.home.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
@@ -16,9 +17,11 @@ router.post("/auth/forgot-password", tenantAuthController.forgotPassword);
 router.post("/auth/verify-otp", tenantAuthController.verifyOTP);
 router.post("/auth/reset-password", tenantAuthController.resetPassword);
 
+// ============ TENANT HOME ROUTE (Protected) ============
+router.get("/home", tenantAuthMiddleware, tenantHomeController.getTenantHomeData);
+
 // ============ TENANT PROFILE ROUTES (Protected) ============
 router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile);
-// Note: No PUT/UPDATE or DELETE routes for tenant profile
 
 // ============ ADMIN ROUTES (Existing) ============
 const uploadFields = upload.fields([
