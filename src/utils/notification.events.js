@@ -282,7 +282,7 @@ class NotificationEventManager {
     }
 
     /**
-     * Handle feedback submission event (NEW)
+     * Handle feedback submission event
      */
     static async onFeedbackSubmitted(feedback) {
         const messageData = generateNotificationMessages.feedbackSubmitted(feedback);
@@ -294,6 +294,40 @@ class NotificationEventManager {
                 entity_id: feedback.id,
                 entity_type: 'feedback',
                 link: `/feedbacks/${feedback.id}`
+            }
+        );
+    }
+
+    /**
+     * Handle maintenance request creation event (NEW)
+     */
+    static async onMaintenanceCreated(request) {
+        const messageData = generateNotificationMessages.maintenanceCreated(request);
+        
+        await NotificationService.sendNotificationToAllAdmins(
+            'MAINTENANCE_CREATED',
+            {
+                ...messageData,
+                entity_id: request.id,
+                entity_type: 'maintenance',
+                link: `/maintenance/${request.id}`
+            }
+        );
+    }
+
+    /**
+     * Handle maintenance status update event (NEW)
+     */
+    static async onMaintenanceStatusUpdated(request) {
+        const messageData = generateNotificationMessages.maintenanceUpdated(request);
+        
+        await NotificationService.sendNotificationToAllAdmins(
+            'MAINTENANCE_UPDATED',
+            {
+                ...messageData,
+                entity_id: request.id,
+                entity_type: 'maintenance',
+                link: `/maintenance/${request.id}`
             }
         );
     }

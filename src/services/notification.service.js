@@ -124,12 +124,26 @@ const NOTIFICATION_TYPES = {
         linkPrefix: '/admins/'
     },
     
-    // Feedback related (NEW)
+    // Feedback related
     FEEDBACK_SUBMITTED: {
         type: 'feedback_submitted',
         icon: '⭐',
         color: '#f39c12',
         linkPrefix: '/feedbacks/'
+    },
+    
+    // Maintenance related (NEW)
+    MAINTENANCE_CREATED: {
+        type: 'maintenance_created',
+        icon: '🔧',
+        color: '#3498db',
+        linkPrefix: '/maintenance/'
+    },
+    MAINTENANCE_UPDATED: {
+        type: 'maintenance_updated',
+        icon: '🔄',
+        color: '#f39c12',
+        linkPrefix: '/maintenance/'
     },
     
     // System
@@ -437,12 +451,27 @@ const generateNotificationMessages = {
         entity_type: 'admin'
     }),
     
-    // Feedback events (NEW)
+    // Feedback events
     feedbackSubmitted: (feedback) => ({
         title: 'New Feedback Received',
         message: `${feedback.tenant_name} gave ${feedback.overall_rating}/10 rating for ${feedback.pg_name}`,
         entity_id: feedback.id,
         entity_type: 'feedback'
+    }),
+    
+    // Maintenance events (NEW)
+    maintenanceCreated: (request) => ({
+        title: 'New Maintenance Request',
+        message: `${request.tenant_name} requested ${request.issue_type} for Room ${request.room_number}`,
+        entity_id: request.id,
+        entity_type: 'maintenance'
+    }),
+    
+    maintenanceUpdated: (request) => ({
+        title: `Maintenance Request ${request.status === 'in_progress' ? 'Started' : 'Completed'}`,
+        message: `${request.issue_type} request for Room ${request.room_number} is now ${request.status}`,
+        entity_id: request.id,
+        entity_type: 'maintenance'
     })
 };
 
