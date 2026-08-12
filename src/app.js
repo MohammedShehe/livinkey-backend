@@ -12,6 +12,7 @@ const billRoutes = require("./routes/bill.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const feedbackRoutes = require("./routes/feedback.routes");
+const tenantDocumentRoutes = require("./routes/tenant.document.routes"); 
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/bills", billRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
+app.use("/api/documents", tenantDocumentRoutes); 
 
 // 404 handler for undefined routes
 app.use((req, res) => {

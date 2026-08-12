@@ -139,7 +139,7 @@ const findPhoneInAnyCountry = async (phone, excludeId = null) => {
     return rows[0] || null;
 };
 
-const findAll = async (search = null, role = null, gender = null, bill_status = null) => {
+const findAll = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
     let query = `
         SELECT 
             t.id,
@@ -182,6 +182,11 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
         WHERE 1=1
     `;
     const params = [];
+
+    if (pg_id) {
+        query += ` AND td.pg_id = ?`;
+        params.push(parseInt(pg_id));
+    }
 
     if (search) {
         query += ` AND (t.full_name LIKE ? OR r.room_number LIKE ? OR t.nationality LIKE ? OR t.gender LIKE ?)`;

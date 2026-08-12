@@ -237,8 +237,8 @@ const createTenant = async (tenantData, files = {}) => {
     }
 };
 
-const getAllTenants = async (search = null, role = null, gender = null, bill_status = null) => {
-    return await TenantModel.findAll(search, role, gender, bill_status);
+const getAllTenants = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
+    return await TenantModel.findAll(search, role, gender, bill_status, pg_id);
 };
 
 const getTenantById = async (tenantId) => {

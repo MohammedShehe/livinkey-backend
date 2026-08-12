@@ -121,8 +121,8 @@ const createTenant = async (req, res) => {
 
 const getAllTenants = async (req, res) => {
     try {
-        const { search, role, gender, bill_status } = req.query;
-        const tenants = await tenantService.getAllTenants(search, role, gender, bill_status);
+        const { search, role, gender, bill_status, pg_id } = req.query;
+        const tenants = await tenantService.getAllTenants(search, role, gender, bill_status, pg_id);
 
         return res.status(200).json({
             success: true,
