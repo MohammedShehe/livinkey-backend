@@ -63,33 +63,7 @@ const getMyDocuments = async (req, res) => {
     }
 };
 
-const deleteMyDocument = async (req, res) => {
-    try {
-        const tenantId = req.tenant.id;
-        const { documentId } = req.params;
-
-        const deleted = await tenantDocumentService.deleteDocumentByTenant(documentId, tenantId);
-
-        if (!deleted) {
-            return res.status(404).json({
-                success: false,
-                message: "Document not found"
-            });
-        }
-
-        return res.json({
-            success: true,
-            message: "Document deleted successfully"
-        });
-
-    } catch (error) {
-        console.error("Delete Document Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message || "Internal server error"
-        });
-    }
-};
+// REMOVED: deleteMyDocument - Tenants should NOT be able to delete documents
 
 const getDocumentTypes = async (req, res) => {
     try {
@@ -259,7 +233,7 @@ const getTenantDocumentsAdmin = async (req, res) => {
 module.exports = {
     uploadDocument,
     getMyDocuments,
-    deleteMyDocument,
+    // deleteMyDocument - REMOVED (Tenants cannot delete)
     getDocumentTypes,
     getDocumentsAdmin,
     deleteDocumentAdmin,
