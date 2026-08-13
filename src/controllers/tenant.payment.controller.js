@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { uploadFile } = require("../services/upload.service");
+const { generatePaymentReceipt } = require("../services/receipt.service");
 
 const getBillDetails = async (req, res) => {
     try {
@@ -231,7 +232,14 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 bp.*,
                 b.total_amount as bill_total,
-                b.status as bill_status
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date
             FROM bill_payments bp
             INNER JOIN bills b ON bp.bill_id = b.id
             WHERE b.tenant_id = ?
@@ -246,7 +254,14 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 cp.*,
                 b.total_amount as bill_total,
-                b.status as bill_status
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date
             FROM cash_payments cp
             INNER JOIN bills b ON cp.bill_id = b.id
             WHERE b.tenant_id = ?
@@ -261,7 +276,14 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 pp.*,
                 b.total_amount as bill_total,
-                b.status as bill_status
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date
             FROM payment_proofs pp
             INNER JOIN bills b ON pp.bill_id = b.id
             WHERE pp.tenant_id = ?
@@ -270,11 +292,33 @@ const getPaymentHistory = async (req, res) => {
             [tenantId]
         );
 
+        // Get tenant info
+        const [tenantInfo] = await connection.execute(
+            `
+            SELECT 
+                t.full_name,
+                t.email,
+                t.phone,
+                t.nationality,
+                p.name as pg_name,
+                r.room_number
+            FROM tenants t
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id
+            LEFT JOIN pgs p ON td.pg_id = p.id
+            LEFT JOIN rooms r ON td.room_id = r.id
+            WHERE t.id = ?
+            `,
+            [tenantId]
+        );
+
         connection.release();
+
+        const tenant = tenantInfo[0] || {};
 
         return res.json({
             success: true,
             data: {
+                tenant: tenant,
                 online_payments: payments,
                 cash_payments: cashPayments,
                 payment_proofs: proofs
@@ -290,8 +334,334 @@ const getPaymentHistory = async (req, res) => {
     }
 };
 
+const getPaymentReceipt = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { paymentId, type } = req.params;
+
+        if (!paymentId || !type) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment ID and type are required"
+            });
+        }
+
+        // Validate type
+        if (!['online', 'cash', 'proof'].includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment type. Must be 'online', 'cash', or 'proof'"
+            });
+        }
+
+        const connection = await db.getConnection();
+
+        let paymentData = null;
+        let tableName = '';
+
+        // Get payment data based on type
+        if (type === 'online') {
+            tableName = 'bill_payments';
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    bp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number
+                FROM bill_payments bp
+                INNER JOIN bills b ON bp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE bp.id = ? AND b.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        } else if (type === 'cash') {
+            tableName = 'cash_payments';
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    cp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number,
+                    a.name as verified_by_name
+                FROM cash_payments cp
+                INNER JOIN bills b ON cp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                LEFT JOIN admins a ON cp.verified_by = a.id
+                WHERE cp.id = ? AND b.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        } else if (type === 'proof') {
+            tableName = 'payment_proofs';
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    pp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number
+                FROM payment_proofs pp
+                INNER JOIN bills b ON pp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE pp.id = ? AND pp.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        }
+
+        connection.release();
+
+        if (!paymentData) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment not found"
+            });
+        }
+
+        // Generate receipt HTML
+        const receiptHTML = generatePaymentReceipt(paymentData, type);
+
+        // Send HTML response
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(receiptHTML);
+
+    } catch (error) {
+        console.error("Get Payment Receipt Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+const downloadPaymentReceipt = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { paymentId, type } = req.params;
+
+        if (!paymentId || !type) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment ID and type are required"
+            });
+        }
+
+        // Validate type
+        if (!['online', 'cash', 'proof'].includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment type. Must be 'online', 'cash', or 'proof'"
+            });
+        }
+
+        const connection = await db.getConnection();
+
+        let paymentData = null;
+
+        // Get payment data based on type (same as above)
+        if (type === 'online') {
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    bp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number
+                FROM bill_payments bp
+                INNER JOIN bills b ON bp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE bp.id = ? AND b.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        } else if (type === 'cash') {
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    cp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number,
+                    a.name as verified_by_name
+                FROM cash_payments cp
+                INNER JOIN bills b ON cp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                LEFT JOIN admins a ON cp.verified_by = a.id
+                WHERE cp.id = ? AND b.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        } else if (type === 'proof') {
+            const [rows] = await connection.execute(
+                `
+                SELECT 
+                    pp.*,
+                    b.total_amount as bill_total,
+                    b.status as bill_status,
+                    b.rent_amount,
+                    b.electricity_amount,
+                    b.maintenance_amount,
+                    b.other_charges,
+                    b.fine_amount,
+                    b.sent_at as bill_date,
+                    b.valid_until as bill_due_date,
+                    b.payment_qr,
+                    b.partial_payment_qr,
+                    b.admin_qr,
+                    b.electricity_meter_image,
+                    t.full_name as tenant_name,
+                    t.email as tenant_email,
+                    t.phone as tenant_phone,
+                    t.nationality,
+                    p.name as pg_name,
+                    r.room_number
+                FROM payment_proofs pp
+                INNER JOIN bills b ON pp.bill_id = b.id
+                INNER JOIN tenants t ON b.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE pp.id = ? AND pp.tenant_id = ?
+                `,
+                [paymentId, tenantId]
+            );
+            paymentData = rows[0];
+        }
+
+        connection.release();
+
+        if (!paymentData) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment not found"
+            });
+        }
+
+        // Generate receipt HTML
+        const receiptHTML = generatePaymentReceipt(paymentData, type);
+
+        // Send as downloadable file
+        const fileName = `receipt_${paymentId}_${Date.now()}.html`;
+        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        return res.send(receiptHTML);
+
+    } catch (error) {
+        console.error("Download Payment Receipt Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     getBillDetails,
     submitPaymentProof,
-    getPaymentHistory
+    getPaymentHistory,
+    getPaymentReceipt,
+    downloadPaymentReceipt
 };

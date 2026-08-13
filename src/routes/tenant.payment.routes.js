@@ -21,4 +21,10 @@ router.post(
 // Get payment history
 router.get("/history", tenantPaymentController.getPaymentHistory);
 
+// View payment receipt (opens in browser)
+router.get("/receipt/:type/:paymentId", tenantPaymentController.getPaymentReceipt);
+
+// Download payment receipt
+router.get("/receipt/:type/:paymentId/download", tenantPaymentController.downloadPaymentReceipt);
+
 module.exports = router;

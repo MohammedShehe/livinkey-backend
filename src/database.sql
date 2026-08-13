@@ -41,7 +41,7 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,6 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
+INSERT INTO `admin_notifications` VALUES (1,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 8.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-12 08:47:08',NULL),(2,2,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 8.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-12 08:47:08',NULL),(3,1,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested Plumber for Room 101',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-12 16:02:12',NULL),(4,2,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested Plumber for Room 101',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-12 16:02:12',NULL);
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -310,6 +311,93 @@ LOCK TABLES `floors` WRITE;
 /*!40000 ALTER TABLE `floors` DISABLE KEYS */;
 INSERT INTO `floors` VALUES (1,1,1,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(2,1,2,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(3,1,3,'2026-08-03 09:20:37','2026-08-03 09:20:37');
 /*!40000 ALTER TABLE `floors` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `maintenance_requests`
+--
+
+DROP TABLE IF EXISTS `maintenance_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `maintenance_requests` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `room_id` int(11) NOT NULL,
+  `issue_type` varchar(50) NOT NULL,
+  `description` text DEFAULT NULL,
+  `service_date` date NOT NULL,
+  `free_time` varchar(100) DEFAULT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `image_public_id` varchar(255) DEFAULT NULL,
+  `image_resource_type` varchar(20) DEFAULT NULL,
+  `status` enum('pending','in_progress','completed') DEFAULT 'pending',
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `room_id` (`room_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_tenant_id` (`tenant_id`),
+  KEY `idx_issue_type` (`issue_type`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `maintenance_requests_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `maintenance_requests_ibfk_2` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `maintenance_requests`
+--
+
+LOCK TABLES `maintenance_requests` WRITE;
+/*!40000 ALTER TABLE `maintenance_requests` DISABLE KEYS */;
+INSERT INTO `maintenance_requests` VALUES (1,1,1,'Plumber','Leaking pipe in bathroom','2026-08-15','10:00 AM - 2:00 PM','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786550529/livinkey/maintenance/1/trewdrdfjhiw4xegpeax.png','livinkey/maintenance/1/trewdrdfjhiw4xegpeax','image','pending',1,'2026-08-12 16:02:12','2026-08-12 16:02:12');
+/*!40000 ALTER TABLE `maintenance_requests` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `payment_proofs`
+--
+
+DROP TABLE IF EXISTS `payment_proofs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `payment_proofs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `bill_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
+  `transaction_id` varchar(100) NOT NULL,
+  `amount_paid` decimal(10,2) NOT NULL,
+  `proof_url` varchar(500) NOT NULL,
+  `proof_public_id` varchar(255) NOT NULL,
+  `proof_resource_type` varchar(20) DEFAULT 'image',
+  `status` enum('pending','verified','rejected') DEFAULT 'pending',
+  `admin_notes` text DEFAULT NULL,
+  `verified_by` int(11) DEFAULT NULL,
+  `verified_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `bill_id` (`bill_id`),
+  KEY `tenant_id` (`tenant_id`),
+  KEY `verified_by` (`verified_by`),
+  KEY `idx_status` (`status`),
+  KEY `idx_transaction_id` (`transaction_id`),
+  CONSTRAINT `payment_proofs_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payment_proofs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payment_proofs_ibfk_3` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `payment_proofs`
+--
+
+LOCK TABLES `payment_proofs` WRITE;
+/*!40000 ALTER TABLE `payment_proofs` DISABLE KEYS */;
+INSERT INTO `payment_proofs` VALUES (1,7,1,'TXN123456789',12700.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786604102/livinkey/payments/proofs/1/nxwrhumifwkkjzoqf66r.png','livinkey/payments/proofs/1/nxwrhumifwkkjzoqf66r','image','pending',NULL,NULL,NULL,'2026-08-13 06:55:04','2026-08-13 06:55:04');
+/*!40000 ALTER TABLE `payment_proofs` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -577,10 +665,13 @@ CREATE TABLE `tenant_documents` (
   `document_resource_type` varchar(20) DEFAULT 'image',
   `document_type` varchar(50) DEFAULT 'id_proof',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `original_name` varchar(255) DEFAULT NULL,
+  `file_size` int(11) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   CONSTRAINT `fk_tenant_documents_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -589,6 +680,7 @@ CREATE TABLE `tenant_documents` (
 
 LOCK TABLES `tenant_documents` WRITE;
 /*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
+INSERT INTO `tenant_documents` VALUES (1,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786544337/livinkey/tenants/1/documents/kq64qugmb5ayvy2tzkel.png','livinkey/tenants/1/documents/kq64qugmb5ayvy2tzkel','image','passport_photo','2026-08-12 14:19:01','Screenshot 2025-09-15 161841.png',381270,'2026-08-12 14:19:01');
 /*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -619,7 +711,7 @@ CREATE TABLE `tenant_feedbacks` (
   KEY `idx_rating` (`overall_rating`),
   CONSTRAINT `tenant_feedbacks_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tenant_feedbacks_ibfk_2` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -628,6 +720,7 @@ CREATE TABLE `tenant_feedbacks` (
 
 LOCK TABLES `tenant_feedbacks` WRITE;
 /*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
+INSERT INTO `tenant_feedbacks` VALUES (1,1,1,10.0,7.0,9.0,8.0,6.0,8.0,NULL,'2026-08-12 08:47:08','2026-08-12 08:47:08');
 /*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -685,4 +778,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-12 14:11:23
+-- Dump completed on 2026-08-13 12:30:21
