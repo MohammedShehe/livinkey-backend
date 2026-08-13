@@ -12,8 +12,10 @@ const billRoutes = require("./routes/bill.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const feedbackRoutes = require("./routes/feedback.routes");
-const tenantDocumentRoutes = require("./routes/tenant.document.routes"); 
+const tenantDocumentRoutes = require("./routes/tenant.document.routes");
 const maintenanceRoutes = require("./routes/maintenance.routes");
+const tenantPaymentRoutes = require("./routes/tenant.payment.routes"); // NEW
+
 const app = express();
 
 app.use(helmet());
@@ -49,8 +51,9 @@ app.use("/api/bills", billRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
-app.use("/api/documents", tenantDocumentRoutes); 
+app.use("/api/documents", tenantDocumentRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/tenant-payments", tenantPaymentRoutes); // NEW
 
 // 404 handler for undefined routes
 app.use((req, res) => {
