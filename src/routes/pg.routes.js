@@ -1,13 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
 
 const pgController = require("../controllers/pg.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const upload = require("../middleware/upload.middleware");
 
-// Configure multer for multiple files
+// Configure multer for multiple files using the imported upload middleware
 const uploadFields = upload.fields([
     { name: 'images', maxCount: 5 },
     { name: 'paymentQr', maxCount: 1 }

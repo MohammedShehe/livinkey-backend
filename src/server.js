@@ -5,13 +5,13 @@ const db = require("./config/db");
 const cron = require("node-cron");
 const billService = require("./services/bill.service");
 const tenantService = require("./services/tenant.service");
-const notificationService = require("./services/notification.service");
 const NotificationEventManager = require("./utils/notification.events");
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
     try {
+        // Test database connection once at startup
         const connection = await db.getConnection();
         console.log("✅ MySQL Connected");
         connection.release();
@@ -43,6 +43,7 @@ async function startServer() {
                 console.error('❌ Error checking e-FRRO expiries:', error);
             }
         });
+        console.log('📅 e-FRRO expiry checker scheduled to run daily at 9:00 AM');
 
         // Cron job 3: Check e-FRRO expiry notifications (daily at 10:00 AM)
         cron.schedule('0 10 * * *', async () => {
@@ -67,7 +68,6 @@ async function startServer() {
             }
         });
         console.log('📅 Overdue payment notification scheduler running daily at 11:00 AM');
-        console.log('📅 e-FRRO expiry checker scheduled to run daily at 9:00 AM');
 
         app.listen(PORT, () => {
             console.log(`🚀 Server running on http://localhost:${PORT}`);

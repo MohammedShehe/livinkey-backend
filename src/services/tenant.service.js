@@ -4,33 +4,13 @@ const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
 const NotificationEventManager = require("../utils/notification.events");
+const {
+    generatePassword,
+    normalizeNumberOfTenants,
+    getTimeBasedGreeting
+} = require("../utils/helpers");
 
-const generatePassword = () => {
-    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const lowercase = "abcdefghijklmnopqrstuvwxyz";
-    const numbers = "0123456789";
-    const specials = "!@#$%^&*";
-    const all = uppercase + lowercase + numbers + specials;
-    
-    let password = "";
-    password += uppercase[Math.floor(Math.random() * uppercase.length)];
-    password += lowercase[Math.floor(Math.random() * lowercase.length)];
-    password += numbers[Math.floor(Math.random() * numbers.length)];
-    password += specials[Math.floor(Math.random() * specials.length)];
-    
-    for (let i = 4; i < 12; i++) {
-        password += all[Math.floor(Math.random() * all.length)];
-    }
-    
-    return password.split('').sort(() => Math.random() - 0.5).join('');
-};
-
-const normalizeNumberOfTenants = (value) => {
-    const parsed = parseInt(value, 10);
-    if (isNaN(parsed) || parsed <= 0) return 1;
-    return parsed;
-};
-
+// ============ INCREMENT ROOM OCCUPANCY ============
 const incrementRoomOccupancy = async (connection, roomId, amount) => {
     await connection.execute(
         `
@@ -42,6 +22,7 @@ const incrementRoomOccupancy = async (connection, roomId, amount) => {
     );
 };
 
+// ============ DECREMENT ROOM OCCUPANCY ============
 const decrementRoomOccupancy = async (connection, roomId, amount) => {
     await connection.execute(
         `
@@ -53,6 +34,7 @@ const decrementRoomOccupancy = async (connection, roomId, amount) => {
     );
 };
 
+// ============ CREATE TENANT ============
 const createTenant = async (tenantData, files = {}) => {
     const connection = await db.getConnection();
     let createdTenant = null;
@@ -60,6 +42,7 @@ const createTenant = async (tenantData, files = {}) => {
     try {
         await connection.beginTransaction();
 
+        // Lock room for occupancy update
         if (tenantData.role === 'tenant') {
             await connection.execute(
                 `SELECT id FROM rooms WHERE id = ? FOR UPDATE`,
@@ -67,11 +50,13 @@ const createTenant = async (tenantData, files = {}) => {
             );
         }
 
+        // Check existing email
         const existingEmail = await TenantModel.findByEmail(tenantData.email);
         if (existingEmail) {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
+        // Check existing phone
         const existingPhone = await TenantModel.findByPhone(
             tenantData.country_code, 
             tenantData.phone
@@ -82,20 +67,22 @@ const createTenant = async (tenantData, files = {}) => {
 
         const numberOfTenants = normalizeNumberOfTenants(tenantData.number_of_tenants);
 
+        // Check room availability
         if (tenantData.role === 'tenant') {
             const availability = await TenantModel.checkRoomAvailability(
                 tenantData.room_id,
                 numberOfTenants
             );
-
             if (!availability.available) {
                 throw new Error(availability.message);
             }
         }
 
+        // Generate password
         const plainPassword = generatePassword();
         const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
+        // Create tenant
         const tenantId = await TenantModel.createTenant(connection, {
             role: tenantData.role,
             full_name: tenantData.full_name,
@@ -108,6 +95,7 @@ const createTenant = async (tenantData, files = {}) => {
             created_by: tenantData.created_by
         });
 
+        // Create tenant details if tenant
         if (tenantData.role === 'tenant') {
             let documentUrl = null;
             let documentPublicId = null;
@@ -146,6 +134,7 @@ const createTenant = async (tenantData, files = {}) => {
                 document_resource_type: documentResourceType
             });
 
+            // Increment room occupancy
             try {
                 await incrementRoomOccupancy(connection, tenantData.room_id, numberOfTenants);
             } catch (occupancyError) {
@@ -156,6 +145,7 @@ const createTenant = async (tenantData, files = {}) => {
                 }
             }
 
+            // Upload other documents
             if (files.otherDocuments && files.otherDocuments.length > 0) {
                 for (const file of files.otherDocuments) {
                     const uploadResult = await uploadFile(
@@ -178,6 +168,7 @@ const createTenant = async (tenantData, files = {}) => {
 
         await connection.commit();
 
+        // Get PG and room info for email
         let pgName = null;
         let roomNumber = null;
         if (tenantData.role === 'tenant') {
@@ -194,6 +185,7 @@ const createTenant = async (tenantData, files = {}) => {
             roomNumber = roomResult[0]?.room_number || null;
         }
 
+        // Send welcome email
         try {
             await sendWelcomeTenantEmail(
                 tenantData.email,
@@ -224,35 +216,37 @@ const createTenant = async (tenantData, files = {}) => {
 
     } catch (error) {
         await connection.rollback();
-
         if (error.code === 'ER_DUP_ENTRY') {
             throw new Error("This tenant (email or phone) was already just registered.");
         }
-
         console.error("Tenant Creation Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
 };
 
+// ============ GET ALL TENANTS ============
 const getAllTenants = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
     return await TenantModel.findAll(search, role, gender, bill_status, pg_id);
 };
 
+// ============ GET TENANT BY ID ============
 const getTenantById = async (tenantId) => {
     return await TenantModel.getTenantWithDocuments(tenantId);
 };
 
+// ============ GET TENANT STATS ============
 const getTenantStats = async () => {
     return await TenantModel.getStats();
 };
 
+// ============ GET GUEST STATS ============
 const getGuestStats = async () => {
     return await TenantModel.getGuestStats();
 };
 
+// ============ UPDATE TENANT ============
 const updateTenant = async (tenantId, tenantData, files = {}) => {
     const connection = await db.getConnection();
 
@@ -264,11 +258,13 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             throw new Error("Tenant not found");
         }
 
+        // Check existing email
         const existingEmail = await TenantModel.findByEmail(tenantData.email, tenantId);
         if (existingEmail) {
             throw new Error(`Email "${tenantData.email}" is already registered`);
         }
 
+        // Check existing phone
         const existingPhone = await TenantModel.findByPhone(
             tenantData.country_code, 
             tenantData.phone, 
@@ -278,6 +274,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             throw new Error(`Phone number "${tenantData.country_code}${tenantData.phone}" is already registered`);
         }
 
+        // Update tenant
         await TenantModel.updateTenant(connection, tenantId, {
             full_name: tenantData.full_name,
             email: tenantData.email,
@@ -306,6 +303,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 }
             }
 
+            // Handle document update
             let documentUrl = existingTenant.document_url;
             let documentPublicId = existingTenant.document_public_id;
             let documentResourceType = existingTenant.document_resource_type;
@@ -333,6 +331,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 }
             }
 
+            // Update tenant details
             await TenantModel.updateTenantDetails(connection, tenantId, {
                 residency: tenantData.residency,
                 aadhaar_id: tenantData.aadhaar_id,
@@ -348,6 +347,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 arrival_date: tenantData.arrival_date
             });
 
+            // Handle room change
             if (roomChanged) {
                 try {
                     await decrementRoomOccupancy(connection, existingTenant.room_id, numberOfTenants);
@@ -366,6 +366,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 );
             }
 
+            // Handle other documents
             if (files.otherDocuments && files.otherDocuments.length > 0) {
                 const oldDocuments = await TenantModel.getTenantDocuments(tenantId);
                 for (const doc of oldDocuments) {
@@ -396,6 +397,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 }
             }
 
+            // Update document URL if new document uploaded
             if (files.document && files.document.length > 0) {
                 await connection.execute(
                     `
@@ -418,19 +420,17 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
 
     } catch (error) {
         await connection.rollback();
-
         if (error.code === 'ER_DUP_ENTRY') {
             throw new Error("This tenant (email or phone) was already just updated elsewhere.");
         }
-
         console.error("Tenant Update Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
 };
 
+// ============ DELETE TENANT ============
 const deleteTenant = async (tenantId) => {
     const connection = await db.getConnection();
 
@@ -442,6 +442,7 @@ const deleteTenant = async (tenantId) => {
             throw new Error("Tenant not found");
         }
 
+        // Delete main document
         if (tenant.document_public_id) {
             try {
                 await deleteFile(
@@ -453,6 +454,7 @@ const deleteTenant = async (tenantId) => {
             }
         }
 
+        // Delete other documents
         const documents = await TenantModel.getTenantDocuments(tenantId);
         for (const doc of documents) {
             try {
@@ -462,6 +464,7 @@ const deleteTenant = async (tenantId) => {
             }
         }
 
+        // Decrement room occupancy
         if (tenant.room_id) {
             try {
                 await decrementRoomOccupancy(connection, tenant.room_id, 1);
@@ -474,6 +477,7 @@ const deleteTenant = async (tenantId) => {
             }
         }
 
+        // Delete tenant
         await TenantModel.deleteTenant(connection, tenantId);
 
         await connection.commit();
@@ -483,18 +487,16 @@ const deleteTenant = async (tenantId) => {
         await connection.rollback();
         console.error("Tenant Delete Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
 };
 
-// Check and send e-FRRO expiry notifications
+// ============ CHECK AND SEND E-FRRO EXPIRY NOTIFICATIONS ============
 const checkAndSendEFRROExpiryNotifications = async () => {
     try {
         console.log("Checking e-FRRO expiry notifications...");
         
-        // Get all tenants with e-FRRO expiring within 30 days
         const expiringTenants = await TenantModel.getTenantsWithExpiringEFRRO();
         
         if (expiringTenants.length === 0) {
@@ -504,7 +506,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
 
         console.log(`Found ${expiringTenants.length} tenant(s) with e-FRRO expiring within 30 days.`);
         
-        // Send email to each tenant
         let tenantEmailsSent = 0;
         let tenantEmailErrors = 0;
         
@@ -523,7 +524,7 @@ const checkAndSendEFRROExpiryNotifications = async () => {
             }
         }
 
-        // Send consolidated report to all super admins
+        // Send report to super admins
         const superAdmins = await TenantModel.getSuperAdmins();
         let adminEmailsSent = 0;
         let adminEmailErrors = 0;
@@ -543,8 +544,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
                     console.error(`Failed to send e-FRRO expiry report to super admin ${admin.full_name}:`, error.message);
                 }
             }
-        } else {
-            console.warn("No super admins found to send e-FRRO expiry report.");
         }
 
         return {
@@ -568,12 +567,12 @@ const checkAndSendEFRROExpiryNotifications = async () => {
     }
 };
 
-// NEW: Get e-FRRO statistics
+// ============ GET E-FRRO STATS ============
 const getEFRROStats = async () => {
     return await TenantModel.getEFRROStats();
 };
 
-// NEW: Get e-FRRO expiring list
+// ============ GET E-FRRO EXPIRING LIST ============
 const getEFRROExpiringList = async (daysRange = null) => {
     return await TenantModel.getEFRROExpiringList(daysRange);
 };
