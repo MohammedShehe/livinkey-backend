@@ -58,6 +58,126 @@ const getQRExpiryTime = (existingExpiry = null) => {
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
 };
 
+/**
+ * Regenerate QR codes for a bill with updated amount
+ * Returns { fullQr, fullPublicId, fullResourceType, partialQr, partialPublicId, partialResourceType }
+ */
+const regenerateBillQRCodes = async (billId, billData, totalDue) => {
+    const connection = await db.getConnection();
+    const uploadedCloudFiles = [];
+    let tempFiles = [];
+    let result = {
+        fullQr: null,
+        fullPublicId: null,
+        fullResourceType: null,
+        partialQr: null,
+        partialPublicId: null,
+        partialResourceType: null
+    };
+
+    try {
+        // If totalDue is 0 or less, we should clear all QRs
+        if (totalDue <= 0) {
+            // Delete existing QR codes from Cloudinary if they exist
+            if (billData.payment_qr_public_id) {
+                try {
+                    await deleteFile(billData.payment_qr_public_id, billData.payment_qr_resource_type);
+                } catch (e) {}
+            }
+            if (billData.partial_payment_qr_public_id) {
+                try {
+                    await deleteFile(billData.partial_payment_qr_public_id, billData.partial_payment_qr_resource_type);
+                } catch (e) {}
+            }
+            return result;
+        }
+
+        // Generate Full Payment QR
+        try {
+            const fullPaymentData = {
+                billId: billId,
+                tenantId: billData.tenant_id,
+                amount: totalDue,
+                type: 'full_payment'
+            };
+            
+            const fullQrPath = await generateQRCode(JSON.stringify(fullPaymentData), 'full');
+            tempFiles.push(fullQrPath);
+            
+            const fullQrUpload = await uploadFile(
+                { buffer: fs.readFileSync(fullQrPath), originalname: 'qr_full.png' },
+                "livinkey/bills/qr"
+            );
+
+            if (fullQrUpload && fullQrUpload.secure_url) {
+                result.fullQr = fullQrUpload.secure_url;
+                result.fullPublicId = fullQrUpload.public_id;
+                result.fullResourceType = fullQrUpload.resource_type;
+                uploadedCloudFiles.push({ public_id: fullQrUpload.public_id, resource_type: fullQrUpload.resource_type });
+            }
+        } catch (qrError) {
+            console.error("Failed to generate full payment QR:", qrError);
+        }
+
+        // Generate Partial Payment QR (50% of remaining)
+        try {
+            const partialAmount = totalDue * 0.5;
+            const partialPaymentData = {
+                billId: billId,
+                tenantId: billData.tenant_id,
+                amount: partialAmount,
+                type: 'partial_payment'
+            };
+            
+            const partialQrPath = await generateQRCode(JSON.stringify(partialPaymentData), 'partial');
+            tempFiles.push(partialQrPath);
+            
+            const partialQrUpload = await uploadFile(
+                { buffer: fs.readFileSync(partialQrPath), originalname: 'qr_partial.png' },
+                "livinkey/bills/qr"
+            );
+
+            if (partialQrUpload && partialQrUpload.secure_url) {
+                result.partialQr = partialQrUpload.secure_url;
+                result.partialPublicId = partialQrUpload.public_id;
+                result.partialResourceType = partialQrUpload.resource_type;
+                uploadedCloudFiles.push({ public_id: partialQrUpload.public_id, resource_type: partialQrUpload.resource_type });
+            }
+        } catch (qrError) {
+            console.error("Failed to generate partial payment QR:", qrError);
+        }
+
+        // Clean up temp files
+        for (const tempFile of tempFiles) {
+            if (fs.existsSync(tempFile)) {
+                try {
+                    fs.unlinkSync(tempFile);
+                } catch (unlinkError) {
+                    console.error("Failed to delete temp file:", unlinkError);
+                }
+            }
+        }
+
+        return result;
+
+    } catch (error) {
+        await cleanupUploadedFiles(uploadedCloudFiles);
+        for (const tempFile of tempFiles) {
+            if (fs.existsSync(tempFile)) {
+                try {
+                    fs.unlinkSync(tempFile);
+                } catch (unlinkError) {
+                    console.error("Failed to delete temp file:", unlinkError);
+                }
+            }
+        }
+        console.error("Regenerate QR Codes Error:", error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
 const createBill = async (billData, files = {}) => {
     const connection = await db.getConnection();
     const uploadedCloudFiles = [];
@@ -237,7 +357,6 @@ const createBill = async (billData, files = {}) => {
 
         createdBill = await BillModel.getBillById(billId);
 
-        // Send bill creation notification to admins
         try {
             if (tenant) {
                 await NotificationEventManager.onBillCreated(createdBill, tenant);
@@ -246,7 +365,6 @@ const createBill = async (billData, files = {}) => {
             console.error("Failed to send bill notification:", notifError);
         }
 
-        // Send bill creation notification to tenant (NEW)
         try {
             if (tenant) {
                 await NotificationEventManager.onTenantBillCreated(createdBill, tenant);
@@ -438,7 +556,6 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
     }
 };
 
-// Cash Payment Functions
 const requestCashPaymentOTP = async (billId, paymentData) => {
     const connection = await db.getConnection();
 
@@ -460,15 +577,13 @@ const requestCashPaymentOTP = async (billId, paymentData) => {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
         }
 
-        // Generate 4-digit OTP
         const otp = generateOTP();
-        const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+        const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
         await BillModel.setCashPaymentOTP(connection, billId, otp, expiry);
 
         await connection.commit();
 
-        // Send OTP email to tenant
         try {
             await sendCashPaymentOTPEmail(
                 bill.tenant_email,
@@ -510,7 +625,6 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             throw new Error("Bill not found");
         }
 
-        // Verify OTP
         const verification = await BillModel.verifyCashPaymentOTP(connection, billId, otp);
         if (!verification.valid) {
             throw new Error(verification.message);
@@ -522,7 +636,6 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
         }
 
-        // Create cash payment record
         await BillModel.createCashPayment(connection, {
             bill_id: billId,
             tenant_id: bill.tenant_id,
@@ -534,7 +647,6 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             notes: paymentData.notes || null
         });
 
-        // Update bill paid amount
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
         const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount - parseFloat(bill.total_cash_paid || 0);
 
@@ -545,42 +657,88 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
 
         await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
 
-        // Clear OTP
         await BillModel.clearCashPaymentOTP(connection, billId);
+
+        // REGENERATE QR CODES BASED ON PAYMENT STATUS
+        const updatedBill = await BillModel.getBillById(billId);
+        const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
+                           parseFloat(updatedBill.paid_amount || 0) - parseFloat(updatedBill.total_cash_paid || 0);
+
+        // Delete old QR codes
+        if (updatedBill.payment_qr_public_id) {
+            try {
+                await deleteFile(updatedBill.payment_qr_public_id, updatedBill.payment_qr_resource_type);
+            } catch (e) {}
+        }
+        if (updatedBill.partial_payment_qr_public_id) {
+            try {
+                await deleteFile(updatedBill.partial_payment_qr_public_id, updatedBill.partial_payment_qr_resource_type);
+            } catch (e) {}
+        }
+
+        let fullQr = null;
+        let fullPublicId = null;
+        let fullResourceType = null;
+        let partialQr = null;
+        let partialPublicId = null;
+        let partialResourceType = null;
+
+        if (newTotalDue > 0) {
+            const qrResult = await regenerateBillQRCodes(billId, updatedBill, newTotalDue);
+            fullQr = qrResult.fullQr;
+            fullPublicId = qrResult.fullPublicId;
+            fullResourceType = qrResult.fullResourceType;
+            partialQr = qrResult.partialQr;
+            partialPublicId = qrResult.partialPublicId;
+            partialResourceType = qrResult.partialResourceType;
+        }
+
+        // Update bill with new QR codes (or null if fully paid)
+        await connection.execute(
+            `
+            UPDATE bills 
+            SET 
+                payment_qr = ?,
+                payment_qr_public_id = ?,
+                payment_qr_resource_type = ?,
+                partial_payment_qr = ?,
+                partial_payment_qr_public_id = ?,
+                partial_payment_qr_resource_type = ?
+            WHERE id = ?
+            `,
+            [fullQr, fullPublicId, fullResourceType, partialQr, partialPublicId, partialResourceType, billId]
+        );
 
         await connection.commit();
 
-        const updatedBill = await BillModel.getBillById(billId);
+        const finalBill = await BillModel.getBillById(billId);
 
-        // Send cash payment notification to admins
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
                 id: bill.tenant_id 
             };
-            await NotificationEventManager.onCashPaymentVerified(updatedBill, tenant);
+            await NotificationEventManager.onCashPaymentVerified(finalBill, tenant);
         } catch (notifError) {
             console.error("Failed to send cash payment notification:", notifError);
         }
 
-        // Send payment notification to tenant (NEW)
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
                 id: bill.tenant_id 
             };
             
-            // Determine if full or partial payment
             if (newStatus === 'paid') {
-                await NotificationEventManager.onTenantBillPaid(updatedBill, tenant);
+                await NotificationEventManager.onTenantBillPaid(finalBill, tenant);
             } else if (newStatus === 'partially_paid') {
-                await NotificationEventManager.onTenantBillPartiallyPaid(updatedBill, tenant);
+                await NotificationEventManager.onTenantBillPartiallyPaid(finalBill, tenant);
             }
         } catch (notifError) {
             console.error("Failed to send tenant payment notification:", notifError);
         }
 
-        return updatedBill;
+        return finalBill;
 
     } catch (error) {
         await connection.rollback();
@@ -607,9 +765,11 @@ const processDelayedPayments = async () => {
                 b.*,
                 t.full_name as tenant_name,
                 t.email as tenant_email,
+                td.payment_date as tenant_payment_date,
                 DATEDIFF(NOW(), b.sent_at) as days_since_sent
             FROM bills b
             INNER JOIN tenants t ON b.tenant_id = t.id
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id
             WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
             AND b.valid_until < NOW()
             AND b.sent_at IS NOT NULL
@@ -621,32 +781,70 @@ const processDelayedPayments = async () => {
         for (const bill of overdueBills[0]) {
             const daysSinceSent = Math.floor((Date.now() - new Date(bill.sent_at).getTime()) / (1000 * 60 * 60 * 24));
             
+            // NEW LOGIC: Determine the actual due date for fine calculation
+            // Fine should start from the LATER of: (bill sent date + 7 days) OR (tenant's payment date of the month)
+            let fineStartDate = new Date(bill.sent_at);
+            fineStartDate.setDate(fineStartDate.getDate() + 7); // 7 days grace from bill sent
+            
+            // Check tenant's payment date (day of month)
+            const tenantPaymentDay = bill.tenant_payment_date || 1; // Default to 1st if not set
+            
+            // Create a date object for the tenant's payment date in the bill's month
+            let tenantPaymentDate = new Date(bill.sent_at);
+            let paymentDay = parseInt(tenantPaymentDay);
+            // Handle month-end dates properly
+            const lastDayOfMonth = new Date(tenantPaymentDate.getFullYear(), tenantPaymentDate.getMonth() + 1, 0).getDate();
+            paymentDay = Math.min(paymentDay, lastDayOfMonth);
+            tenantPaymentDate.setDate(paymentDay);
+            
+            // If the tenant's payment date is earlier in the month than the bill sent date,
+            // then the next payment date is in the following month
+            if (tenantPaymentDate < new Date(bill.sent_at)) {
+                tenantPaymentDate.setMonth(tenantPaymentDate.getMonth() + 1);
+                // Recalculate last day of month for the new month
+                const newLastDay = new Date(tenantPaymentDate.getFullYear(), tenantPaymentDate.getMonth() + 1, 0).getDate();
+                paymentDay = Math.min(paymentDay, newLastDay);
+                tenantPaymentDate.setDate(paymentDay);
+            }
+            
+            // The fine should start from the LATER of the two dates
+            const actualFineStartDate = new Date(Math.max(fineStartDate.getTime(), tenantPaymentDate.getTime()));
+            
+            // Calculate days overdue from the actual fine start date
+            const today = new Date();
+            let daysOverdue = Math.floor((today.getTime() - actualFineStartDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            // If daysOverdue is negative, no fine should be applied yet
+            if (daysOverdue <= 0) {
+                continue;
+            }
+            
             let shouldApplyFine = false;
             let fineAmount = bill.fine_amount || 0;
             
             const hasPartialPayment = bill.total_partial_paid > 0 || bill.total_cash_paid > 0;
             
+            // For partial payments, we give more time before applying fines
             if (hasPartialPayment) {
-                if (daysSinceSent > 14) {
+                if (daysOverdue > 7) { // 7 days after the actual due date for partial payments
                     shouldApplyFine = true;
-                    const daysOverdue = daysSinceSent - 14;
-                    fineAmount = daysOverdue * 100;
+                    const extraDays = daysOverdue - 7;
+                    fineAmount = extraDays * 100;
                 }
             } else {
-                if (daysSinceSent > 7) {
+                if (daysOverdue > 0) { // Fines start immediately after the actual due date
                     shouldApplyFine = true;
-                    const daysOverdue = daysSinceSent - 7;
                     fineAmount = daysOverdue * 100;
                 }
             }
             
             if (shouldApplyFine) {
                 const newValidUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                const fineAppliedDays = Math.floor((Date.now() - new Date(bill.sent_at).getTime()) / (1000 * 60 * 60 * 24)) - (hasPartialPayment ? 14 : 7);
+                const fineAppliedDays = daysOverdue;
                 
                 const lastEmailSent = bill.last_fine_email_sent;
-                const today = new Date().toDateString();
-                const shouldSendEmail = !lastEmailSent || new Date(lastEmailSent).toDateString() !== today;
+                const todayDate = new Date().toDateString();
+                const shouldSendEmail = !lastEmailSent || new Date(lastEmailSent).toDateString() !== todayDate;
                 
                 const totalAmount = parseFloat(bill.total_amount) || 0;
                 const totalWithFine = totalAmount + fineAmount;
@@ -747,7 +945,6 @@ const processDelayedPayments = async () => {
                     }
                 }
                 
-                // Send fine applied notification to tenant (NEW)
                 try {
                     const updatedBill = await BillModel.getBillById(bill.id);
                     await NotificationEventManager.onTenantBillFineApplied(updatedBill, fineAmount);
@@ -836,11 +1033,60 @@ const addPayment = async (billId, paymentData) => {
 
         await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
 
+        // REGENERATE QR CODES BASED ON PAYMENT STATUS
+        const updatedBill = await BillModel.getBillById(billId);
+        const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
+                           parseFloat(updatedBill.paid_amount || 0) - parseFloat(updatedBill.total_cash_paid || 0);
+
+        // Delete old QR codes
+        if (updatedBill.payment_qr_public_id) {
+            try {
+                await deleteFile(updatedBill.payment_qr_public_id, updatedBill.payment_qr_resource_type);
+            } catch (e) {}
+        }
+        if (updatedBill.partial_payment_qr_public_id) {
+            try {
+                await deleteFile(updatedBill.partial_payment_qr_public_id, updatedBill.partial_payment_qr_resource_type);
+            } catch (e) {}
+        }
+
+        let fullQr = null;
+        let fullPublicId = null;
+        let fullResourceType = null;
+        let partialQr = null;
+        let partialPublicId = null;
+        let partialResourceType = null;
+
+        if (newTotalDue > 0) {
+            const qrResult = await regenerateBillQRCodes(billId, updatedBill, newTotalDue);
+            fullQr = qrResult.fullQr;
+            fullPublicId = qrResult.fullPublicId;
+            fullResourceType = qrResult.fullResourceType;
+            partialQr = qrResult.partialQr;
+            partialPublicId = qrResult.partialPublicId;
+            partialResourceType = qrResult.partialResourceType;
+        }
+
+        // Update bill with new QR codes (or null if fully paid)
+        await connection.execute(
+            `
+            UPDATE bills 
+            SET 
+                payment_qr = ?,
+                payment_qr_public_id = ?,
+                payment_qr_resource_type = ?,
+                partial_payment_qr = ?,
+                partial_payment_qr_public_id = ?,
+                partial_payment_qr_resource_type = ?
+            WHERE id = ?
+            `,
+            [fullQr, fullPublicId, fullResourceType, partialQr, partialPublicId, partialResourceType, billId]
+        );
+
         await connection.commit();
 
-        const updatedBill = await BillModel.getBillById(billId);
+        const finalBill = await BillModel.getBillById(billId);
 
-        // Send payment notifications to admins
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
@@ -848,15 +1094,14 @@ const addPayment = async (billId, paymentData) => {
             };
             
             if (newStatus === 'paid') {
-                await NotificationEventManager.onBillPaid(updatedBill, tenant);
+                await NotificationEventManager.onBillPaid(finalBill, tenant);
             } else if (newStatus === 'partially_paid') {
-                await NotificationEventManager.onBillPartiallyPaid(updatedBill, tenant);
+                await NotificationEventManager.onBillPartiallyPaid(finalBill, tenant);
             }
         } catch (notifError) {
             console.error("Failed to send payment notification:", notifError);
         }
 
-        // Send payment notifications to tenant (NEW)
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
@@ -864,15 +1109,15 @@ const addPayment = async (billId, paymentData) => {
             };
             
             if (newStatus === 'paid') {
-                await NotificationEventManager.onTenantBillPaid(updatedBill, tenant);
+                await NotificationEventManager.onTenantBillPaid(finalBill, tenant);
             } else if (newStatus === 'partially_paid') {
-                await NotificationEventManager.onTenantBillPartiallyPaid(updatedBill, tenant);
+                await NotificationEventManager.onTenantBillPartiallyPaid(finalBill, tenant);
             }
         } catch (notifError) {
             console.error("Failed to send tenant payment notification:", notifError);
         }
 
-        return updatedBill;
+        return finalBill;
 
     } catch (error) {
         await connection.rollback();
@@ -902,10 +1147,8 @@ const generateBillPaymentOptions = async (billId) => {
         throw new Error("No amount due for this bill");
     }
 
-    // Generate UPI QR and links
     const paymentOptions = await paymentService.generatePaymentOptions(bill);
 
-    // Create payment order (for gateway if enabled)
     let orderData = null;
     if (process.env.ENABLE_PAYMENT_GATEWAY === 'true') {
         try {
@@ -915,9 +1158,8 @@ const generateBillPaymentOptions = async (billId) => {
         }
     }
 
-    // Create transaction record
     const transactionId = await paymentService.createPaymentTransaction(
-        null, // Connection will be handled inside
+        null,
         {
             bill_id: bill.id,
             tenant_id: tenant.id,
@@ -931,7 +1173,6 @@ const generateBillPaymentOptions = async (billId) => {
         }
     );
 
-    // Update bill with payment info
     const connection = await db.getConnection();
     try {
         await connection.execute(
@@ -959,7 +1200,6 @@ const generateBillPaymentOptions = async (billId) => {
         connection.release();
     }
 
-    // Send payment link email
     try {
         await sendPaymentLinkEmail(
             tenant.email,
@@ -995,5 +1235,6 @@ module.exports = {
     verifyCashPayment,
     processDelayedPayments,
     addPayment,
-    generateBillPaymentOptions
+    generateBillPaymentOptions,
+    regenerateBillQRCodes
 };

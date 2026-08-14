@@ -164,6 +164,7 @@ const getBillById = async (billId) => {
             t.phone as tenant_phone,
             t.nationality as tenant_nationality,
             td.rent as monthly_rent,
+            td.payment_date as tenant_payment_date,
             td.pg_id,
             td.room_id,
             p.name as pg_name,
@@ -369,9 +370,11 @@ const getOverdueBills = async () => {
             b.*,
             t.full_name as tenant_name,
             t.email as tenant_email,
+            td.payment_date as tenant_payment_date,
             DATEDIFF(NOW(), b.sent_at) as days_since_sent
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
+        LEFT JOIN tenant_details td ON t.id = td.tenant_id
         WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
         AND b.valid_until < NOW()
         AND b.sent_at IS NOT NULL
@@ -487,7 +490,6 @@ const getActiveCustomMessage = async (billId) => {
     return rows[0] || null;
 };
 
-// Cash payment OTP functions
 const setCashPaymentOTP = async (connection, billId, otp, expiry) => {
     const [result] = await connection.execute(
         `
@@ -551,6 +553,32 @@ const clearCashPaymentOTP = async (connection, billId) => {
     return true;
 };
 
+const updateBillQRCodes = async (connection, billId, qrData) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills 
+        SET 
+            payment_qr = ?,
+            payment_qr_public_id = ?,
+            payment_qr_resource_type = ?,
+            partial_payment_qr = ?,
+            partial_payment_qr_public_id = ?,
+            partial_payment_qr_resource_type = ?
+        WHERE id = ?
+        `,
+        [
+            qrData.payment_qr || null,
+            qrData.payment_qr_public_id || null,
+            qrData.payment_qr_resource_type || null,
+            qrData.partial_payment_qr || null,
+            qrData.partial_payment_qr_public_id || null,
+            qrData.partial_payment_qr_resource_type || null,
+            billId
+        ]
+    );
+    return result.affectedRows;
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -569,5 +597,6 @@ module.exports = {
     getActiveCustomMessage,
     setCashPaymentOTP,
     verifyCashPaymentOTP,
-    clearCashPaymentOTP
+    clearCashPaymentOTP,
+    updateBillQRCodes
 };
