@@ -1,0 +1,187 @@
+const guestNotificationService = require("../services/guest.notification.service");
+
+/**
+ * Get unread notifications for the logged-in guest
+ */
+const getUnreadNotifications = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const { limit = 20 } = req.query;
+
+        const result = await guestNotificationService.getUnreadGuestNotifications(
+            guestId,
+            parseInt(limit)
+        );
+
+        return res.status(200).json({
+            success: true,
+            data: result.notifications,
+            unreadCount: result.unreadCount
+        });
+
+    } catch (error) {
+        console.error('Get Unread Notifications Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Get all notifications for the logged-in guest (paginated)
+ */
+const getNotifications = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const { limit = 50, offset = 0 } = req.query;
+
+        const result = await guestNotificationService.getGuestNotifications(
+            guestId,
+            parseInt(limit),
+            parseInt(offset)
+        );
+
+        return res.status(200).json({
+            success: true,
+            data: result.notifications,
+            unreadCount: result.unreadCount,
+            pagination: {
+                limit: parseInt(limit),
+                offset: parseInt(offset),
+                total: result.total
+            }
+        });
+
+    } catch (error) {
+        console.error('Get Notifications Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Get unread count for the logged-in guest
+ */
+const getUnreadCount = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const count = await guestNotificationService.getUnreadGuestCount(guestId);
+
+        return res.status(200).json({
+            success: true,
+            unreadCount: count
+        });
+
+    } catch (error) {
+        console.error('Get Unread Count Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Mark a notification as read
+ */
+const markAsRead = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const { id } = req.params;
+
+        const updated = await guestNotificationService.markGuestNotificationAsRead(id, guestId);
+
+        if (!updated) {
+            return res.status(404).json({
+                success: false,
+                message: 'Notification not found'
+            });
+        }
+
+        // Get updated unread count
+        const unreadCount = await guestNotificationService.getUnreadGuestCount(guestId);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Notification marked as read',
+            unreadCount
+        });
+
+    } catch (error) {
+        console.error('Mark As Read Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Mark all notifications as read
+ */
+const markAllAsRead = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const count = await guestNotificationService.markAllGuestNotificationsAsRead(guestId);
+
+        return res.status(200).json({
+            success: true,
+            message: `Marked ${count} notifications as read`,
+            unreadCount: 0
+        });
+
+    } catch (error) {
+        console.error('Mark All As Read Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Delete a notification
+ */
+const deleteNotification = async (req, res) => {
+    try {
+        const guestId = req.guest.id;
+        const { id } = req.params;
+
+        const deleted = await guestNotificationService.deleteGuestNotification(id, guestId);
+
+        if (!deleted) {
+            return res.status(404).json({
+                success: false,
+                message: 'Notification not found'
+            });
+        }
+
+        // Get updated unread count
+        const unreadCount = await guestNotificationService.getUnreadGuestCount(guestId);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Notification deleted',
+            unreadCount
+        });
+
+    } catch (error) {
+        console.error('Delete Notification Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+module.exports = {
+    getUnreadNotifications,
+    getNotifications,
+    getUnreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification
+};

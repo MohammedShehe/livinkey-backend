@@ -16,7 +16,9 @@ const tenantDocumentRoutes = require("./routes/tenant.document.routes");
 const maintenanceRoutes = require("./routes/maintenance.routes");
 const tenantPaymentRoutes = require("./routes/tenant.payment.routes");
 const guestRoutes = require("./routes/guest.routes"); 
-const publicRoutes = require("./routes/public.routes"); 
+const publicRoutes = require("./routes/public.routes");
+const tenantNotificationRoutes = require("./routes/tenant.notification.routes"); // NEW
+const guestNotificationRoutes = require("./routes/guest.notification.routes"); // NEW
 
 const app = express();
 
@@ -57,7 +59,9 @@ app.use("/api/documents", tenantDocumentRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/tenant-payments", tenantPaymentRoutes);
 app.use("/api/guests", guestRoutes); 
-app.use("/api/public", publicRoutes); 
+app.use("/api/public", publicRoutes);
+app.use("/api/tenant-notifications", tenantNotificationRoutes); // NEW
+app.use("/api/guest-notifications", guestNotificationRoutes); // NEW
 
 // 404 handler for undefined routes
 app.use((req, res) => {

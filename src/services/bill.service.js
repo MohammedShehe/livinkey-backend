@@ -237,13 +237,22 @@ const createBill = async (billData, files = {}) => {
 
         createdBill = await BillModel.getBillById(billId);
 
-        // Send bill creation notification
+        // Send bill creation notification to admins
         try {
             if (tenant) {
                 await NotificationEventManager.onBillCreated(createdBill, tenant);
             }
         } catch (notifError) {
             console.error("Failed to send bill notification:", notifError);
+        }
+
+        // Send bill creation notification to tenant (NEW)
+        try {
+            if (tenant) {
+                await NotificationEventManager.onTenantBillCreated(createdBill, tenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send tenant bill notification:", notifError);
         }
 
         return { ...createdBill, email_sent: emailSent };
@@ -543,7 +552,7 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
 
         const updatedBill = await BillModel.getBillById(billId);
 
-        // Send cash payment notification
+        // Send cash payment notification to admins
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
@@ -552,6 +561,23 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             await NotificationEventManager.onCashPaymentVerified(updatedBill, tenant);
         } catch (notifError) {
             console.error("Failed to send cash payment notification:", notifError);
+        }
+
+        // Send payment notification to tenant (NEW)
+        try {
+            const tenant = { 
+                full_name: bill.tenant_name, 
+                id: bill.tenant_id 
+            };
+            
+            // Determine if full or partial payment
+            if (newStatus === 'paid') {
+                await NotificationEventManager.onTenantBillPaid(updatedBill, tenant);
+            } else if (newStatus === 'partially_paid') {
+                await NotificationEventManager.onTenantBillPartiallyPaid(updatedBill, tenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send tenant payment notification:", notifError);
         }
 
         return updatedBill;
@@ -721,6 +747,14 @@ const processDelayedPayments = async () => {
                     }
                 }
                 
+                // Send fine applied notification to tenant (NEW)
+                try {
+                    const updatedBill = await BillModel.getBillById(bill.id);
+                    await NotificationEventManager.onTenantBillFineApplied(updatedBill, fineAmount);
+                } catch (notifError) {
+                    console.error("Failed to send tenant fine notification:", notifError);
+                }
+                
                 processedCount++;
             }
         }
@@ -806,7 +840,7 @@ const addPayment = async (billId, paymentData) => {
 
         const updatedBill = await BillModel.getBillById(billId);
 
-        // Send payment notifications
+        // Send payment notifications to admins
         try {
             const tenant = { 
                 full_name: bill.tenant_name, 
@@ -820,6 +854,22 @@ const addPayment = async (billId, paymentData) => {
             }
         } catch (notifError) {
             console.error("Failed to send payment notification:", notifError);
+        }
+
+        // Send payment notifications to tenant (NEW)
+        try {
+            const tenant = { 
+                full_name: bill.tenant_name, 
+                id: bill.tenant_id 
+            };
+            
+            if (newStatus === 'paid') {
+                await NotificationEventManager.onTenantBillPaid(updatedBill, tenant);
+            } else if (newStatus === 'partially_paid') {
+                await NotificationEventManager.onTenantBillPartiallyPaid(updatedBill, tenant);
+            }
+        } catch (notifError) {
+            console.error("Failed to send tenant payment notification:", notifError);
         }
 
         return updatedBill;

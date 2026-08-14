@@ -62,6 +62,13 @@ const createMaintenanceRequest = async (tenantId, requestData, file = null) => {
             console.error("Failed to send maintenance notification:", notifError);
         }
 
+        // Send notification to tenant (NEW)
+        try {
+            await NotificationEventManager.onTenantMaintenanceCreated(request);
+        } catch (notifError) {
+            console.error("Failed to send tenant maintenance notification:", notifError);
+        }
+
         return request;
 
     } catch (error) {
@@ -121,11 +128,22 @@ const updateRequestStatus = async (requestId, status) => {
         if (updated > 0) {
             const updatedRequest = await MaintenanceModel.getRequestById(requestId);
             
-            // Send notification to tenant
+            // Send notification to admins
             try {
                 await NotificationEventManager.onMaintenanceStatusUpdated(updatedRequest);
             } catch (notifError) {
                 console.error("Failed to send maintenance status notification:", notifError);
+            }
+
+            // Send notification to tenant based on status (NEW)
+            try {
+                if (status === 'in_progress') {
+                    await NotificationEventManager.onTenantMaintenanceStarted(updatedRequest);
+                } else if (status === 'completed') {
+                    await NotificationEventManager.onTenantMaintenanceCompleted(updatedRequest);
+                }
+            } catch (notifError) {
+                console.error("Failed to send tenant maintenance status notification:", notifError);
             }
             
             return updatedRequest;

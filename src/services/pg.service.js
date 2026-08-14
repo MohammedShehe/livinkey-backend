@@ -116,11 +116,18 @@ const createPG = async (pgData, files = {}) => {
         // Get the complete PG data
         createdPG = await PGModel.getPGWithDetails(pgId);
 
-        // Send PG creation notification
+        // Send PG creation notification to admins
         try {
             await NotificationEventManager.onPGCreated(createdPG);
         } catch (notifError) {
             console.error("Failed to send PG notification:", notifError);
+        }
+
+        // Send PG creation notification to guests (NEW)
+        try {
+            await NotificationEventManager.onGuestPGAdded(createdPG);
+        } catch (notifError) {
+            console.error("Failed to send PG added notification to guests:", notifError);
         }
 
         return createdPG;
@@ -299,11 +306,18 @@ const updatePG = async (pgId, pgData, files = {}) => {
         // Get the updated PG data
         updatedPG = await PGModel.getPGWithDetails(pgId);
 
-        // Send PG update notification
+        // Send PG update notification to admins
         try {
             await NotificationEventManager.onPGUpdated(updatedPG);
         } catch (notifError) {
             console.error("Failed to send PG update notification:", notifError);
+        }
+
+        // Send PG update notification to guests (NEW)
+        try {
+            await NotificationEventManager.onGuestPGUpdated(updatedPG);
+        } catch (notifError) {
+            console.error("Failed to send PG updated notification to guests:", notifError);
         }
 
         return updatedPG;
@@ -376,10 +390,35 @@ const togglePGStatus = async (pgId, isActive) => {
             // Get the PG details for notification
             const pg = await PGModel.findById(pgId);
             if (pg) {
+                // Send status change notification to admins
                 try {
                     await NotificationEventManager.onPGStatusChanged(pg, isActive === 1);
                 } catch (notifError) {
                     console.error("Failed to send PG status notification:", notifError);
+                }
+
+                // If PG is activated, send notification to guests (NEW)
+                if (isActive === 1) {
+                    try {
+                        await NotificationEventManager.onGuestPGAdded(pg);
+                    } catch (notifError) {
+                        console.error("Failed to send PG activation notification to guests:", notifError);
+                    }
+                }
+
+                // Check for vacant rooms and notify guests (NEW)
+                try {
+                    const floors = await PGModel.getFloorsByPGId(pgId);
+                    for (const floor of floors) {
+                        const rooms = await PGModel.getRoomsByFloorId(floor.id);
+                        for (const room of rooms) {
+                            if (room.occupied_count < room.capacity) {
+                                await NotificationEventManager.onGuestRoomVacant(room, pg.name);
+                            }
+                        }
+                    }
+                } catch (notifError) {
+                    console.error("Failed to send vacant room notifications to guests:", notifError);
                 }
             }
         }

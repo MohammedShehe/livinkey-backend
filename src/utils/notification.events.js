@@ -1,6 +1,8 @@
 const NotificationService = require("../services/notification.service");
 const db = require("../config/db");
 const { generateNotificationMessages } = NotificationService;
+const tenantNotificationService = require("../services/tenant.notification.service");
+const guestNotificationService = require("../services/guest.notification.service");
 
 /**
  * Event handlers for various actions that trigger notifications
@@ -330,6 +332,208 @@ class NotificationEventManager {
                 link: `/maintenance/${request.id}`
             }
         );
+    }
+
+    /**
+     * Send notification to tenant when bill is created
+     */
+    static async onTenantBillCreated(bill, tenant) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.billCreated(bill);
+        
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'BILL_CREATED',
+            {
+                ...messageData,
+                link: `/tenant-payments/bill`
+            }
+        );
+    }
+
+    /**
+     * Send notification to tenant when bill is paid
+     */
+    static async onTenantBillPaid(bill, tenant) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.billPaid(bill);
+        
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'BILL_PAID',
+            {
+                ...messageData,
+                link: `/tenant-payments/history`
+            }
+        );
+    }
+
+    /**
+     * Send notification to tenant when partial payment is made
+     */
+    static async onTenantBillPartiallyPaid(bill, tenant) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.billPartiallyPaid(bill);
+        
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'BILL_PARTIALLY_PAID',
+            {
+                ...messageData,
+                link: `/tenant-payments/history`
+            }
+        );
+    }
+
+    /**
+     * Send notification to tenant when maintenance is created
+     */
+    static async onTenantMaintenanceCreated(request) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.maintenanceCreated(request);
+        
+        await tenantNotificationService.sendTenantNotification(
+            request.tenant_id,
+            'MAINTENANCE_CREATED',
+            {
+                ...messageData,
+                link: `/maintenance/my-requests`
+            }
+        );
+    }
+
+    /**
+     * Send notification to tenant when maintenance is started
+     */
+    static async onTenantMaintenanceStarted(request) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.maintenanceStarted(request);
+        
+        await tenantNotificationService.sendTenantNotification(
+            request.tenant_id,
+            'MAINTENANCE_STARTED',
+            {
+                ...messageData,
+                link: `/maintenance/my-requests`
+            }
+        );
+    }
+
+    /**
+     * Send notification to tenant when maintenance is completed
+     */
+    static async onTenantMaintenanceCompleted(request) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.maintenanceCompleted(request);
+        
+        await tenantNotificationService.sendTenantNotification(
+            request.tenant_id,
+            'MAINTENANCE_COMPLETED',
+            {
+                ...messageData,
+                link: `/maintenance/my-requests`
+            }
+        );
+    }
+
+    /**
+     * Send notification to guests when a new PG is added
+     */
+    static async onGuestPGAdded(pg) {
+        try {
+            // Get all active guests
+            const connection = await db.getConnection();
+            const [guests] = await connection.execute(
+                `SELECT id FROM tenants WHERE role = 'guest' AND is_active = 1`
+            );
+            connection.release();
+
+            if (guests.length === 0) return;
+
+            const guestIds = guests.map(guest => guest.id);
+            const messageData = guestNotificationService.generateGuestNotificationMessages.pgAdded(pg);
+            
+            await guestNotificationService.sendNotificationsToGuests(
+                guestIds,
+                'PG_ADDED',
+                {
+                    ...messageData,
+                    link: `/public/pgs/${pg.id}`
+                }
+            );
+        } catch (error) {
+            console.error('Error sending PG added notification to guests:', error);
+        }
+    }
+
+    /**
+     * Send notification to guests when a room becomes vacant
+     */
+    static async onGuestRoomVacant(room, pgName) {
+        try {
+            const connection = await db.getConnection();
+            const [guests] = await connection.execute(
+                `SELECT id FROM tenants WHERE role = 'guest' AND is_active = 1`
+            );
+            connection.release();
+
+            if (guests.length === 0) return;
+
+            const guestIds = guests.map(guest => guest.id);
+            const roomData = { ...room, pg_name: pgName };
+            const messageData = guestNotificationService.generateGuestNotificationMessages.vacantRoom(roomData);
+            
+            await guestNotificationService.sendNotificationsToGuests(
+                guestIds,
+                'VACANT_ROOM',
+                {
+                    ...messageData,
+                    link: `/public/pgs/${room.pg_id}`
+                }
+            );
+        } catch (error) {
+            console.error('Error sending vacant room notification to guests:', error);
+        }
+    }
+
+
+    /**
+     * Send notification to tenant when bill fine is applied
+     */
+    static async onTenantBillFineApplied(bill, fineAmount) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.billFineApplied(bill, fineAmount);
+        
+        await tenantNotificationService.sendTenantNotification(
+            bill.tenant_id,
+            'BILL_FINE_APPLIED',
+            {
+                ...messageData,
+                link: `/tenant-payments/bill`
+            }
+        );
+    }
+
+    /**
+     * Send notification to guests when PG is updated
+     */
+    static async onGuestPGUpdated(pg) {
+        try {
+            const connection = await db.getConnection();
+            const [guests] = await connection.execute(
+                `SELECT id FROM tenants WHERE role = 'guest' AND is_active = 1`
+            );
+            connection.release();
+
+            if (guests.length === 0) return;
+
+            const guestIds = guests.map(guest => guest.id);
+            const messageData = guestNotificationService.generateGuestNotificationMessages.pgUpdated(pg);
+            
+            await guestNotificationService.sendNotificationsToGuests(
+                guestIds,
+                'PG_UPDATED',
+                {
+                    ...messageData,
+                    link: `/public/pgs/${pg.id}`
+                }
+            );
+        } catch (error) {
+            console.error('Error sending PG updated notification to guests:', error);
+        }
     }
 }
 
