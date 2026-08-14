@@ -740,6 +740,7 @@ CREATE TABLE `tenants` (
   `country_code` varchar(10) NOT NULL,
   `phone` varchar(20) NOT NULL,
   `gender` enum('male','female','other') NOT NULL,
+  `residency` enum('national','international') DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT 1,
   `password` varchar(255) DEFAULT NULL,
   `created_by` int(11) NOT NULL,
@@ -756,7 +757,7 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -765,7 +766,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',1,'$2b$12$QnvPFIM91qqYQr9iEFxpE.b/sTLY1E9Ay9N0UiFTVeiSoxTB.PbA.',1,'2026-08-03 09:22:22','2026-08-12 08:31:02',0,NULL,NULL,'2026-08-12 13:58:34',NULL,NULL),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-03 09:37:09',0,NULL,NULL,NULL,NULL,NULL),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50',0,NULL,NULL,NULL,NULL,NULL),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34',0,NULL,NULL,NULL,NULL,NULL),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55',0,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',NULL,1,'$2b$12$QnvPFIM91qqYQr9iEFxpE.b/sTLY1E9Ay9N0UiFTVeiSoxTB.PbA.',1,'2026-08-03 09:22:22','2026-08-12 08:31:02',0,NULL,NULL,'2026-08-12 13:58:34',NULL,NULL),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male','international',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-14 03:48:51',0,NULL,NULL,NULL,NULL,NULL),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',NULL,1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50',0,NULL,NULL,NULL,NULL,NULL),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',NULL,1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34',0,NULL,NULL,NULL,NULL,NULL),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',NULL,1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55',0,NULL,NULL,NULL,NULL,NULL),(17,'guest','John Doe','molittle10111@gmail.com','American','+1','1234567890','other','international',1,'$2b$12$uvbYa42SgMtXtTAN2aYlqucHga2blISptSu341wPkvawu.LWMe/0O',1,'2026-08-14 03:52:21','2026-08-14 03:52:21',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -778,4 +779,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-13 12:30:21
+-- Dump completed on 2026-08-14  9:35:41

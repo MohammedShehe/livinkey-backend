@@ -509,3 +509,55 @@ exports.deleteAdmin = async (req, res) => {
     }
 
 };
+
+// Get Admin Dashboard 
+exports.getAdminDashboard = async (req, res) => {
+    try {
+        const adminId = req.admin.id;
+
+        const connection = await db.getConnection();
+        const [admins] = await connection.execute(
+            `
+            SELECT name, email, role FROM admins WHERE id = ? AND is_active = 1
+            `,
+            [adminId]
+        );
+        connection.release();
+
+        if (admins.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Admin not found"
+            });
+        }
+
+        const admin = admins[0];
+        const hours = new Date().getHours();
+        let greeting = '';
+        if (hours >= 5 && hours < 12) greeting = 'Good Morning';
+        else if (hours >= 12 && hours < 17) greeting = 'Good Afternoon';
+        else if (hours >= 17 && hours < 21) greeting = 'Good Evening';
+        else greeting = 'Good Night';
+
+        let roleDisplay = admin.role === 'super_admin' ? 'Super Admin' : 'Admin';
+
+        return res.json({
+            success: true,
+            data: {
+                greeting: greeting,
+                name: admin.name,
+                email: admin.email,
+                role: admin.role,
+                role_display: roleDisplay,
+                message: `${greeting}, ${admin.name}! Welcome to Livinkey Admin Dashboard.`
+            }
+        });
+
+    } catch (error) {
+        console.error("Get Admin Dashboard Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};

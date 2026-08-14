@@ -1,14 +1,18 @@
 const express = require("express");
-
 const router = express.Router();
 
 const adminController = require("../controllers/admin.controller");
-
 const authMiddleware = require("../middleware/auth.middleware");
-
 const roleMiddleware = require("../middleware/role.middleware");
-
 const upload = require("../middleware/upload.middleware");
+
+// Admin dashboard with greeting (Protected)
+router.get(
+    "/dashboard",
+    authMiddleware,
+    roleMiddleware("super_admin", "admin"),
+    adminController.getAdminDashboard
+);
 
 router.post(
     "/",
