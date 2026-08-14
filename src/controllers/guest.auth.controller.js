@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const db = require("../config/db");
 const { generateToken } = require("../services/token.service");
 const { generateAndSendGuestOTP, compareOTP } = require("../services/otp.service");
+const { sendWelcomeGuestEmail } = require("../services/mail.service");
 
 // Guest Registration
 exports.register = async (req, res) => {
@@ -110,6 +111,20 @@ exports.register = async (req, res) => {
         );
 
         connection.release();
+
+        // Send welcome email to guest
+        try {
+            await sendWelcomeGuestEmail(
+                email,
+                full_name,
+                nationality,
+                country_code,
+                phone
+            );
+        } catch (emailError) {
+            console.error("Failed to send welcome email to guest:", emailError);
+            // Don't fail registration if email fails
+        }
 
         return res.status(201).json({
             success: true,

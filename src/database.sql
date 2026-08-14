@@ -124,7 +124,7 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'Super Admin','molittle1011@gmail.com',NULL,'$2b$12$G70dlPpJLTsE0nnRxSDDG.rlHXY6ohIls2XLQeDsHDgtzxU3kG7Sm',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-01 19:54:33','2026-08-02 00:21:13','2026-08-02 05:49:15',NULL,NULL),(2,'Mohammed Aminu Shehe','mosnake111@gmail.com','0677532140','$2b$12$TPc9GjihkUFS5jR/NKefHO1e6Kcd1sCfu88hLmZePWLbHiROVL2tW',0,'admin','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785631345/livinkey/admins/thwkmzoz3tmanoxydk8m.jpg','livinkey/admins/thwkmzoz3tmanoxydk8m','image',NULL,NULL,1,'2026-08-01 19:54:47','2026-08-02 00:42:26','2026-08-02 03:40:34',NULL,NULL);
+INSERT INTO `admins` VALUES (1,'Super Admin','molittle1011@gmail.com',NULL,'$2b$12$G70dlPpJLTsE0nnRxSDDG.rlHXY6ohIls2XLQeDsHDgtzxU3kG7Sm',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-01 19:54:33','2026-08-02 00:21:13','2026-08-02 05:49:15',NULL,NULL),(2,'Mohammed Aminu Shehe','mosnake111@gmail.com','0677532140','$2b$12$/a/DOw69OlD/lHsNSwQJIuLIi0u6fKIl14e7pfuB61DGif0djoHwC',0,'admin','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785631345/livinkey/admins/thwkmzoz3tmanoxydk8m.jpg','livinkey/admins/thwkmzoz3tmanoxydk8m','image','$2b$10$6/QFK6ymIyenaxno328p7ucQNCHVuStQiqesdqzFEJtXBrTdXPj.q','2026-08-14 10:19:38',1,'2026-08-01 19:54:47','2026-08-14 04:44:42','2026-08-14 10:14:42',NULL,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -311,6 +311,44 @@ LOCK TABLES `floors` WRITE;
 /*!40000 ALTER TABLE `floors` DISABLE KEYS */;
 INSERT INTO `floors` VALUES (1,1,1,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(2,1,2,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(3,1,3,'2026-08-03 09:20:37','2026-08-03 09:20:37');
 /*!40000 ALTER TABLE `floors` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `guest_notifications`
+--
+
+DROP TABLE IF EXISTS `guest_notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `guest_notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `guest_id` int(11) NOT NULL,
+  `type` varchar(50) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `entity_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `link` varchar(500) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
+  `read_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_guest_id` (`guest_id`),
+  KEY `idx_is_read` (`is_read`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `guest_notifications_ibfk_1` FOREIGN KEY (`guest_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `guest_notifications`
+--
+
+LOCK TABLES `guest_notifications` WRITE;
+/*!40000 ALTER TABLE `guest_notifications` DISABLE KEYS */;
+/*!40000 ALTER TABLE `guest_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -725,6 +763,44 @@ INSERT INTO `tenant_feedbacks` VALUES (1,1,1,10.0,7.0,9.0,8.0,6.0,8.0,NULL,'2026
 UNLOCK TABLES;
 
 --
+-- Table structure for table `tenant_notifications`
+--
+
+DROP TABLE IF EXISTS `tenant_notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant_notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `type` varchar(50) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `entity_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `link` varchar(500) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
+  `read_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant_id` (`tenant_id`),
+  KEY `idx_is_read` (`is_read`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenant_notifications`
+--
+
+LOCK TABLES `tenant_notifications` WRITE;
+/*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `tenants`
 --
 
@@ -779,4 +855,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-14  9:35:41
+-- Dump completed on 2026-08-14 15:17:42
