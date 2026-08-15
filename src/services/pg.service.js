@@ -10,6 +10,7 @@ const NotificationEventManager = require("../utils/notification.events");
 const createPG = async (pgData, files = {}) => {
     const connection = await db.getConnection();
     let createdPG = null;
+    const uploadedCloudFiles = [];
 
     try {
         await connection.beginTransaction();
@@ -34,6 +35,7 @@ const createPG = async (pgData, files = {}) => {
                 paymentQr = uploadResult.secure_url;
                 paymentQrPublicId = uploadResult.public_id;
                 paymentQrResourceType = uploadResult.resource_type;
+                uploadedCloudFiles.push({ public_id: paymentQrPublicId, resource_type: paymentQrResourceType });
             }
         }
 
@@ -63,8 +65,6 @@ const createPG = async (pgData, files = {}) => {
 
         // 4. Upload PG Images
         const imageFiles = files.images || [];
-        const uploadedImages = [];
-
         for (let i = 0; i < Math.min(imageFiles.length, 5); i++) {
             const file = imageFiles[i];
             const uploadResult = await uploadFile(
@@ -81,11 +81,7 @@ const createPG = async (pgData, files = {}) => {
                     uploadResult.resource_type,
                     i
                 );
-
-                uploadedImages.push({
-                    url: uploadResult.secure_url,
-                    public_id: uploadResult.public_id
-                });
+                uploadedCloudFiles.push({ public_id: uploadResult.public_id, resource_type: uploadResult.resource_type });
             }
         }
 
@@ -98,7 +94,6 @@ const createPG = async (pgData, files = {}) => {
                 parseInt(floorData.floor_number)
             );
 
-            // Create rooms for this floor
             const rooms = floorData.rooms || [];
             for (const roomData of rooms) {
                 await PGModel.createRoom(
@@ -116,29 +111,19 @@ const createPG = async (pgData, files = {}) => {
         // Get the complete PG data
         createdPG = await PGModel.getPGWithDetails(pgId);
 
-        // Send PG creation notification to admins
+        // Send notifications
         try {
             await NotificationEventManager.onPGCreated(createdPG);
         } catch (notifError) {
             console.error("Failed to send PG notification:", notifError);
         }
 
-        // Send PG creation notification to guests (NEW)
-        try {
-            await NotificationEventManager.onGuestPGAdded(createdPG);
-        } catch (notifError) {
-            console.error("Failed to send PG added notification to guests:", notifError);
-        }
-
         return createdPG;
 
     } catch (error) {
         await connection.rollback();
-
-        // Clean up any uploaded files if transaction fails
         console.error("PG Creation Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
@@ -164,13 +149,11 @@ const updatePG = async (pgId, pgData, files = {}) => {
     try {
         await connection.beginTransaction();
 
-        // Get existing PG data
         const existingPG = await PGModel.findById(pgId);
         if (!existingPG) {
             throw new Error("PG not found");
         }
 
-        // Check for duplicate PG name (excluding current PG)
         const duplicatePG = await PGModel.findByName(pgData.name, pgId);
         if (duplicatePG) {
             throw new Error(`PG with name "${pgData.name}" already exists`);
@@ -182,7 +165,6 @@ const updatePG = async (pgId, pgData, files = {}) => {
         let paymentQrResourceType = existingPG.payment_qr_resource_type;
 
         if (files.paymentQr && files.paymentQr.length > 0) {
-            // Delete old QR if exists
             if (existingPG.payment_qr_public_id) {
                 try {
                     await deleteFile(
@@ -205,7 +187,6 @@ const updatePG = async (pgId, pgData, files = {}) => {
                 paymentQrResourceType = uploadResult.resource_type;
             }
         } else if (pgData.remove_qr === true) {
-            // Remove QR if requested
             if (existingPG.payment_qr_public_id) {
                 try {
                     await deleteFile(
@@ -233,7 +214,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
             payment_qr_resource_type: paymentQrResourceType
         });
 
-        // 3. Update Amenities (delete and recreate)
+        // 3. Update Amenities
         await PGModel.deleteAmenitiesByPGId(connection, pgId);
         const amenities = pgData.amenities || [];
         for (const amenity of amenities) {
@@ -245,9 +226,8 @@ const updatePG = async (pgId, pgData, files = {}) => {
             );
         }
 
-        // 4. Update Images (delete and recreate) - Only if new images are provided
+        // 4. Update Images - FIXED: Keep existing images if no new ones uploaded
         if (files.images && files.images.length > 0) {
-            // Delete old images from Cloudinary first
             const oldImages = await PGModel.getImagesByPGId(pgId);
             for (const image of oldImages) {
                 try {
@@ -258,7 +238,6 @@ const updatePG = async (pgId, pgData, files = {}) => {
             }
             await PGModel.deleteImagesByPGId(connection, pgId);
 
-            // Upload new images
             const imageFiles = files.images || [];
             for (let i = 0; i < Math.min(imageFiles.length, 5); i++) {
                 const file = imageFiles[i];
@@ -279,7 +258,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
             }
         }
 
-        // 5. Update Floors and Rooms (delete and recreate)
+        // 5. Update Floors and Rooms
         await PGModel.deleteFloorsByPGId(connection, pgId);
         const floors = pgData.floors || [];
         for (const floorData of floors) {
@@ -303,21 +282,12 @@ const updatePG = async (pgId, pgData, files = {}) => {
 
         await connection.commit();
 
-        // Get the updated PG data
         updatedPG = await PGModel.getPGWithDetails(pgId);
 
-        // Send PG update notification to admins
         try {
             await NotificationEventManager.onPGUpdated(updatedPG);
         } catch (notifError) {
             console.error("Failed to send PG update notification:", notifError);
-        }
-
-        // Send PG update notification to guests (NEW)
-        try {
-            await NotificationEventManager.onGuestPGUpdated(updatedPG);
-        } catch (notifError) {
-            console.error("Failed to send PG updated notification to guests:", notifError);
         }
 
         return updatedPG;
@@ -326,7 +296,6 @@ const updatePG = async (pgId, pgData, files = {}) => {
         await connection.rollback();
         console.error("PG Update Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
@@ -338,13 +307,11 @@ const deletePG = async (pgId) => {
     try {
         await connection.beginTransaction();
 
-        // Get PG data for file cleanup
         const pg = await PGModel.findById(pgId);
         if (!pg) {
             throw new Error("PG not found");
         }
 
-        // Delete QR from Cloudinary
         if (pg.payment_qr_public_id) {
             try {
                 await deleteFile(
@@ -356,7 +323,6 @@ const deletePG = async (pgId) => {
             }
         }
 
-        // Delete images from Cloudinary
         const images = await PGModel.getImagesByPGId(pgId);
         for (const image of images) {
             try {
@@ -366,7 +332,6 @@ const deletePG = async (pgId) => {
             }
         }
 
-        // Delete PG from database (cascades to all related tables)
         await PGModel.deletePG(connection, pgId);
 
         await connection.commit();
@@ -376,7 +341,6 @@ const deletePG = async (pgId) => {
         await connection.rollback();
         console.error("PG Delete Error:", error);
         throw error;
-
     } finally {
         connection.release();
     }
@@ -387,38 +351,12 @@ const togglePGStatus = async (pgId, isActive) => {
         const result = await PGModel.togglePGStatus(pgId, isActive);
         
         if (result > 0) {
-            // Get the PG details for notification
             const pg = await PGModel.findById(pgId);
             if (pg) {
-                // Send status change notification to admins
                 try {
                     await NotificationEventManager.onPGStatusChanged(pg, isActive === 1);
                 } catch (notifError) {
                     console.error("Failed to send PG status notification:", notifError);
-                }
-
-                // If PG is activated, send notification to guests (NEW)
-                if (isActive === 1) {
-                    try {
-                        await NotificationEventManager.onGuestPGAdded(pg);
-                    } catch (notifError) {
-                        console.error("Failed to send PG activation notification to guests:", notifError);
-                    }
-                }
-
-                // Check for vacant rooms and notify guests (NEW)
-                try {
-                    const floors = await PGModel.getFloorsByPGId(pgId);
-                    for (const floor of floors) {
-                        const rooms = await PGModel.getRoomsByFloorId(floor.id);
-                        for (const room of rooms) {
-                            if (room.occupied_count < room.capacity) {
-                                await NotificationEventManager.onGuestRoomVacant(room, pg.name);
-                            }
-                        }
-                    }
-                } catch (notifError) {
-                    console.error("Failed to send vacant room notifications to guests:", notifError);
                 }
             }
         }

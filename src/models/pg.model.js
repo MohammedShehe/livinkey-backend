@@ -78,18 +78,14 @@ const createRoom = async (connection, floorId, roomNumber, capacity, rent = null
     return result.insertId;
 };
 
-// Check if PG name already exists
 const findByName = async (name, excludeId = null) => {
     let query = `SELECT id, name FROM pgs WHERE name = ?`;
     const params = [name];
-    
     if (excludeId) {
         query += ` AND id != ?`;
         params.push(excludeId);
     }
-    
     query += ` LIMIT 1`;
-    
     const [rows] = await db.execute(query, params);
     return rows[0] || null;
 };
@@ -196,7 +192,6 @@ const getPGWithDetails = async (pgId) => {
     const images = await getImagesByPGId(pgId);
     const floors = await getFloorsByPGId(pgId);
 
-    // Calculate total rooms and total occupancy
     let totalRooms = 0;
     let totalOccupied = 0;
     let totalCapacity = 0;
@@ -205,7 +200,6 @@ const getPGWithDetails = async (pgId) => {
         floors.map(async (floor) => {
             const rooms = await getRoomsByFloorId(floor.id);
             
-            // Calculate floor totals
             let floorTotalRooms = 0;
             let floorOccupied = 0;
             let floorCapacity = 0;
@@ -239,7 +233,6 @@ const getPGWithDetails = async (pgId) => {
         })
     );
 
-    // Get all amenities as a simple array for summary
     const amenityNames = amenities.map(a => a.amenity_name);
 
     return {
@@ -248,6 +241,9 @@ const getPGWithDetails = async (pgId) => {
         amenity_names: amenityNames,
         images,
         floors: floorsWithRooms,
+        total_rooms: totalRooms,
+        total_capacity: totalCapacity,
+        total_occupied: totalOccupied,
         summary: {
             total_rooms: totalRooms,
             total_capacity: totalCapacity,
@@ -258,8 +254,12 @@ const getPGWithDetails = async (pgId) => {
     };
 };
 
+// ============================================
+// FIXED: getAllPGs - Correct occupancy calculation
+// ============================================
 const getAllPGs = async (search = null, isActive = null) => {
-    let query = `
+    // First, get all PGs with basic info
+    let baseQuery = `
         SELECT
             p.id,
             p.name,
@@ -272,43 +272,75 @@ const getAllPGs = async (search = null, isActive = null) => {
             p.created_by,
             p.created_at,
             p.updated_at,
-            COUNT(DISTINCT r.id) as total_rooms,
-            COALESCE(SUM(r.capacity), 0) as total_capacity,
-            COALESCE(SUM(ro.occupied_count), 0) as total_occupied,
-            GROUP_CONCAT(DISTINCT pa.amenity_name) as amenity_names
+            (SELECT image_url FROM pg_images WHERE pg_id = p.id ORDER BY display_order ASC LIMIT 1) as cover_image
         FROM pgs p
-        LEFT JOIN floors f ON p.id = f.pg_id
-        LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
-        LEFT JOIN room_occupancy ro ON r.id = ro.room_id
-        LEFT JOIN pg_amenities pa ON p.id = pa.pg_id
         WHERE 1=1
     `;
     const params = [];
 
     if (search) {
-        query += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
+        baseQuery += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
         const searchPattern = `%${search}%`;
         params.push(searchPattern, searchPattern);
     }
 
     if (isActive !== null) {
-        query += ` AND p.is_active = ?`;
+        baseQuery += ` AND p.is_active = ?`;
         params.push(isActive);
     }
 
-    query += ` GROUP BY p.id ORDER BY p.created_at DESC`;
+    baseQuery += ` ORDER BY p.created_at DESC`;
 
-    const [rows] = await db.execute(query, params);
-    
-    // Process results to format occupancy text
-    return rows.map(row => ({
-        ...row,
-        occupancy_text: `${row.total_occupied || 0}/${row.total_capacity || 0}`,
-        occupancy_percentage: row.total_capacity > 0 ? Math.round(((row.total_occupied || 0) / row.total_capacity) * 100) : 0,
-        amenity_names: row.amenity_names ? row.amenity_names.split(',') : []
-    }));
+    const [pgRows] = await db.execute(baseQuery, params);
+
+    // For each PG, calculate occupancy separately
+    const result = [];
+    for (const pg of pgRows) {
+        // Get room count, capacity, and occupancy for this PG
+        const [roomData] = await db.execute(
+            `
+            SELECT
+                COUNT(DISTINCT r.id) as total_rooms,
+                COALESCE(SUM(r.capacity), 0) as total_capacity,
+                COALESCE(SUM(ro.occupied_count), 0) as total_occupied
+            FROM floors f
+            LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
+            LEFT JOIN room_occupancy ro ON r.id = ro.room_id
+            WHERE f.pg_id = ?
+            `,
+            [pg.id]
+        );
+
+        // Get amenities
+        const [amenities] = await db.execute(
+            `
+            SELECT GROUP_CONCAT(DISTINCT amenity_name) as amenity_names
+            FROM pg_amenities
+            WHERE pg_id = ?
+            `,
+            [pg.id]
+        );
+
+        result.push({
+            ...pg,
+            total_rooms: parseInt(roomData[0]?.total_rooms) || 0,
+            total_capacity: parseInt(roomData[0]?.total_capacity) || 0,
+            total_occupied: parseInt(roomData[0]?.total_occupied) || 0,
+            amenity_names: amenities[0]?.amenity_names ? amenities[0].amenity_names.split(',') : [],
+            occupancy_text: `${parseInt(roomData[0]?.total_occupied) || 0}/${parseInt(roomData[0]?.total_capacity) || 0}`,
+            occupancy_percentage: parseInt(roomData[0]?.total_capacity) > 0 
+                ? Math.round((parseInt(roomData[0]?.total_occupied) || 0) / parseInt(roomData[0]?.total_capacity) * 100) 
+                : 0,
+            images: pg.cover_image ? [pg.cover_image] : []
+        });
+    }
+
+    return result;
 };
 
+// ============================================
+// FIXED: getPGStats - Correct occupancy stats
+// ============================================
 const getPGStats = async () => {
     // Get total PGs
     const [totalResult] = await db.execute(
@@ -316,12 +348,11 @@ const getPGStats = async () => {
     );
     const totalPGs = totalResult[0].total;
 
-    // Get all PGs with their room counts, capacities, and occupancy
+    // Get all PGs with their room data
     const [pgData] = await db.execute(
         `
         SELECT 
             p.id,
-            p.name,
             p.is_active,
             COUNT(DISTINCT r.id) as total_rooms,
             COALESCE(SUM(r.capacity), 0) as total_capacity,
@@ -331,7 +362,7 @@ const getPGStats = async () => {
         LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
         LEFT JOIN room_occupancy ro ON r.id = ro.room_id
         WHERE p.is_active = 1
-        GROUP BY p.id, p.name, p.is_active
+        GROUP BY p.id, p.is_active
         `
     );
 
@@ -340,15 +371,25 @@ const getPGStats = async () => {
     let vacant = 0;
 
     for (const pg of pgData) {
-        // If PG has no rooms, it's vacant
-        if (pg.total_rooms === 0) {
+        const totalRooms = parseInt(pg.total_rooms) || 0;
+        const totalCapacity = parseInt(pg.total_capacity) || 0;
+        const totalOccupied = parseInt(pg.total_occupied) || 0;
+
+        // If no rooms, it's vacant
+        if (totalRooms === 0) {
+            vacant++;
+            continue;
+        }
+
+        // If capacity is 0, it's vacant
+        if (totalCapacity === 0) {
             vacant++;
             continue;
         }
 
         // Calculate occupancy percentage
-        const occupancyPercentage = pg.total_capacity > 0 ? (pg.total_occupied / pg.total_capacity) * 100 : 0;
-        
+        const occupancyPercentage = (totalOccupied / totalCapacity) * 100;
+
         if (occupancyPercentage === 100) {
             fullyOccupied++;
         } else if (occupancyPercentage > 0) {
@@ -411,7 +452,6 @@ const deleteImagesByPGId = async (connection, pgId) => {
 };
 
 const deleteFloorsByPGId = async (connection, pgId) => {
-    // This will cascade delete rooms due to FOREIGN KEY constraint
     await connection.execute(
         `DELETE FROM floors WHERE pg_id = ?`,
         [pgId]
@@ -419,7 +459,6 @@ const deleteFloorsByPGId = async (connection, pgId) => {
 };
 
 const deletePG = async (connection, pgId) => {
-    // This will cascade delete amenities, images, floors, and rooms
     const [result] = await connection.execute(
         `DELETE FROM pgs WHERE id = ?`,
         [pgId]
