@@ -518,7 +518,7 @@ exports.getAdminDashboard = async (req, res) => {
         const connection = await db.getConnection();
         const [admins] = await connection.execute(
             `
-            SELECT name, email, role FROM admins WHERE id = ? AND is_active = 1
+            SELECT name, email, role, must_change_password FROM admins WHERE id = ? AND is_active = 1
             `,
             [adminId]
         );
@@ -532,6 +532,23 @@ exports.getAdminDashboard = async (req, res) => {
         }
 
         const admin = admins[0];
+        
+        // Check if admin must change password
+        if (admin.must_change_password === 1) {
+            return res.json({
+                success: true,
+                data: {
+                    greeting: "Welcome",
+                    name: admin.name,
+                    email: admin.email,
+                    role: admin.role,
+                    role_display: admin.role === 'super_admin' ? 'Super Admin' : 'Admin',
+                    must_change_password: true,
+                    message: "Please change your password to continue."
+                }
+            });
+        }
+
         const hours = new Date().getHours();
         let greeting = '';
         if (hours >= 5 && hours < 12) greeting = 'Good Morning';
@@ -549,6 +566,7 @@ exports.getAdminDashboard = async (req, res) => {
                 email: admin.email,
                 role: admin.role,
                 role_display: roleDisplay,
+                must_change_password: false,
                 message: `${greeting}, ${admin.name}! Welcome to Livinkey Admin Dashboard.`
             }
         });

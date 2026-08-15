@@ -36,7 +36,6 @@ const clearOTP = async (id) => {
 };
 
 const findByResetToken = async (token) => {
-    // Fix: Check if token is valid before query
     if (!token || token === 'undefined' || token === 'null') {
         return null;
     }
@@ -69,6 +68,21 @@ const updatePassword = async (id, password) => {
             password=?,
             reset_token=NULL,
             reset_token_expiry=NULL
+        WHERE id=?`,
+        [password, id]
+    );
+};
+
+// NEW: Update password and clear must_change_password flag
+const updatePasswordAndClearFlag = async (id, password) => {
+    if (!id || !password) return;
+    await db.execute(
+        `UPDATE admins
+        SET
+            password=?,
+            reset_token=NULL,
+            reset_token_expiry=NULL,
+            must_change_password=0
         WHERE id=?`,
         [password, id]
     );
@@ -236,7 +250,8 @@ const findById = async (id) => {
         `
         SELECT
             id,
-            role
+            role,
+            email
         FROM admins
         WHERE id=?
         LIMIT 1
@@ -394,6 +409,7 @@ module.exports = {
     findByResetToken,
     saveResetToken,
     updatePassword,
+    updatePasswordAndClearFlag,
     createAdmin,
     findByPhone,
     createDefaultPermissions,

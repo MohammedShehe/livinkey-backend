@@ -38,6 +38,30 @@ exports.login = async (req, res) => {
             );
         }
 
+        // Check if admin must change password
+        if (admin.must_change_password === 1) {
+            // Generate token with must_change_password flag
+            const token = generateToken({
+                id: admin.id,
+                role: admin.role,
+                email: admin.email,
+                must_change_password: true
+            });
+
+            // Return user without OTP
+            delete admin.password;
+            delete admin.otp;
+            delete admin.otp_expiry;
+
+            return res.json({
+                success: true,
+                message: "Please change your password before continuing.",
+                must_change_password: true,
+                token,
+                user: admin
+            });
+        }
+
         const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Login");
 
         await Admin.updateOTP(admin.id, hashedOTP, expiry);
@@ -259,7 +283,6 @@ exports.resetPassword = async (req, res) => {
     try {
         const { resetToken, password, confirmPassword } = req.body;
 
-        // Fix: Validate resetToken exists
         if (!resetToken) {
             return res.status(400).json({
                 success: false,
@@ -304,6 +327,73 @@ exports.resetPassword = async (req, res) => {
         return res.json({
             success: true,
             message: "Password changed successfully."
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error."
+        });
+    }
+};
+
+// NEW: Change password for admin (when must_change_password is true)
+exports.changePassword = async (req, res) => {
+    try {
+        const adminId = req.admin.id;
+        const { current_password, new_password, confirm_password } = req.body;
+
+        if (!current_password || !new_password || !confirm_password) {
+            return res.status(400).json({
+                success: false,
+                message: "Current password, new password, and confirm password are required."
+            });
+        }
+
+        if (new_password !== confirm_password) {
+            return res.status(400).json({
+                success: false,
+                message: "New password and confirm password do not match."
+            });
+        }
+
+        if (new_password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: "Password must be at least 6 characters long."
+            });
+        }
+
+        const admin = await Admin.findById(adminId);
+
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: "Admin not found."
+            });
+        }
+
+        // Get full admin with password
+        const fullAdmin = await Admin.findByEmail(admin.email);
+
+        const matched = await bcrypt.compare(current_password, fullAdmin.password);
+
+        if (!matched) {
+            return res.status(401).json({
+                success: false,
+                message: "Current password is incorrect."
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(new_password, 12);
+
+        // Update password and clear must_change_password flag
+        await Admin.updatePasswordAndClearFlag(adminId, hashedPassword);
+
+        return res.json({
+            success: true,
+            message: "Password changed successfully. Please login again."
         });
 
     } catch (error) {
