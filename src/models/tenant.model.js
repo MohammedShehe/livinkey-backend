@@ -12,8 +12,9 @@ const createTenant = async (connection, tenantData) => {
             phone,
             gender,
             password,
-            created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_by,
+            residency  -- <-- FIX: Added residency column
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             tenantData.role,
@@ -24,7 +25,8 @@ const createTenant = async (connection, tenantData) => {
             tenantData.phone,
             tenantData.gender,
             tenantData.password,
-            tenantData.created_by
+            tenantData.created_by,
+            tenantData.residency || null  // <-- FIX: Include residency value
         ]
     );
     return result.insertId;
@@ -432,7 +434,8 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             nationality = ?,
             country_code = ?,
             phone = ?,
-            gender = ?
+            gender = ?,
+            residency = ?  -- <-- FIX: Added residency column
         WHERE id = ?
         `,
         [
@@ -442,6 +445,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             tenantData.country_code,
             tenantData.phone,
             tenantData.gender,
+            tenantData.residency || null,  // <-- FIX: Include residency value
             tenantId
         ]
     );

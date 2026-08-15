@@ -82,7 +82,7 @@ const createTenant = async (tenantData, files = {}) => {
         const plainPassword = generatePassword();
         const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
-        // Create tenant
+        // Create tenant - FIX: Include residency in the main tenants table
         const tenantId = await TenantModel.createTenant(connection, {
             role: tenantData.role,
             full_name: tenantData.full_name,
@@ -92,7 +92,8 @@ const createTenant = async (tenantData, files = {}) => {
             phone: tenantData.phone,
             gender: tenantData.gender,
             password: hashedPassword,
-            created_by: tenantData.created_by
+            created_by: tenantData.created_by,
+            residency: tenantData.residency // <-- FIX: Pass residency to main tenant table
         });
 
         // Create tenant details if tenant
@@ -117,7 +118,7 @@ const createTenant = async (tenantData, files = {}) => {
                 tenant_id: tenantId,
                 pg_id: tenantData.pg_id,
                 room_id: tenantData.room_id,
-                residency: tenantData.residency,
+                residency: tenantData.residency, // <-- Also store in details table
                 aadhaar_id: tenantData.aadhaar_id,
                 father_aadhaar_id: tenantData.father_aadhaar_id,
                 c_form_number: tenantData.c_form_number,
@@ -274,14 +275,15 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             throw new Error(`Phone number "${tenantData.country_code}${tenantData.phone}" is already registered`);
         }
 
-        // Update tenant
+        // Update tenant - FIX: Include residency in main table update
         await TenantModel.updateTenant(connection, tenantId, {
             full_name: tenantData.full_name,
             email: tenantData.email,
             nationality: tenantData.nationality,
             country_code: tenantData.country_code,
             phone: tenantData.phone,
-            gender: tenantData.gender
+            gender: tenantData.gender,
+            residency: tenantData.residency // <-- FIX: Update residency in main table
         });
 
         if (tenantData.role === 'tenant') {
