@@ -5,48 +5,76 @@ const maintenanceController = require("../controllers/maintenance.controller");
 const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
+const permissionMiddleware = require("../middleware/permission.middleware");
 const upload = require("../middleware/upload.middleware");
 
 // ============ TENANT ROUTES (Protected) ============
-router.use(tenantAuthMiddleware);
+// Tenant routes are NOT mounted under /admin, so they use tenantAuthMiddleware
+// These are separate from admin routes
 
-// Create maintenance request
+// Create maintenance request (tenant)
 router.post(
     "/request",
+    tenantAuthMiddleware,
     upload.single('image'),
     maintenanceController.createRequest
 );
 
-// Get my requests
-router.get("/my-requests", maintenanceController.getMyRequests);
+// Get my requests (tenant)
+router.get("/my-requests", tenantAuthMiddleware, maintenanceController.getMyRequests);
 
-// Get my stats
-router.get("/my-stats", maintenanceController.getMyStats);
+// Get my stats (tenant)
+router.get("/my-stats", tenantAuthMiddleware, maintenanceController.getMyStats);
 
 // ============ ADMIN ROUTES (Protected) ============
+// Admin routes are mounted on a separate router to avoid tenantAuthMiddleware leak
 const adminRouter = express.Router();
 adminRouter.use(authMiddleware);
 adminRouter.use(roleMiddleware("super_admin", "admin"));
 
-// Get all requests with filters
-adminRouter.get("/admin/all", maintenanceController.getAllRequestsAdmin);
+// GET ALL REQUESTS - Requires maintenance.view permission
+adminRouter.get(
+    "/all",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.getAllRequestsAdmin
+);
 
-// Get admin stats
-adminRouter.get("/admin/stats", maintenanceController.getAdminStats);
+// GET ADMIN STATS - Requires maintenance.view permission
+adminRouter.get(
+    "/stats",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.getAdminStats
+);
 
-// Get request by ID
-adminRouter.get("/admin/:id", maintenanceController.getRequestByIdAdmin);
+// GET REQUEST BY ID - Requires maintenance.view permission
+adminRouter.get(
+    "/:id",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.getRequestByIdAdmin
+);
 
-// Start request
-adminRouter.put("/admin/:id/start", maintenanceController.startRequest);
+// START REQUEST - Requires maintenance.edit permission
+adminRouter.put(
+    "/:id/start",
+    permissionMiddleware("maintenance", "edit"),
+    maintenanceController.startRequest
+);
 
-// Complete request
-adminRouter.put("/admin/:id/complete", maintenanceController.completeRequest);
+// COMPLETE REQUEST - Requires maintenance.edit permission
+adminRouter.put(
+    "/:id/complete",
+    permissionMiddleware("maintenance", "edit"),
+    maintenanceController.completeRequest
+);
 
-// Delete request
-adminRouter.delete("/admin/:id", maintenanceController.deleteRequestAdmin);
+// DELETE REQUEST - Requires maintenance.delete permission
+adminRouter.delete(
+    "/:id",
+    permissionMiddleware("maintenance", "delete"),
+    maintenanceController.deleteRequestAdmin
+);
 
-// Mount admin routes
-router.use(adminRouter);
+// Mount admin routes under /admin
+router.use("/admin", adminRouter);
 
 module.exports = router;
