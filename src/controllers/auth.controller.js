@@ -259,10 +259,25 @@ exports.resetPassword = async (req, res) => {
     try {
         const { resetToken, password, confirmPassword } = req.body;
 
+        // Fix: Validate resetToken exists
+        if (!resetToken) {
+            return res.status(400).json({
+                success: false,
+                message: "Reset token is required."
+            });
+        }
+
         if (password !== confirmPassword) {
             return res.status(400).json({
                 success: false,
                 message: "Passwords do not match."
+            });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: "Password must be at least 6 characters long."
             });
         }
 
@@ -271,7 +286,7 @@ exports.resetPassword = async (req, res) => {
         if (!admin) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid reset token."
+                message: "Invalid or expired reset token."
             });
         }
 

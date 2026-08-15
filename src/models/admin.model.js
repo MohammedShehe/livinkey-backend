@@ -1,17 +1,16 @@
 const db = require("../config/db");
 
 const findByEmail = async (email) => {
-
+    if (!email) return null;
     const [rows] = await db.execute(
         "SELECT * FROM admins WHERE email = ? LIMIT 1",
         [email]
     );
-
     return rows[0];
 };
 
 const updateOTP = async (id, otp, otpExpiry) => {
-
+    if (!id) return;
     await db.execute(
         `
         UPDATE admins
@@ -23,11 +22,10 @@ const updateOTP = async (id, otp, otpExpiry) => {
         `,
         [otp, otpExpiry, id]
     );
-
 };
 
 const clearOTP = async (id) => {
-
+    if (!id) return;
     await db.execute(
         `UPDATE admins
         SET otp=NULL,
@@ -35,24 +33,24 @@ const clearOTP = async (id) => {
         WHERE id=?`,
         [id]
     );
-
 };
 
 const findByResetToken = async (token) => {
-
+    // Fix: Check if token is valid before query
+    if (!token || token === 'undefined' || token === 'null') {
+        return null;
+    }
     const [rows] = await db.execute(
         `SELECT * FROM admins
         WHERE reset_token=?
         LIMIT 1`,
         [token]
     );
-
     return rows[0];
-
 };
 
 const saveResetToken = async (id, token, expiry) => {
-
+    if (!id || !token) return;
     await db.execute(
         `UPDATE admins
         SET
@@ -61,11 +59,10 @@ const saveResetToken = async (id, token, expiry) => {
         WHERE id=?`,
         [token, expiry, id]
     );
-
 };
 
 const updatePassword = async (id, password) => {
-
+    if (!id || !password) return;
     await db.execute(
         `UPDATE admins
         SET
@@ -75,11 +72,9 @@ const updatePassword = async (id, password) => {
         WHERE id=?`,
         [password, id]
     );
-
 };
 
 const createAdmin = async (connection, admin) => {
-
     const [result] = await connection.execute(
         `
         INSERT INTO admins
@@ -103,19 +98,17 @@ const createAdmin = async (connection, admin) => {
             admin.phone,
             admin.password,
             admin.role,
-            admin.id_document,
-            admin.id_document_public_id,
-            admin.id_document_resource_type,
-            admin.must_change_password
+            admin.id_document || null,
+            admin.id_document_public_id || null,
+            admin.id_document_resource_type || null,
+            admin.must_change_password || false
         ]
     );
-
     return result.insertId;
-
 };
 
 const findByPhone = async (phone) => {
-
+    if (!phone) return null;
     const [rows] = await db.execute(
         `
         SELECT *
@@ -125,13 +118,11 @@ const findByPhone = async (phone) => {
         `,
         [phone]
     );
-
     return rows[0];
-
 };
 
 const createDefaultPermissions = async (connection, adminId) => {
-
+    if (!adminId) return;
     const modules = [
         "tenants",
         "guests",
@@ -166,14 +157,11 @@ const createDefaultPermissions = async (connection, adminId) => {
         `,
         [values]
     );
-
 };
 
 const getAllAdmins = async (search = null) => {
-
     let query = `
         SELECT
-
             a.id,
             a.name,
             a.email,
@@ -183,21 +171,16 @@ const getAllAdmins = async (search = null) => {
             a.is_active,
             a.must_change_password,
             a.created_at,
-
             ap.module_name,
             ap.can_view,
             ap.can_add,
             ap.can_edit,
             ap.can_delete
-
         FROM admins a
-
         LEFT JOIN admin_permissions ap
         ON a.id = ap.admin_id
-
         WHERE a.role='admin'
     `;
-
     const params = [];
 
     if (search) {
@@ -219,59 +202,36 @@ const getAllAdmins = async (search = null) => {
     const adminsMap = {};
 
     rows.forEach(row => {
-
         if (!adminsMap[row.id]) {
-
             adminsMap[row.id] = {
-
                 id: row.id,
-
                 name: row.name,
-
                 email: row.email,
-
                 phone: row.phone,
-
                 role: row.role,
-
                 id_document: row.id_document,
-
                 is_active: Boolean(row.is_active),
-
                 must_change_password: Boolean(row.must_change_password),
-
                 created_at: row.created_at,
-
                 permissions: {}
-
             };
-
         }
 
         if (row.module_name) {
-
             adminsMap[row.id].permissions[row.module_name] = {
-
                 view: Boolean(row.can_view),
-
                 add: Boolean(row.can_add),
-
                 edit: Boolean(row.can_edit),
-
                 delete: Boolean(row.can_delete)
-
             };
-
         }
-
     });
 
     return Object.values(adminsMap);
-
 };
 
 const findById = async (id) => {
-
+    if (!id) return null;
     const [rows] = await db.execute(
         `
         SELECT
@@ -283,9 +243,7 @@ const findById = async (id) => {
         `,
         [id]
     );
-
     return rows[0];
-
 };
 
 const updatePermission = async (
@@ -294,23 +252,12 @@ const updatePermission = async (
     moduleName,
     permission
 ) => {
-
+    if (!adminId || !moduleName) return { affectedRows: 0 };
+    
     const canView = Boolean(permission.view);
-
-    const canAdd =
-        moduleName === "feedbacks"
-            ? false
-            : Boolean(permission.add);
-
-    const canEdit =
-        moduleName === "feedbacks"
-            ? false
-            : Boolean(permission.edit);
-
-    const canDelete =
-        moduleName === "feedbacks"
-            ? false
-            : Boolean(permission.delete);
+    const canAdd = moduleName === "feedbacks" ? false : Boolean(permission.add);
+    const canEdit = moduleName === "feedbacks" ? false : Boolean(permission.edit);
+    const canDelete = moduleName === "feedbacks" ? false : Boolean(permission.delete);
 
     const [result] = await connection.execute(
         `
@@ -334,17 +281,14 @@ const updatePermission = async (
             moduleName
         ]
     );
-
     return result;
-
 };
 
 const getAdminById = async (adminId) => {
-
+    if (!adminId) return null;
     const [rows] = await db.execute(
         `
         SELECT
-
             a.id,
             a.name,
             a.email,
@@ -356,18 +300,14 @@ const getAdminById = async (adminId) => {
             a.is_active,
             a.must_change_password,
             a.created_at,
-
             ap.module_name,
             ap.can_view,
             ap.can_add,
             ap.can_edit,
             ap.can_delete
-
         FROM admins a
-
         LEFT JOIN admin_permissions ap
         ON a.id = ap.admin_id
-
         WHERE
             a.id=?
         AND
@@ -377,122 +317,74 @@ const getAdminById = async (adminId) => {
     );
 
     if (!rows.length) {
-
         return null;
-
     }
 
     const admin = {
-
         id: rows[0].id,
-
         name: rows[0].name,
-
         email: rows[0].email,
-
         phone: rows[0].phone,
-
         role: rows[0].role,
-
         id_document: rows[0].id_document,
-
         id_document_public_id: rows[0].id_document_public_id,
-
         id_document_resource_type: rows[0].id_document_resource_type,
-
         is_active: Boolean(rows[0].is_active),
-
         must_change_password: Boolean(rows[0].must_change_password),
-
         created_at: rows[0].created_at,
-
         permissions: {}
-
     };
 
     rows.forEach(row => {
-
         if (row.module_name) {
-
             admin.permissions[row.module_name] = {
-
                 view: Boolean(row.can_view),
-
                 add: Boolean(row.can_add),
-
                 edit: Boolean(row.can_edit),
-
                 delete: Boolean(row.can_delete)
-
             };
-
         }
-
     });
 
     return admin;
-
 };
 
 const updateAdmin = async (admin) => {
-
+    if (!admin || !admin.id) return;
     await db.execute(
         `
         UPDATE admins
-
         SET
-
             name=?,
-
             email=?,
-
             phone=?,
-
             id_document=?,
-
-            id_document_public_id=? ,
-
+            id_document_public_id=?,
             id_document_resource_type=?
-
         WHERE id=?
         `,
         [
-
             admin.name,
-
             admin.email,
-
             admin.phone,
-
-            admin.id_document,
-
-            admin.id_document_public_id,
-
-            admin.id_document_resource_type,
-
+            admin.id_document || null,
+            admin.id_document_public_id || null,
+            admin.id_document_resource_type || null,
             admin.id
-
         ]
     );
-
 };
 
 const deleteAdmin = async (id) => {
-
+    if (!id) return;
     await db.execute(
-
         `
         DELETE FROM admins
-
         WHERE id=?
-
         AND role='admin'
         `,
-
         [id]
-
     );
-
 };
 
 module.exports = {
