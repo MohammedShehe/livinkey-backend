@@ -63,8 +63,6 @@ const getMyDocuments = async (req, res) => {
     }
 };
 
-// REMOVED: deleteMyDocument - Tenants should NOT be able to delete documents
-
 const getDocumentTypes = async (req, res) => {
     try {
         const tenantId = req.tenant.id;
@@ -191,9 +189,7 @@ const downloadDocuments = async (req, res) => {
 
         const zipFilePath = await tenantDocumentService.downloadDocumentsAsZip(documentIds);
 
-        // Send file for download
         res.download(zipFilePath, 'documents.zip', (err) => {
-            // Clean up temp file after download
             if (fs.existsSync(zipFilePath)) {
                 fs.unlinkSync(zipFilePath);
             }
@@ -218,7 +214,7 @@ const getTenantDocumentsAdmin = async (req, res) => {
 
         return res.json({
             success: true,
-            data: result
+            data: result || { documents: [], uploaded_documents: [] }
         });
 
     } catch (error) {
@@ -233,7 +229,6 @@ const getTenantDocumentsAdmin = async (req, res) => {
 module.exports = {
     uploadDocument,
     getMyDocuments,
-    // deleteMyDocument - REMOVED (Tenants cannot delete)
     getDocumentTypes,
     getDocumentsAdmin,
     deleteDocumentAdmin,
