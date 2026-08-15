@@ -58,7 +58,9 @@ const createPG = async (req, res) => {
             }
         }
 
-        // Validate floors and rooms
+        // ============================================
+        // FIX: Validate floors and rooms properly
+        // ============================================
         if (!parsedFloors || !Array.isArray(parsedFloors) || parsedFloors.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -66,21 +68,48 @@ const createPG = async (req, res) => {
             });
         }
 
+        // Track empty floors for better error message
+        let emptyFloorFound = false;
+        let emptyFloorNumber = null;
+
         for (const floor of parsedFloors) {
-            if (!floor.floor_number || !floor.rooms || !Array.isArray(floor.rooms) || floor.rooms.length === 0) {
+            // Check if floor has floor_number
+            if (!floor.floor_number && floor.floor_number !== 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "Each floor must have at least one room"
+                    message: "Each floor must have a floor_number"
                 });
             }
+
+            // Check if floor has rooms
+            if (!floor.rooms || !Array.isArray(floor.rooms) || floor.rooms.length === 0) {
+                emptyFloorFound = true;
+                emptyFloorNumber = floor.floor_number || 'unknown';
+                break;
+            }
+
+            // Validate each room
             for (const room of floor.rooms) {
-                if (!room.room_number || !room.capacity) {
+                if (!room.room_number) {
                     return res.status(400).json({
                         success: false,
-                        message: "Each room must have a room_number and capacity"
+                        message: `Room on floor ${floor.floor_number} is missing a room_number`
+                    });
+                }
+                if (!room.capacity || room.capacity < 1) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Room ${room.room_number} on floor ${floor.floor_number} must have a capacity of at least 1`
                     });
                 }
             }
+        }
+
+        if (emptyFloorFound) {
+            return res.status(400).json({
+                success: false,
+                message: `Floor ${emptyFloorNumber} must have at least one room`
+            });
         }
 
         // Prepare data for service
@@ -258,10 +287,16 @@ const updatePG = async (req, res) => {
         }
 
         for (const floor of parsedFloors) {
-            if (!floor.floor_number || !floor.rooms || !Array.isArray(floor.rooms) || floor.rooms.length === 0) {
+            if (!floor.floor_number) {
                 return res.status(400).json({
                     success: false,
-                    message: "Each floor must have at least one room"
+                    message: "Each floor must have a floor_number"
+                });
+            }
+            if (!floor.rooms || !Array.isArray(floor.rooms) || floor.rooms.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Floor ${floor.floor_number} must have at least one room`
                 });
             }
             for (const room of floor.rooms) {
