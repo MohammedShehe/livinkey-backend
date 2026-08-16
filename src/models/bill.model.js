@@ -56,6 +56,8 @@ const createBill = async (connection, billData) => {
     return result.insertId;
 };
 
+// In bill.model.js - getUnpaidTenants
+
 const getUnpaidTenants = async () => {
     const [rows] = await db.execute(
         `
@@ -76,8 +78,12 @@ const getUnpaidTenants = async () => {
         INNER JOIN pgs p ON td.pg_id = p.id
         INNER JOIN rooms r ON td.room_id = r.id
         WHERE t.role = 'tenant'
-        AND td.paid_till < CURDATE()
-        AND td.payment_date <= DAY(CURDATE())
+        AND t.is_active = 1
+        AND (
+            td.paid_till IS NULL 
+            OR td.paid_till = '0000-00-00'
+            OR td.paid_till < CURDATE()
+        )
         ORDER BY t.full_name ASC
         `
     );
