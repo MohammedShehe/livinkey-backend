@@ -4,6 +4,7 @@ const router = express.Router();
 const paymentController = require("../controllers/payment.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
+const permissionMiddleware = require("../middleware/permission.middleware");
 
 // ============================================================
 // Webhook route — MUST be registered BEFORE `router.use(authMiddleware)`.
@@ -25,10 +26,23 @@ router.post(
 // All routes below require authenticated admin access
 router.use(authMiddleware);
 
+// ============================================================
+// FIX: None of the routes below previously checked the "bills"
+// permission — only roleMiddleware("super_admin","admin"), which any
+// admin account satisfies regardless of what an actual super admin
+// granted them. That meant an admin with zero "bills" permissions
+// could still generate payment links (which emails the tenant) and
+// view/download any tenant's full payment history and receipts.
+// Every other bills-related mutation in the app is correctly gated
+// by the "bills" permission; these routes are brought in line with
+// that same model.
+// ============================================================
+
 // Generate payment link for a bill
 router.post(
     "/generate/:id",
     roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "edit"),
     paymentController.generatePaymentLink
 );
 
@@ -36,6 +50,7 @@ router.post(
 router.get(
     "/status/:transactionId",
     roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "view"),
     paymentController.getPaymentStatus
 );
 
@@ -43,6 +58,7 @@ router.get(
 router.get(
     "/history/:tenantId",
     roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "view"),
     paymentController.getPaymentHistory
 );
 
@@ -50,6 +66,7 @@ router.get(
 router.get(
     "/receipt/:type/:paymentId",
     roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "view"),
     paymentController.getReceiptAdmin
 );
 
@@ -57,6 +74,7 @@ router.get(
 router.get(
     "/receipt/:type/:paymentId/download",
     roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "view"),
     paymentController.downloadReceiptAdmin
 );
 
