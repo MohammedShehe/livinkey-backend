@@ -374,7 +374,22 @@ exports.updateAdmin = async (req, res) => {
         const oldPublicId = admin.id_document_public_id;
         const oldResourceType = admin.id_document_resource_type;
 
-        // Check if there's a new file uploaded
+        // ============================================================
+        // FIX: Previously, ANY edit that didn't include a re-uploaded
+        // ID document was treated as "remove the document" (the old
+        // `else` branch nulled out the fields whenever `oldPublicId`
+        // existed, then the delete block below ran unconditionally via
+        // `if (req.file || !req.file)` — a tautology that always
+        // deleted the old Cloudinary file). That meant simply editing
+        // an admin's name/email/phone silently destroyed their stored
+        // ID document.
+        //
+        // Now: a new file uploaded -> replace it. An explicit
+        // `remove_document` flag from the caller -> remove it.
+        // Otherwise -> keep the existing document untouched.
+        // ============================================================
+        const wantsRemoval = req.body.remove_document === 'true' || req.body.remove_document === true;
+
         if (req.file) {
 
             const upload = await uploadFile(
@@ -386,15 +401,13 @@ exports.updateAdmin = async (req, res) => {
             publicId = upload.public_id;
             resourceType = upload.resource_type;
 
-        } else {
-            // If no file uploaded and there was an old document, 
-            // set fields to null to remove it
-            if (oldPublicId) {
-                idDocument = null;
-                publicId = null;
-                resourceType = null;
-            }
+        } else if (wantsRemoval) {
+            idDocument = null;
+            publicId = null;
+            resourceType = null;
         }
+        // else: no new file and no explicit removal request -> keep
+        // the existing document exactly as it was.
 
         await Admin.updateAdmin({
 
@@ -414,14 +427,18 @@ exports.updateAdmin = async (req, res) => {
 
         });
 
-        // Delete old file only after successful DB update
-        if (oldPublicId) {
-            // If new file uploaded OR no file uploaded (meaning we're removing it)
-            if (req.file || !req.file) {
+        // Only delete the OLD Cloudinary file when it was actually
+        // replaced by a new upload, or explicitly removed - never when
+        // it's simply being kept as-is.
+        if (oldPublicId && (req.file || wantsRemoval)) {
+            try {
                 await deleteFile(
                     oldPublicId,
                     oldResourceType
                 );
+            } catch (cloudErr) {
+                console.error("Failed to delete old admin ID document from Cloudinary:", cloudErr);
+                // Don't fail the request - the DB update already succeeded.
             }
         }
 

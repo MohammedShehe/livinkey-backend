@@ -2,6 +2,7 @@
 const billService = require("../services/bill.service");
 const paymentService = require("../services/payment.service");
 const db = require("../config/db");
+const { generatePaymentReceipt } = require("../services/receipt.service");
 
 /**
  * Generate payment link for a bill
@@ -279,9 +280,217 @@ const getPaymentHistory = async (req, res) => {
     }
 };
 
+/**
+ * ============================================================
+ * NEW: Admin receipt viewing.
+ *
+ * The admin Payments page previously called the TENANT-only
+ * `/tenant-payments/receipt/:type/:paymentId` route (protected by
+ * tenantAuthMiddleware), which always rejected an admin's JWT with
+ * 403 "Invalid user role". These admin-scoped equivalents let an
+ * admin view/download the receipt for ANY tenant's payment, matching
+ * the tenant version's HTML output exactly.
+ * ============================================================
+ */
+
+const _fetchReceiptData = async (type, paymentId) => {
+    const connection = await db.getConnection();
+    let paymentData = null;
+
+    if (type === 'online') {
+        const [rows] = await connection.execute(
+            `
+            SELECT 
+                bp.*,
+                b.total_amount as bill_total,
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date,
+                b.payment_qr,
+                b.partial_payment_qr,
+                b.admin_qr,
+                b.electricity_meter_image,
+                t.full_name as tenant_name,
+                t.email as tenant_email,
+                t.phone as tenant_phone,
+                t.nationality,
+                p.name as pg_name,
+                r.room_number
+            FROM bill_payments bp
+            INNER JOIN bills b ON bp.bill_id = b.id
+            INNER JOIN tenants t ON b.tenant_id = t.id
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id
+            LEFT JOIN pgs p ON td.pg_id = p.id
+            LEFT JOIN rooms r ON td.room_id = r.id
+            WHERE bp.id = ?
+            `,
+            [paymentId]
+        );
+        paymentData = rows[0];
+    } else if (type === 'cash') {
+        const [rows] = await connection.execute(
+            `
+            SELECT 
+                cp.*,
+                b.total_amount as bill_total,
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date,
+                b.payment_qr,
+                b.partial_payment_qr,
+                b.admin_qr,
+                b.electricity_meter_image,
+                t.full_name as tenant_name,
+                t.email as tenant_email,
+                t.phone as tenant_phone,
+                t.nationality,
+                p.name as pg_name,
+                r.room_number,
+                a.name as verified_by_name
+            FROM cash_payments cp
+            INNER JOIN bills b ON cp.bill_id = b.id
+            INNER JOIN tenants t ON b.tenant_id = t.id
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id
+            LEFT JOIN pgs p ON td.pg_id = p.id
+            LEFT JOIN rooms r ON td.room_id = r.id
+            LEFT JOIN admins a ON cp.verified_by = a.id
+            WHERE cp.id = ?
+            `,
+            [paymentId]
+        );
+        paymentData = rows[0];
+    } else if (type === 'proof') {
+        const [rows] = await connection.execute(
+            `
+            SELECT 
+                pp.*,
+                b.total_amount as bill_total,
+                b.status as bill_status,
+                b.rent_amount,
+                b.electricity_amount,
+                b.maintenance_amount,
+                b.other_charges,
+                b.fine_amount,
+                b.sent_at as bill_date,
+                b.valid_until as bill_due_date,
+                b.payment_qr,
+                b.partial_payment_qr,
+                b.admin_qr,
+                b.electricity_meter_image,
+                t.full_name as tenant_name,
+                t.email as tenant_email,
+                t.phone as tenant_phone,
+                t.nationality,
+                p.name as pg_name,
+                r.room_number
+            FROM payment_proofs pp
+            INNER JOIN bills b ON pp.bill_id = b.id
+            INNER JOIN tenants t ON b.tenant_id = t.id
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id
+            LEFT JOIN pgs p ON td.pg_id = p.id
+            LEFT JOIN rooms r ON td.room_id = r.id
+            WHERE pp.id = ?
+            `,
+            [paymentId]
+        );
+        paymentData = rows[0];
+    }
+
+    connection.release();
+    return paymentData;
+};
+
+/**
+ * View payment receipt (Admin - any tenant's payment)
+ */
+const getReceiptAdmin = async (req, res) => {
+    try {
+        const { type, paymentId } = req.params;
+
+        if (!['online', 'cash', 'proof'].includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment type. Must be 'online', 'cash', or 'proof'"
+            });
+        }
+
+        const paymentData = await _fetchReceiptData(type, paymentId);
+
+        if (!paymentData) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment not found"
+            });
+        }
+
+        const receiptHTML = generatePaymentReceipt(paymentData, type);
+
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(receiptHTML);
+
+    } catch (error) {
+        console.error("Get Receipt Admin Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+/**
+ * Download payment receipt (Admin - any tenant's payment)
+ */
+const downloadReceiptAdmin = async (req, res) => {
+    try {
+        const { type, paymentId } = req.params;
+
+        if (!['online', 'cash', 'proof'].includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment type. Must be 'online', 'cash', or 'proof'"
+            });
+        }
+
+        const paymentData = await _fetchReceiptData(type, paymentId);
+
+        if (!paymentData) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment not found"
+            });
+        }
+
+        const receiptHTML = generatePaymentReceipt(paymentData, type);
+        const fileName = `receipt_${paymentId}_${Date.now()}.html`;
+
+        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        return res.send(receiptHTML);
+
+    } catch (error) {
+        console.error("Download Receipt Admin Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     generatePaymentLink,
     getPaymentStatus,
     handleWebhook,
-    getPaymentHistory
+    getPaymentHistory,
+    getReceiptAdmin,
+    downloadReceiptAdmin
 };

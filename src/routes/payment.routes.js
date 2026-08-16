@@ -5,7 +5,24 @@ const paymentController = require("../controllers/payment.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 
-// All routes require authentication
+// ============================================================
+// Webhook route — MUST be registered BEFORE `router.use(authMiddleware)`.
+//
+// FIX: This was previously declared AFTER `router.use(authMiddleware)`,
+// which in Express applies to every route registered after it on this
+// router. That meant incoming webhook calls from Razorpay/Cashfree
+// (server-to-server, no admin JWT) were being rejected with 401 by
+// authMiddleware before ever reaching the handler. Payment gateway
+// webhooks can't carry an admin Bearer token, so this route must stay
+// unauthenticated (the gateway payload itself is the source of trust,
+// verified via signature checks inside the service layer).
+// ============================================================
+router.post(
+    "/webhook/:gateway",
+    paymentController.handleWebhook
+);
+
+// All routes below require authenticated admin access
 router.use(authMiddleware);
 
 // Generate payment link for a bill
@@ -29,10 +46,18 @@ router.get(
     paymentController.getPaymentHistory
 );
 
-// Webhook routes (no authentication needed)
-router.post(
-    "/webhook/:gateway",
-    paymentController.handleWebhook
+// View payment receipt (admin — any tenant's payment)
+router.get(
+    "/receipt/:type/:paymentId",
+    roleMiddleware("super_admin", "admin"),
+    paymentController.getReceiptAdmin
+);
+
+// Download payment receipt (admin — any tenant's payment)
+router.get(
+    "/receipt/:type/:paymentId/download",
+    roleMiddleware("super_admin", "admin"),
+    paymentController.downloadReceiptAdmin
 );
 
 module.exports = router;
