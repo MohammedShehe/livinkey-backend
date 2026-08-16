@@ -24,17 +24,31 @@ const adminRouter = express.Router();
 adminRouter.use(authMiddleware);
 adminRouter.use(roleMiddleware("super_admin", "admin"));
 
-// FIX: Removed duplicate "/admin" prefix from all routes
-// The full path becomes: /api/guests/admin/all (correct!)
-
+// GET ALL GUESTS - ONLY guests (role='guest')
 adminRouter.get(
-    "/all",  // Was "/admin/all"
+    "/all",
     permissionMiddleware("guests", "view"),
     async (req, res) => {
         try {
-            const tenantController = require("../controllers/tenant.controller");
-            req.query.role = 'guest';
-            await tenantController.getAllTenants(req, res);
+            const tenantService = require("../services/tenant.service");
+            const { search, gender, bill_status, pg_id } = req.query;
+
+            // Pass 'guest' directly to the service layer instead of
+            // mutating req.query (which Express re-parses from the URL
+            // on every access, silently dropping the injected role).
+            const guests = await tenantService.getAllTenants(
+                search,
+                'guest',
+                gender,
+                bill_status,
+                pg_id
+            );
+
+            return res.status(200).json({
+                success: true,
+                count: guests.length,
+                data: guests
+            });
         } catch (error) {
             console.error("Get all guests admin error:", error);
             res.status(500).json({
@@ -45,8 +59,9 @@ adminRouter.get(
     }
 );
 
+// GET GUEST STATS
 adminRouter.get(
-    "/stats",  // Was "/admin/stats"
+    "/stats",
     permissionMiddleware("guests", "view"),
     async (req, res) => {
         try {
@@ -62,8 +77,9 @@ adminRouter.get(
     }
 );
 
+// UPDATE GUEST
 adminRouter.put(
-    "/:id",  // Was "/admin/:id"
+    "/:id",
     permissionMiddleware("guests", "edit"),
     async (req, res) => {
         try {
@@ -80,8 +96,9 @@ adminRouter.put(
     }
 );
 
+// DELETE GUEST
 adminRouter.delete(
-    "/:id",  // Was "/admin/:id"
+    "/:id",
     permissionMiddleware("guests", "delete"),
     async (req, res) => {
         try {
@@ -97,8 +114,9 @@ adminRouter.delete(
     }
 );
 
+// SEND MESSAGE TO GUEST
 adminRouter.post(
-    "/:id/send-message",  // Was "/admin/:id/send-message"
+    "/:id/send-message",
     permissionMiddleware("guests", "edit"),
     async (req, res) => {
         try {

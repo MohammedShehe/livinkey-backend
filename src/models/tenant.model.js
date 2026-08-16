@@ -13,7 +13,7 @@ const createTenant = async (connection, tenantData) => {
             gender,
             password,
             created_by,
-            residency  -- <-- FIX: Added residency column
+            residency
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
@@ -26,7 +26,7 @@ const createTenant = async (connection, tenantData) => {
             tenantData.gender,
             tenantData.password,
             tenantData.created_by,
-            tenantData.residency || null  // <-- FIX: Include residency value
+            tenantData.residency || null
         ]
     );
     return result.insertId;
@@ -141,6 +141,10 @@ const findPhoneInAnyCountry = async (phone, excludeId = null) => {
     return rows[0] || null;
 };
 
+// ============================================================
+// FIX: Added role filter to findAll - this was the root cause
+// of guests page showing all tenants instead of just guests.
+// ============================================================
 const findAll = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
     let query = `
         SELECT 
@@ -185,6 +189,15 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
     `;
     const params = [];
 
+    // ============================================================
+    // FIX: Add role filter FIRST - this ensures guests page
+    // only shows guests and tenants page only shows tenants
+    // ============================================================
+    if (role) {
+        query += ` AND t.role = ?`;
+        params.push(role);
+    }
+
     if (pg_id) {
         query += ` AND td.pg_id = ?`;
         params.push(parseInt(pg_id));
@@ -194,11 +207,6 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
         query += ` AND (t.full_name LIKE ? OR r.room_number LIKE ? OR t.nationality LIKE ? OR t.gender LIKE ?)`;
         const searchPattern = `%${search}%`;
         params.push(searchPattern, searchPattern, searchPattern, searchPattern);
-    }
-
-    if (role) {
-        query += ` AND t.role = ?`;
-        params.push(role);
     }
 
     if (gender) {
@@ -435,7 +443,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             country_code = ?,
             phone = ?,
             gender = ?,
-            residency = ?  -- <-- FIX: Added residency column
+            residency = ?
         WHERE id = ?
         `,
         [
@@ -445,7 +453,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             tenantData.country_code,
             tenantData.phone,
             tenantData.gender,
-            tenantData.residency || null,  // <-- FIX: Include residency value
+            tenantData.residency || null,
             tenantId
         ]
     );
@@ -672,7 +680,6 @@ const getEFRROStats = async () => {
     );
     const totalInternational = totalInternationalResult[0].total_international || 0;
 
-    // Tenants with e-FRRO expiring in 0-7 days (URGENT)
     const [urgentResult] = await db.execute(
         `
         SELECT COUNT(*) as urgent 
@@ -689,7 +696,6 @@ const getEFRROStats = async () => {
     );
     const urgent = urgentResult[0].urgent || 0;
 
-    // Tenants with e-FRRO expiring in 8-14 days (Soon)
     const [soonResult] = await db.execute(
         `
         SELECT COUNT(*) as soon 
@@ -706,7 +712,6 @@ const getEFRROStats = async () => {
     );
     const soon = soonResult[0].soon || 0;
 
-    // Tenants with e-FRRO expiring in 15-30 days (Upcoming)
     const [upcomingResult] = await db.execute(
         `
         SELECT COUNT(*) as upcoming 
@@ -723,7 +728,6 @@ const getEFRROStats = async () => {
     );
     const upcoming = upcomingResult[0].upcoming || 0;
 
-    // Tenants with e-FRRO expiring in more than 30 days (Valid)
     const [validResult] = await db.execute(
         `
         SELECT COUNT(*) as valid 
@@ -740,11 +744,11 @@ const getEFRROStats = async () => {
     );
     const valid = validResult[0].valid || 0;
 
-    // Tenants with e-FRRO expired (Overdue)
     const [expiredResult] = await db.execute(
         `
         SELECT COUNT(*) as expired 
-        FROM tenants t        JOIN tenant_details td ON t.id = td.tenant_id
+        FROM tenants t
+        JOIN tenant_details td ON t.id = td.tenant_id
         WHERE 
             t.role = 'tenant'
             AND td.residency = 'international'
@@ -755,7 +759,6 @@ const getEFRROStats = async () => {
     );
     const expired = expiredResult[0].expired || 0;
 
-    // Tenants with e-FRRO not set (No e-FRRO)
     const [noEfrroResult] = await db.execute(
         `
         SELECT COUNT(*) as no_efrro 
@@ -769,7 +772,6 @@ const getEFRROStats = async () => {
     );
     const noEfrro = noEfrroResult[0].no_efrro || 0;
 
-    // Total with e-FRRO set (has e-FRRO date)
     const [withEfrroResult] = await db.execute(
         `
         SELECT COUNT(*) as with_efrro 
@@ -790,9 +792,9 @@ const getEFRROStats = async () => {
         no_efrro: noEfrro,
         expired: expired,
         expiring_soon: {
-            urgent: urgent,      // 0-7 days
-            soon: soon,          // 8-14 days
-            upcoming: upcoming,  // 15-30 days
+            urgent: urgent,
+            soon: soon,
+            upcoming: upcoming,
             total: urgent + soon + upcoming
         },
         valid: valid,
@@ -903,7 +905,6 @@ const getEFRROExpiringList = async (daysRange = null) => {
             `;
         }
     } else {
-        // Get all international tenants with e-FRRO expiring within 30 days
         query += ` AND DATEDIFF(td.efrro_till, CURDATE()) <= 30 AND td.efrro_till > CURDATE()`;
     }
     
