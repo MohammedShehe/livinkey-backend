@@ -1,3 +1,4 @@
+// tenant.home.controller.js
 const db = require("../config/db");
 
 const getTenantHomeData = async (req, res) => {
@@ -111,63 +112,114 @@ const getTenantHomeData = async (req, res) => {
 
         connection.release();
 
-        // Calculate rent status
+        // ============================================================
+        // FIXED: Calculate rent status with FLOOR instead of CEIL
+        // to show correct due days (2 days instead of 3)
+        // ============================================================
         let rentStatus = 'unpaid';
         let dueDays = 0;
         let nextPaymentDate = null;
         let daysLeft = 0;
 
-        if (tenant.paid_from && tenant.paid_till) {
-            const today = new Date();
-            const paidTill = new Date(tenant.paid_till);
-            const paidFrom = new Date(tenant.paid_from);
+        // ============================================================
+        // FIXED: Helper to check if a date is valid - handles null/undefined
+        // ============================================================
+        const isValidDate = (dateStr) => {
+            if (!dateStr) return false;
+            if (typeof dateStr !== 'string') {
+                // If it's already a Date object
+                if (dateStr instanceof Date) {
+                    return !isNaN(dateStr.getTime());
+                }
+                return false;
+            }
+            if (dateStr === '0000-00-00') return false;
+            if (dateStr === 'null') return false;
+            if (dateStr.toLowerCase() === 'null') return false;
+            if (dateStr.trim() === '') return false;
+            try {
+                const d = new Date(dateStr);
+                return !isNaN(d.getTime()) && d.getFullYear() > 1970;
+            } catch (e) {
+                return false;
+            }
+        };
 
-            // Check if paid_till is a valid date and not '0000-00-00'
-            if (!isNaN(paidTill.getTime()) && paidTill.getFullYear() > 1970) {
+        // ============================================================
+        // FIXED: Format date without timezone conversion
+        // This ensures the date stays as the correct day (e.g., 14th)
+        // ============================================================
+        const formatDate = (date) => {
+            if (!date) return null;
+            if (!(date instanceof Date)) return null;
+            if (isNaN(date.getTime())) return null;
+            return date.getFullYear() + '-' + 
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(date.getDate()).padStart(2, '0');
+        };
+
+        const paidFromValid = isValidDate(tenant.paid_from);
+        const paidTillValid = isValidDate(tenant.paid_till);
+
+        if (paidFromValid && paidTillValid) {
+            try {
+                // Get today's date at midnight for accurate day comparison
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const paidTill = new Date(tenant.paid_till);
+                paidTill.setHours(0, 0, 0, 0);
+                
+                const paidFrom = new Date(tenant.paid_from);
+                paidFrom.setHours(0, 0, 0, 0);
+
                 if (paidTill >= today) {
                     rentStatus = 'paid';
+                    // Calculate days remaining (full days)
                     const diffTime = paidTill.getTime() - today.getTime();
-                    dueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 } else {
                     rentStatus = 'unpaid';
+                    // Calculate overdue days using FLOOR (not CEIL)
+                    // This gives accurate day difference: Aug 14 to Aug 16 = 2 days
                     const diffTime = today.getTime() - paidTill.getTime();
-                    dueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 }
-            }
 
-            // Calculate next payment date
-            if (tenant.payment_date) {
-                const nextDate = new Date(today);
-                const currentMonth = today.getMonth();
-                const currentYear = today.getFullYear();
-                
-                // Set to payment day
-                let paymentDay = parseInt(tenant.payment_date);
-                if (paymentDay > 28) {
-                    // Handle months with fewer days
-                    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-                    paymentDay = Math.min(paymentDay, lastDayOfMonth);
+                // Calculate next payment date
+                if (tenant.payment_date) {
+                    const nextDate = new Date(today);
+                    const currentMonth = today.getMonth();
+                    const currentYear = today.getFullYear();
+                    
+                    let paymentDay = parseInt(tenant.payment_date);
+                    if (paymentDay > 28) {
+                        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                        paymentDay = Math.min(paymentDay, lastDayOfMonth);
+                    }
+                    
+                    nextDate.setDate(paymentDay);
+                    
+                    // If payment date already passed this month, go to next month
+                    if (nextDate < today) {
+                        nextDate.setMonth(nextDate.getMonth() + 1);
+                    }
+                    
+                    // If we're in the next month, set to that month's payment day
+                    const nextMonth = nextDate.getMonth();
+                    const nextYear = nextDate.getFullYear();
+                    let nextPaymentDay = parseInt(tenant.payment_date);
+                    const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
+                    nextPaymentDay = Math.min(nextPaymentDay, lastDayOfNextMonth);
+                    nextDate.setDate(nextPaymentDay);
+                    
+                    nextPaymentDate = nextDate;
+                    const diffTime = nextDate.getTime() - today.getTime();
+                    daysLeft = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    if (daysLeft < 0) daysLeft = 0;
                 }
-                
-                nextDate.setDate(paymentDay);
-                
-                // If payment date already passed this month, go to next month
-                if (nextDate < today) {
-                    nextDate.setMonth(nextDate.getMonth() + 1);
-                }
-                
-                // If we're in the next month, set to that month's payment day
-                const nextMonth = nextDate.getMonth();
-                const nextYear = nextDate.getFullYear();
-                let nextPaymentDay = parseInt(tenant.payment_date);
-                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
-                nextPaymentDay = Math.min(nextPaymentDay, lastDayOfNextMonth);
-                nextDate.setDate(nextPaymentDay);
-                
-                nextPaymentDate = nextDate;
-                const diffTime = nextDate.getTime() - today.getTime();
-                daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (daysLeft < 0) daysLeft = 0;
+            } catch (dateError) {
+                console.log('Date calculation error:', dateError);
             }
         }
 
@@ -205,16 +257,20 @@ const getTenantHomeData = async (req, res) => {
                 room_number: tenant.room_number || 'Not Assigned',
                 profile_picture: tenant.profile_picture || null,
                 placeholder_initials: initials.toUpperCase(),
-                residency: tenant.residency
+                residency: tenant.residency || 'national'
             },
             rent_status: {
-                status: rentStatus, // 'paid' or 'unpaid'
+                status: rentStatus,
                 due_days: dueDays,
-                next_payment_date: nextPaymentDate ? nextPaymentDate.toISOString().split('T')[0] : null,
+                // ============================================================
+                // FIXED: Use formatDate() instead of toISOString() to avoid
+                // timezone conversion that changes the day
+                // ============================================================
+                next_payment_date: formatDate(nextPaymentDate),
                 days_left: daysLeft,
                 payment_date_of_month: tenant.payment_date || null,
-                paid_from: tenant.paid_from || null,
-                paid_till: tenant.paid_till || null
+                paid_from: tenant.paid_from && isValidDate(tenant.paid_from) ? tenant.paid_from : null,
+                paid_till: tenant.paid_till && isValidDate(tenant.paid_till) ? tenant.paid_till : null
             },
             current_bill: currentBill ? {
                 id: currentBill.id,

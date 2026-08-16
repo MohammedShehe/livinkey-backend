@@ -41,7 +41,7 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=72 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 8.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-12 08:47:08',NULL),(2,2,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 8.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-12 08:47:08',NULL),(3,1,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested Plumber for Room 101',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-12 16:02:12',NULL),(4,2,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested Plumber for Room 101',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-12 16:02:12',NULL);
+INSERT INTO `admin_notifications` VALUES (1,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 8.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',1,'2026-08-12 08:47:08','2026-08-16 16:57:44'),(3,1,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested Plumber for Room 101',1,'maintenance','/maintenance/1','?','#3498db',1,'2026-08-12 16:02:12','2026-08-16 16:57:44'),(5,1,'pg_created','New PG Created','PG \"Hii Najaribu\" has been created',2,'pg','/pgs/2','?','#2ecc71',1,'2026-08-15 13:17:16','2026-08-16 16:57:44'),(7,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 13:22:09','2026-08-16 16:57:44'),(9,1,'pg_updated','PG Updated','PG \"Happy Living PG\" has been updated',1,'pg','/pgs/1','?️','#3498db',1,'2026-08-15 13:34:36','2026-08-16 16:57:44'),(11,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 13:40:14','2026-08-16 16:57:44'),(13,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 13:40:52','2026-08-16 16:57:44'),(15,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 13:41:03','2026-08-16 16:57:44'),(17,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 13:50:27','2026-08-16 16:57:44'),(19,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 16:21:06','2026-08-16 16:57:44'),(21,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 16:46:15','2026-08-16 16:57:44'),(23,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',2,'tenant','/tenants/2','?','#2ecc71',1,'2026-08-15 16:53:47','2026-08-16 16:57:44'),(25,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 17:08:35','2026-08-16 16:57:44'),(27,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-15 17:37:13','2026-08-16 16:57:44'),(29,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 17:47:47','2026-08-16 16:57:44'),(31,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-15 18:28:53','2026-08-16 16:57:44'),(33,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',4,'tenant','/tenants/4','?','#2ecc71',1,'2026-08-15 18:32:51','2026-08-16 16:57:44'),(35,1,'tenant_registered','New Tenant Registered','Abdul-warith Shehe has been registered as a tenant',5,'tenant','/tenants/5','?','#2ecc71',1,'2026-08-15 18:35:56','2026-08-16 16:57:44'),(37,1,'tenant_registered','New Tenant Registered','Abdul-warith Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 18:51:36','2026-08-16 16:57:44'),(39,1,'tenant_registered','New Tenant Registered','Abdul-warith Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-15 19:03:27','2026-08-16 16:57:44'),(41,1,'tenant_registered','New Tenant Registered','Milah has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-15 19:07:09','2026-08-16 16:57:44'),(43,1,'tenant_registered','New Tenant Registered','Wa Tatu has been registered as a tenant',4,'tenant','/tenants/4','?','#2ecc71',1,'2026-08-15 19:11:34','2026-08-16 16:57:44'),(45,1,'tenant_registered','New Tenant Registered','Wa nne has been registered as a tenant',5,'tenant','/tenants/5','?','#2ecc71',1,'2026-08-15 19:11:38','2026-08-16 16:57:44'),(47,1,'guest_registered','New Guest Registered','FOUR BROTHERS has been registered as a guest',6,'guest','/tenants/6','?','#1abc9c',1,'2026-08-15 19:29:26','2026-08-16 16:57:44'),(49,1,'guest_registered','New Guest Registered','FOUR BROTHERS has been registered as a guest',7,'guest','/tenants/7','?','#1abc9c',1,'2026-08-15 20:12:18','2026-08-16 16:57:39'),(51,1,'guest_registered','New Guest Registered','FOUR BROTHERS has been registered as a guest',8,'guest','/tenants/8','?','#1abc9c',1,'2026-08-15 21:32:53','2026-08-16 16:57:44'),(53,1,'admin_created','New Admin Created','Admin \"Mohammed Aminu Shehe\" has been created',8,'admin','/admins/8','?‍?','#3498db',1,'2026-08-15 21:53:30','2026-08-16 16:57:44'),(54,1,'pg_updated','PG Updated','PG \"Hii Najaribu Tu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 22:04:45','2026-08-16 16:57:36'),(56,1,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated',2,'pg','/pgs/2','?️','#3498db',1,'2026-08-15 22:05:32','2026-08-16 16:57:44'),(58,1,'tenant_registered','New Tenant Registered','Abdul-warith Shehe has been registered as a tenant',9,'tenant','/tenants/9','?','#2ecc71',1,'2026-08-16 01:28:15','2026-08-16 16:57:44'),(59,1,'bill_created','New Bill Generated','Bill of ₹12510.00 created for undefined',8,'bill','/bills/8','?','#3498db',1,'2026-08-16 01:32:18','2026-08-16 16:57:34'),(60,1,'tenant_registered','New Tenant Registered','MO11 has been registered as a tenant',10,'tenant','/tenants/10','?','#2ecc71',1,'2026-08-16 01:34:22','2026-08-16 16:57:44'),(61,1,'bill_created','New Bill Generated','Bill of ₹14990.00 created for undefined',9,'bill','/bills/9','?','#3498db',1,'2026-08-16 01:35:31','2026-08-16 16:57:44'),(62,1,'bill_paid','Bill Paid','MO11 has paid the bill of ₹14990.00',9,'bill','/bills/9','✅','#2ecc71',1,'2026-08-16 01:40:36','2026-08-16 16:57:44'),(63,1,'bill_partially_paid','Partial Payment Made','Abdul-warith Shehe made a partial payment of ₹11000.00',8,'bill','/bills/8','?','#f39c12',1,'2026-08-16 01:41:35','2026-08-16 16:57:44'),(64,1,'bill_created','New Bill Generated','Bill of ₹12500.00 created for undefined',10,'bill','/bills/10','?','#3498db',1,'2026-08-16 02:01:22','2026-08-16 16:57:32'),(65,1,'bill_created','New Bill Generated','Bill of ₹12500.00 created for undefined',11,'bill','/bills/11','?','#3498db',1,'2026-08-16 02:01:43','2026-08-16 16:57:44'),(66,1,'cash_payment_verified','Cash Payment Verified','Cash payment of ₹12500.00 verified for MO11',10,'bill','/bills/10','?','#2ecc71',1,'2026-08-16 10:31:51','2026-08-16 16:57:29'),(67,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-16 13:10:49','2026-08-16 19:38:01'),(68,1,'maintenance_created','New Maintenance Request','Mohammed Aminu Shehe requested AC for Room 103',2,'maintenance','/maintenance/2','?','#3498db',1,'2026-08-16 15:10:17','2026-08-16 21:24:12'),(69,1,'maintenance_updated','Maintenance Request Started','AC request for Room 103 is now in_progress',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-16 17:32:06','2026-08-16 23:34:59'),(70,1,'maintenance_updated','Maintenance Request Completed','AC request for Room 103 is now completed',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-16 17:32:26','2026-08-16 23:34:59'),(71,1,'bill_created','New Bill Generated','Bill of ₹12799.00 created for undefined',12,'bill','/bills/12','?','#3498db',1,'2026-08-16 17:36:02','2026-08-16 23:34:59');
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -73,7 +73,7 @@ CREATE TABLE `admin_permissions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `admin_id` (`admin_id`,`module_name`),
   CONSTRAINT `admin_permissions_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=37 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -82,7 +82,6 @@ CREATE TABLE `admin_permissions` (
 
 LOCK TABLES `admin_permissions` WRITE;
 /*!40000 ALTER TABLE `admin_permissions` DISABLE KEYS */;
-INSERT INTO `admin_permissions` VALUES (1,2,'tenants',1,1,1,0,'2026-08-01 21:44:32'),(2,2,'guests',1,0,0,0,'2026-08-01 21:44:32'),(3,2,'bills',1,1,0,0,'2026-08-01 21:44:32'),(4,2,'pgs',1,1,1,1,'2026-08-01 21:44:32'),(5,2,'maintenance',0,0,0,0,'2026-08-01 21:44:32'),(6,2,'documents',1,0,0,0,'2026-08-01 21:44:32'),(7,2,'feedbacks',1,0,0,0,'2026-08-01 21:44:32');
 /*!40000 ALTER TABLE `admin_permissions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -115,7 +114,7 @@ CREATE TABLE `admins` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
   UNIQUE KEY `phone` (`phone`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -124,7 +123,7 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'Super Admin','molittle1011@gmail.com',NULL,'$2b$12$G70dlPpJLTsE0nnRxSDDG.rlHXY6ohIls2XLQeDsHDgtzxU3kG7Sm',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-01 19:54:33','2026-08-02 00:21:13','2026-08-02 05:49:15',NULL,NULL),(2,'Mohammed Aminu Shehe','mosnake111@gmail.com','0677532140','$2b$12$/a/DOw69OlD/lHsNSwQJIuLIi0u6fKIl14e7pfuB61DGif0djoHwC',0,'admin','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785631345/livinkey/admins/thwkmzoz3tmanoxydk8m.jpg','livinkey/admins/thwkmzoz3tmanoxydk8m','image','$2b$10$6/QFK6ymIyenaxno328p7ucQNCHVuStQiqesdqzFEJtXBrTdXPj.q','2026-08-14 10:19:38',1,'2026-08-01 19:54:47','2026-08-14 04:44:42','2026-08-14 10:14:42',NULL,NULL);
+INSERT INTO `admins` VALUES (1,'Super Admin','molittle1011@gmail.com',NULL,'$2b$12$6V2v.oUhzW7r2qhvZaVnSeYJJ9uXONALQRrPqBk71WPhscPXBdHk2',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-01 19:54:33','2026-08-16 13:09:14','2026-08-16 18:38:48',NULL,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -147,7 +146,7 @@ CREATE TABLE `bill_payments` (
   PRIMARY KEY (`id`),
   KEY `idx_bill_id` (`bill_id`),
   CONSTRAINT `fk_bill_payments_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -156,7 +155,7 @@ CREATE TABLE `bill_payments` (
 
 LOCK TABLES `bill_payments` WRITE;
 /*!40000 ALTER TABLE `bill_payments` DISABLE KEYS */;
-INSERT INTO `bill_payments` VALUES (1,1,6000.00,'2026-08-05 01:11:05','qr_code','TXN123456',1,'2026-08-04 19:41:05'),(2,1,400.00,'2026-08-05 01:11:50','qr_code','TXN123456',1,'2026-08-04 19:41:50');
+INSERT INTO `bill_payments` VALUES (3,9,14990.00,'2026-08-16 07:10:31','cash','AGSAHt566G',0,'2026-08-16 01:40:31'),(4,8,11000.00,'2026-08-16 07:11:30','online','cgcywchwcgyw',0,'2026-08-16 01:41:30');
 /*!40000 ALTER TABLE `bill_payments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -229,7 +228,7 @@ CREATE TABLE `bills` (
   KEY `idx_qr_expires_at` (`qr_expires_at`),
   CONSTRAINT `fk_bills_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_bills_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -238,7 +237,7 @@ CREATE TABLE `bills` (
 
 LOCK TABLES `bills` WRITE;
 /*!40000 ALTER TABLE `bills` DISABLE KEYS */;
-INSERT INTO `bills` VALUES (1,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785753320/livinkey/bills/meters/hi73zbtj3dw0iti1dxl7.png','livinkey/bills/meters/hi73zbtj3dw0iti1dxl7','image',500.00,0.00,12700.00,13400.00,800.00,'partially_paid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785872608/livinkey/bills/qr/fine/wfqktwgvq1dpcwsbva9l.png','livinkey/bills/qr/m2lokyyshyuvz8gt6kfw','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785872610/livinkey/bills/qr/fine/fvqqpstpxwz9oob0xihy.png','livinkey/bills/qr/ww8kd0e4wljnoww9vjpx','image','2026-07-21 01:12:42','2026-08-06 01:13:27',1,'2026-08-03 10:35:25','2026-08-04 21:30:17',8,'2026-08-05 00:55:12',1,NULL,NULL,NULL,'2026-08-05 02:37:57','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785875997/livinkey/bills/custom_qr/u4jta4ls66aimnre6nz9.png','livinkey/bills/custom_qr/u4jta4ls66aimnre6nz9','image',NULL,NULL,NULL,'Dear Tenant, Your payment is due. Please pay tomorrow if possible. Regards, Livinkey Team','2026-08-05 23:59:59',NULL,NULL,0,NULL,'2026-08-05 03:00:17','upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(2,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754010/livinkey/bills/meters/el40mcmgybifxszpx9r6.png','livinkey/bills/meters/el40mcmgybifxszpx9r6','image',500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754014/livinkey/bills/qr/q2aamsdjc8cy7mseg2yf.jpg','livinkey/bills/qr/q2aamsdjc8cy7mseg2yf','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754013/livinkey/bills/qr/rblmqupwnpdreg1nhuqh.png','livinkey/bills/qr/rblmqupwnpdreg1nhuqh','image','2026-08-03 16:16:55','2026-08-10 16:16:55',1,'2026-08-03 10:46:55','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(3,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754192/livinkey/bills/meters/n79zrgdd0e8u5mapt2wn.png','livinkey/bills/meters/n79zrgdd0e8u5mapt2wn','image',500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754195/livinkey/bills/qr/anqrk2ysbojstfr9redn.jpg','livinkey/bills/qr/anqrk2ysbojstfr9redn','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754194/livinkey/bills/qr/avg1mrotyxmblbkqrund.png','livinkey/bills/qr/avg1mrotyxmblbkqrund','image','2026-08-03 16:19:56','2026-08-10 16:19:56',1,'2026-08-03 10:49:56','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(4,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754341/livinkey/bills/meters/nnb6fgjjysauijnv2tny.png','livinkey/bills/meters/nnb6fgjjysauijnv2tny','image',500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754345/livinkey/bills/qr/wf63ipxidxeebbemgfy1.jpg','livinkey/bills/qr/wf63ipxidxeebbemgfy1','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785754344/livinkey/bills/qr/yhkel35gi3rlsun3a0st.png','livinkey/bills/qr/yhkel35gi3rlsun3a0st','image','2026-08-03 16:22:26','2026-08-10 16:22:26',1,'2026-08-03 10:52:26','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(5,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755017/livinkey/bills/meters/slpg5jtsnarycjism7ua.png','livinkey/bills/meters/slpg5jtsnarycjism7ua','image',500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755021/livinkey/bills/qr/aq4bfhir9jel7qewjbq3.jpg','livinkey/bills/qr/aq4bfhir9jel7qewjbq3','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755019/livinkey/bills/qr/jpokmvby5qmvsvzs8xcl.png','livinkey/bills/qr/jpokmvby5qmvsvzs8xcl','image','2026-08-03 16:33:42','2026-08-10 16:33:42',1,'2026-08-03 11:03:42','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(6,1,11000.00,1200.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755758/livinkey/bills/meters/kudetl0k4smyjvmy7xnn.png','livinkey/bills/meters/kudetl0k4smyjvmy7xnn','image',500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755759/livinkey/bills/qr/ofk4fsk3nypdvyh47mqw.png','livinkey/bills/qr/ofk4fsk3nypdvyh47mqw','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785755760/livinkey/bills/qr/f89npidhdh6d1qbg7tlh.png','livinkey/bills/qr/f89npidhdh6d1qbg7tlh','image','2026-08-03 16:46:03','2026-08-10 16:46:03',1,'2026-08-03 11:16:03','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(7,1,11000.00,1200.00,NULL,NULL,NULL,500.00,0.00,12700.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785871004/livinkey/bills/qr/l0gmurrz2sj3ysnfvnqn.png','livinkey/bills/qr/l0gmurrz2sj3ysnfvnqn','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1785871005/livinkey/bills/qr/mk4zatw8fyyhraie813r.png','livinkey/bills/qr/mk4zatw8fyyhraie813r','image','2026-08-05 00:46:48','2026-08-12 00:46:48',1,'2026-08-04 19:16:48','2026-08-04 19:59:10',0,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `bills` VALUES (8,9,11000.00,1200.00,NULL,NULL,NULL,300.00,10.00,12510.00,11000.00,0.00,'partially_paid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786844493/livinkey/bills/qr/ywf4fzhuw6hbphqv301d.png','livinkey/bills/qr/ywf4fzhuw6hbphqv301d','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786844494/livinkey/bills/qr/ygpw1aeqtumdkuriozal.png','livinkey/bills/qr/ygpw1aeqtumdkuriozal','image','2026-08-16 07:02:15','2026-08-23 07:02:15',1,'2026-08-16 01:32:15','2026-08-16 01:51:25',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,'LIVMSV5FCSX82A30F8D',NULL,NULL,'upi://pay?pa=your_merchant%40upi&pn=Livinkey&am=1510&tn=Payment+for+PG+Rent&cu=INR&mc=LIVINKEY&tid=LIVMSV5FCSX82A30F8D','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786845083/livinkey/payments/qr/fsepvim5h6jazghy35h1.png','livinkey/payments/qr/fsepvim5h6jazghy35h1','image'),(9,10,12000.00,2690.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786844123/livinkey/bills/meters/vzhwurxehigu0kv5vid7.jpg','livinkey/bills/meters/vzhwurxehigu0kv5vid7','image',300.00,0.00,14990.00,14990.00,0.00,'paid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786844434/livinkey/bills/qr/dkfqt3gfyidlgc5rrgcb.png','livinkey/bills/qr/dkfqt3gfyidlgc5rrgcb','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786844435/livinkey/bills/qr/a3rfmmtyzzrpnm4orf79.png','livinkey/bills/qr/a3rfmmtyzzrpnm4orf79','image','2026-08-16 07:05:28','2026-08-23 07:05:28',1,'2026-08-16 01:35:28','2026-08-16 01:40:36',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(10,10,11000.00,1200.00,NULL,NULL,NULL,300.00,0.00,12500.00,12500.00,0.00,'paid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786876309/livinkey/bills/qr/thhhatvdmbwhdkdzeeoq.png','livinkey/bills/qr/thhhatvdmbwhdkdzeeoq','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786876310/livinkey/bills/qr/r1wwycfnhodffxng8ig8.png','livinkey/bills/qr/r1wwycfnhodffxng8ig8','image','2026-08-16 07:31:19','2026-08-23 07:31:19',1,'2026-08-16 02:01:19','2026-08-16 10:31:51',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'2026-08-16 16:01:46','upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(11,9,11000.00,1200.00,NULL,NULL,NULL,300.00,0.00,12500.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786845697/livinkey/bills/qr/z5f5sdaly3jo0iqowcym.png','livinkey/bills/qr/z5f5sdaly3jo0iqowcym','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786845698/livinkey/bills/qr/uvv8eysj8abvzjnkg2kv.png','livinkey/bills/qr/uvv8eysj8abvzjnkg2kv','image','2026-08-16 07:31:40','2026-08-23 07:31:40',1,'2026-08-16 02:01:40','2026-08-16 10:38:15',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,'LIVMSVO8UP8548AF8B3',NULL,NULL,'upi://pay?pa=your_merchant%40upi&pn=Livinkey&am=12500&tn=Payment+for+PG+Rent&cu=INR&mc=LIVINKEY&tid=LIVMSVO8UP8548AF8B3','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786876692/livinkey/payments/qr/ykddujwltrnu4gasta1l.png','livinkey/payments/qr/ykddujwltrnu4gasta1l','image'),(12,1,10000.00,2499.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786901754/livinkey/bills/meters/leydtrzklbrcswar9k5u.jpg','livinkey/bills/meters/leydtrzklbrcswar9k5u','image',300.00,0.00,12799.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786901756/livinkey/bills/qr/tgoueq1omkqrcraojgef.png','livinkey/bills/qr/tgoueq1omkqrcraojgef','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786901757/livinkey/bills/qr/bn6ztfk8587kaevxyndo.png','livinkey/bills/qr/bn6ztfk8587kaevxyndo','image','2026-08-16 23:05:58','2026-08-23 23:05:58',1,'2026-08-16 17:35:58','2026-08-16 17:35:58',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `bills` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -270,7 +269,7 @@ CREATE TABLE `cash_payments` (
   CONSTRAINT `fk_cash_payments_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_cash_payments_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_cash_payments_verified_by` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -279,7 +278,7 @@ CREATE TABLE `cash_payments` (
 
 LOCK TABLES `cash_payments` WRITE;
 /*!40000 ALTER TABLE `cash_payments` DISABLE KEYS */;
-INSERT INTO `cash_payments` VALUES (1,1,1,7000.00,'2026-08-14','2026-09-30','2026-08-05 03:00:17',1,'3012','verified','Cash payment for August rent','2026-08-04 21:30:17');
+INSERT INTO `cash_payments` VALUES (2,10,10,12500.00,'2026-08-16','2026-09-16','2026-08-16 16:01:46',1,'3915','verified','Paid full','2026-08-16 10:31:46');
 /*!40000 ALTER TABLE `cash_payments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -300,7 +299,7 @@ CREATE TABLE `floors` (
   UNIQUE KEY `unique_pg_floor` (`pg_id`,`floor_number`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_floors_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -309,7 +308,7 @@ CREATE TABLE `floors` (
 
 LOCK TABLES `floors` WRITE;
 /*!40000 ALTER TABLE `floors` DISABLE KEYS */;
-INSERT INTO `floors` VALUES (1,1,1,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(2,1,2,'2026-08-03 09:20:37','2026-08-03 09:20:37'),(3,1,3,'2026-08-03 09:20:37','2026-08-03 09:20:37');
+INSERT INTO `floors` VALUES (18,2,1,'2026-08-15 22:05:32','2026-08-15 22:05:32'),(19,2,2,'2026-08-15 22:05:32','2026-08-15 22:05:32');
 /*!40000 ALTER TABLE `floors` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -339,7 +338,7 @@ CREATE TABLE `guest_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `guest_notifications_ibfk_1` FOREIGN KEY (`guest_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -348,6 +347,7 @@ CREATE TABLE `guest_notifications` (
 
 LOCK TABLES `guest_notifications` WRITE;
 /*!40000 ALTER TABLE `guest_notifications` DISABLE KEYS */;
+INSERT INTO `guest_notifications` VALUES (1,17,'pg_added','New PG Available','A new PG \"Hii Najaribu\" has been added. Check it out!',2,'pg','/public/pgs/2','?','#2ecc71',0,NULL,'2026-08-15 13:17:16'),(2,18,'pg_added','New PG Available','A new PG \"Hii Najaribu\" has been added. Check it out!',2,'pg','/public/pgs/2','?','#2ecc71',0,NULL,'2026-08-15 13:17:16'),(3,20,'pg_added','New PG Available','A new PG \"Hii Najaribu\" has been added. Check it out!',2,'pg','/public/pgs/2','?','#2ecc71',0,NULL,'2026-08-15 13:17:16'),(4,17,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated with new details.',2,'pg','/public/pgs/2','?️','#3498db',0,NULL,'2026-08-15 13:22:09'),(5,18,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated with new details.',2,'pg','/public/pgs/2','?️','#3498db',0,NULL,'2026-08-15 13:22:09'),(6,20,'pg_updated','PG Updated','PG \"Hii Najaribu\" has been updated with new details.',2,'pg','/public/pgs/2','?️','#3498db',0,NULL,'2026-08-15 13:22:09');
 /*!40000 ALTER TABLE `guest_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -381,7 +381,7 @@ CREATE TABLE `maintenance_requests` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `maintenance_requests_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `maintenance_requests_ibfk_2` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -390,7 +390,7 @@ CREATE TABLE `maintenance_requests` (
 
 LOCK TABLES `maintenance_requests` WRITE;
 /*!40000 ALTER TABLE `maintenance_requests` DISABLE KEYS */;
-INSERT INTO `maintenance_requests` VALUES (1,1,1,'Plumber','Leaking pipe in bathroom','2026-08-15','10:00 AM - 2:00 PM','https://res.cloudinary.com/dlokcqf1h/image/upload/v1786550529/livinkey/maintenance/1/trewdrdfjhiw4xegpeax.png','livinkey/maintenance/1/trewdrdfjhiw4xegpeax','image','pending',1,'2026-08-12 16:02:12','2026-08-12 16:02:12');
+INSERT INTO `maintenance_requests` VALUES (2,1,36,'AC','AC is not working','2026-08-17','8:30 PM',NULL,NULL,NULL,'completed',1,'2026-08-16 15:10:17','2026-08-16 17:32:26');
 /*!40000 ALTER TABLE `maintenance_requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -425,7 +425,7 @@ CREATE TABLE `payment_proofs` (
   CONSTRAINT `payment_proofs_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_3` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -434,7 +434,6 @@ CREATE TABLE `payment_proofs` (
 
 LOCK TABLES `payment_proofs` WRITE;
 /*!40000 ALTER TABLE `payment_proofs` DISABLE KEYS */;
-INSERT INTO `payment_proofs` VALUES (1,7,1,'TXN123456789',12700.00,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786604102/livinkey/payments/proofs/1/nxwrhumifwkkjzoqf66r.png','livinkey/payments/proofs/1/nxwrhumifwkkjzoqf66r','image','pending',NULL,NULL,NULL,'2026-08-13 06:55:04','2026-08-13 06:55:04');
 /*!40000 ALTER TABLE `payment_proofs` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -469,7 +468,7 @@ CREATE TABLE `payment_transactions` (
   KEY `idx_status` (`status`),
   CONSTRAINT `fk_payment_transactions_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_payment_transactions_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -478,6 +477,7 @@ CREATE TABLE `payment_transactions` (
 
 LOCK TABLES `payment_transactions` WRITE;
 /*!40000 ALTER TABLE `payment_transactions` DISABLE KEYS */;
+INSERT INTO `payment_transactions` VALUES (1,8,9,1510.00,'upi','upi_qr','LIVMSV5536M300896F0',NULL,'pending','upi://pay?pa=your_merchant%40upi&pn=Livinkey&am=1510&tn=Payment+for+PG+Rent&cu=INR&mc=LIVINKEY&tid=LIVMSV5536M300896F0','your_merchant@upi','2026-08-16 07:13:26',NULL,0,'2026-08-16 01:43:26','2026-08-16 01:43:26'),(2,8,9,1510.00,'upi','upi_qr','LIVMSV5FCSX82A30F8D',NULL,'pending','upi://pay?pa=your_merchant%40upi&pn=Livinkey&am=1510&tn=Payment+for+PG+Rent&cu=INR&mc=LIVINKEY&tid=LIVMSV5FCSX82A30F8D','your_merchant@upi','2026-08-16 07:21:25',NULL,0,'2026-08-16 01:51:25','2026-08-16 01:51:25'),(3,11,9,12500.00,'upi','upi_qr','LIVMSVO8UP8548AF8B3',NULL,'pending','upi://pay?pa=your_merchant%40upi&pn=Livinkey&am=12500&tn=Payment+for+PG+Rent&cu=INR&mc=LIVINKEY&tid=LIVMSVO8UP8548AF8B3','your_merchant@upi','2026-08-16 16:08:15',NULL,0,'2026-08-16 10:38:15','2026-08-16 10:38:15');
 /*!40000 ALTER TABLE `payment_transactions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -497,7 +497,7 @@ CREATE TABLE `pg_amenities` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_amenities_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=68 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -506,7 +506,7 @@ CREATE TABLE `pg_amenities` (
 
 LOCK TABLES `pg_amenities` WRITE;
 /*!40000 ALTER TABLE `pg_amenities` DISABLE KEYS */;
-INSERT INTO `pg_amenities` VALUES (1,1,'Free WiFi',0,'2026-08-03 09:20:37'),(2,1,'24*7 Assistance',0,'2026-08-03 09:20:37'),(3,1,'24*7 Power Backup',0,'2026-08-03 09:20:37'),(4,1,'CCTV',0,'2026-08-03 09:20:37'),(5,1,'AC',0,'2026-08-03 09:20:37'),(6,1,'Free Housekeeping',0,'2026-08-03 09:20:37'),(7,1,'Swimming Pool',1,'2026-08-03 09:20:37');
+INSERT INTO `pg_amenities` VALUES (61,2,'Free WiFi',0,'2026-08-15 22:05:32'),(62,2,'24×7 Assistance',0,'2026-08-15 22:05:32'),(63,2,'24×7 Power Backup',0,'2026-08-15 22:05:32'),(64,2,'Ventilated Rooms',0,'2026-08-15 22:05:32'),(65,2,'CCTV',0,'2026-08-15 22:05:32'),(66,2,'AC',0,'2026-08-15 22:05:32'),(67,2,'Water Free',1,'2026-08-15 22:05:32');
 /*!40000 ALTER TABLE `pg_amenities` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -528,7 +528,7 @@ CREATE TABLE `pg_images` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_images_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -537,6 +537,7 @@ CREATE TABLE `pg_images` (
 
 LOCK TABLES `pg_images` WRITE;
 /*!40000 ALTER TABLE `pg_images` DISABLE KEYS */;
+INSERT INTO `pg_images` VALUES (2,2,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786800127/livinkey/pgs/images/m2yys2umdirbrk5idkmq.webp','livinkey/pgs/images/m2yys2umdirbrk5idkmq','image',0,'2026-08-15 13:22:09');
 /*!40000 ALTER TABLE `pg_images` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -564,7 +565,7 @@ CREATE TABLE `pgs` (
   PRIMARY KEY (`id`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_pgs_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -573,7 +574,7 @@ CREATE TABLE `pgs` (
 
 LOCK TABLES `pgs` WRITE;
 /*!40000 ALTER TABLE `pgs` DISABLE KEYS */;
-INSERT INTO `pgs` VALUES (1,'Happy Living PG','123 Main Street, Bangalore',3,NULL,NULL,NULL,1,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',0.00,0.00);
+INSERT INTO `pgs` VALUES (2,'Hii Najaribu','Plot No. 45, Sector 12, Kharghar, Navi Mumbai',2,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786801825/livinkey/pgs/qr/a2ohvnsjaruombhhdwjx.jpg','livinkey/pgs/qr/a2ohvnsjaruombhhdwjx','image',1,1,'2026-08-15 13:17:13','2026-08-15 22:05:32',11000.00,11000.00);
 /*!40000 ALTER TABLE `pgs` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -592,7 +593,7 @@ CREATE TABLE `room_occupancy` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -601,7 +602,7 @@ CREATE TABLE `room_occupancy` (
 
 LOCK TABLES `room_occupancy` WRITE;
 /*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
-INSERT INTO `room_occupancy` VALUES (1,1,2,'2026-08-06 16:53:50'),(3,2,3,'2026-08-07 23:56:55');
+INSERT INTO `room_occupancy` VALUES (5,34,2,'2026-08-16 01:14:57'),(7,35,2,'2026-08-16 01:34:19'),(9,36,1,'2026-08-16 13:10:46');
 /*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -625,7 +626,7 @@ CREATE TABLE `rooms` (
   UNIQUE KEY `unique_floor_room` (`floor_id`,`room_number`),
   KEY `idx_floor_id` (`floor_id`),
   CONSTRAINT `fk_rooms_floor_id` FOREIGN KEY (`floor_id`) REFERENCES `floors` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -634,7 +635,7 @@ CREATE TABLE `rooms` (
 
 LOCK TABLES `rooms` WRITE;
 /*!40000 ALTER TABLE `rooms` DISABLE KEYS */;
-INSERT INTO `rooms` VALUES (1,1,'101',2,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL),(2,1,'102',3,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL),(3,2,'201',4,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL),(4,2,'202',2,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL),(5,3,'301',3,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL),(6,3,'302',2,1,'2026-08-03 09:20:37','2026-08-03 09:20:37',NULL);
+INSERT INTO `rooms` VALUES (34,18,'101',2,1,'2026-08-15 22:05:32','2026-08-15 22:05:32',11000.00),(35,18,'102',2,1,'2026-08-15 22:05:32','2026-08-15 22:05:32',11000.00),(36,18,'103',2,1,'2026-08-15 22:05:32','2026-08-15 22:05:32',11000.00),(37,19,'201',3,1,'2026-08-15 22:05:32','2026-08-15 22:05:32',11000.00);
 /*!40000 ALTER TABLE `rooms` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -675,7 +676,7 @@ CREATE TABLE `tenant_details` (
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -684,7 +685,7 @@ CREATE TABLE `tenant_details` (
 
 LOCK TABLES `tenant_details` WRITE;
 /*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
-INSERT INTO `tenant_details` VALUES (1,1,1,1,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,1,'2026-07-01','2026-07-31','2026-07-22',NULL,NULL,NULL,'2026-08-03 09:22:22','2026-08-03 10:30:46'),(2,12,1,1,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-06 16:53:50','2026-08-06 16:53:50'),(3,13,1,2,'international',NULL,NULL,'CF123456',NULL,NULL,11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-07 17:53:34','2026-08-07 17:53:34'),(5,16,1,2,'international',NULL,NULL,'CF123456','2026-01-01','2026-08-10',11000.00,5000.00,10,'2026-07-31','0000-00-00','2026-07-22',NULL,NULL,NULL,'2026-08-07 23:56:55','2026-08-07 23:56:55');
+INSERT INTO `tenant_details` VALUES (23,9,2,35,'international','5152525D1RD','YYHHCQ','fwdwedweq','2026-08-07','2026-12-19',11000.00,11000.00,14,'2026-07-10','2026-08-09','2026-08-15',NULL,NULL,NULL,'2026-08-16 01:28:11','2026-08-16 01:28:11'),(24,10,2,35,'international','5152525D1RD','YYHHCQ','fwdwedweq','2026-07-22','2026-09-30',11000.00,11000.00,14,'2026-07-14','2026-08-14','2026-08-15',NULL,NULL,NULL,'2026-08-16 01:34:19','2026-08-16 01:34:19'),(25,1,2,36,'international','null','null','CF14231011','2026-07-22','2026-09-30',11000.00,11000.00,14,'2026-06-14','2026-08-14','2026-06-14',NULL,NULL,NULL,'2026-08-16 13:10:46','2026-08-16 13:10:46');
 /*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -718,7 +719,6 @@ CREATE TABLE `tenant_documents` (
 
 LOCK TABLES `tenant_documents` WRITE;
 /*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
-INSERT INTO `tenant_documents` VALUES (1,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786544337/livinkey/tenants/1/documents/kq64qugmb5ayvy2tzkel.png','livinkey/tenants/1/documents/kq64qugmb5ayvy2tzkel','image','passport_photo','2026-08-12 14:19:01','Screenshot 2025-09-15 161841.png',381270,'2026-08-12 14:19:01');
 /*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -758,7 +758,6 @@ CREATE TABLE `tenant_feedbacks` (
 
 LOCK TABLES `tenant_feedbacks` WRITE;
 /*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
-INSERT INTO `tenant_feedbacks` VALUES (1,1,1,10.0,7.0,9.0,8.0,6.0,8.0,NULL,'2026-08-12 08:47:08','2026-08-12 08:47:08');
 /*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -788,7 +787,7 @@ CREATE TABLE `tenant_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -797,6 +796,7 @@ CREATE TABLE `tenant_notifications` (
 
 LOCK TABLES `tenant_notifications` WRITE;
 /*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
+INSERT INTO `tenant_notifications` VALUES (1,8,'bill_created','New Bill Generated','A new bill of ₹12510.00 has been generated for you.',8,'bill','/tenant-payments/bill','?','#3498db',0,NULL,'2026-08-16 01:32:18'),(2,9,'bill_created','New Bill Generated','A new bill of ₹14990.00 has been generated for you.',9,'bill','/tenant-payments/bill','?','#3498db',0,NULL,'2026-08-16 01:35:31'),(3,10,'bill_paid','Payment Confirmed','Your payment of ₹14990.00 has been confirmed.',9,'bill','/tenant-payments/history','✅','#2ecc71',0,NULL,'2026-08-16 01:40:36'),(4,9,'bill_partially_paid','Partial Payment Received','Your partial payment of ₹11000.00 has been received.',8,'bill','/tenant-payments/history','?','#f39c12',0,NULL,'2026-08-16 01:41:35'),(5,10,'bill_created','New Bill Generated','A new bill of ₹12500.00 has been generated for you.',10,'bill','/tenant-payments/bill','?','#3498db',0,NULL,'2026-08-16 02:01:22'),(7,10,'bill_paid','Payment Confirmed','Your payment of ₹12500.00 has been confirmed.',10,'bill','/tenant-payments/history','✅','#2ecc71',0,NULL,'2026-08-16 10:31:51'),(8,1,'maintenance_created','Maintenance Request Submitted','Your AC request has been submitted.',2,'maintenance','/maintenance/my-requests','?','#f39c12',1,'2026-08-16 22:06:14','2026-08-16 15:10:17'),(9,1,'maintenance_started','Maintenance Started','Your AC request is now in progress.',2,'maintenance','/maintenance/my-requests','?','#3498db',1,'2026-08-16 23:06:46','2026-08-16 17:32:06'),(10,1,'maintenance_completed','Maintenance Completed','Your AC request has been completed.',2,'maintenance','/maintenance/my-requests','✅','#2ecc71',1,'2026-08-16 23:06:46','2026-08-16 17:32:26');
 /*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -833,7 +833,7 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -842,7 +842,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140x','male',NULL,1,'$2b$12$QnvPFIM91qqYQr9iEFxpE.b/sTLY1E9Ay9N0UiFTVeiSoxTB.PbA.',1,'2026-08-03 09:22:22','2026-08-12 08:31:02',0,NULL,NULL,'2026-08-12 13:58:34',NULL,NULL),(2,'guest','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+255','677532140','male','international',1,'$2b$12$emFlKU1/GuJXUtsuqx8jHebdrAf1LZmssQFDPidSwjAxtrcuDV6w2',1,'2026-08-03 09:37:09','2026-08-14 03:48:51',0,NULL,NULL,NULL,NULL,NULL),(12,'tenant','Shaggy','shaghiramchomvu1@gmail.com','Tanzanian','+255','656635975','male',NULL,1,'$2b$12$0E64egZycpEfB..HVFK0.eK96o8bGnWpmWf5pZYfVLJOlPpuiYkuu',1,'2026-08-06 16:53:50','2026-08-06 16:53:50',0,NULL,NULL,NULL,NULL,NULL),(13,'tenant','Mohammed','livinkey@gmail.com','Tanzanian','+255','656635970','male',NULL,1,'$2b$12$WTEvldPXJIF5eyO6tz03IuFt2zd4gzEb4BTQvmDiXFvDBoXU/PY76',1,'2026-08-07 17:53:34','2026-08-07 17:53:34',0,NULL,NULL,NULL,NULL,NULL),(16,'tenant','Mohammed','fourbrothers10112627@gmail.com','Tanzanian','+255','656635979','male',NULL,1,'$2b$12$.DWEEfgEMQOcqijEQ03tQejCncC2YW1rEbWcogW.hqRKCCB05DZzi',1,'2026-08-07 23:56:55','2026-08-07 23:56:55',0,NULL,NULL,NULL,NULL,NULL),(17,'guest','John Doe','molittle10111@gmail.com','American','+1','1234567890','other','international',1,'$2b$12$uvbYa42SgMtXtTAN2aYlqucHga2blISptSu341wPkvawu.LWMe/0O',1,'2026-08-14 03:52:21','2026-08-14 03:52:21',0,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+91','7681969865','male','international',1,'$2b$12$Kuk.iEw467TlVSELiYRAte.ntUiBolImE06aVPs8zxyt.nXQpbXtu',1,'2026-08-16 13:10:46','2026-08-16 16:22:36',0,NULL,NULL,'2026-08-16 21:52:20','f0d8cc3959a570554ae4d101a3957699d3a9f19b789012e4a38a158b70c463cd','2026-08-16 22:02:36'),(2,'guest','Mohammed Aminu Shehe','mosnake111@gmail.com','Tanzanian','+255','677532140','other','international',1,'$2b$12$mGMKt4jHK7KlNpX/0HvQL.EO4OeKs/lDQs/kFUhlSbDQDj//.5aS.',1,'2026-08-16 13:43:43','2026-08-16 13:43:43',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -855,4 +855,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-14 15:17:42
+-- Dump completed on 2026-08-16 23:44:10

@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
+// FIXED: Import each controller properly
 const tenantController = require("../controllers/tenant.controller");
 const tenantAuthController = require("../controllers/tenant.auth.controller");
 const tenantProfileController = require("../controllers/tenant.profile.controller");
-const tenantHomeController = require("../controllers/tenant.home.controller");
+const { getTenantHomeData } = require("../controllers/tenant.home.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
@@ -19,7 +20,7 @@ router.post("/auth/verify-otp", tenantAuthController.verifyOTP);
 router.post("/auth/reset-password", tenantAuthController.resetPassword);
 
 // ============ TENANT HOME ROUTE (Protected) ============
-router.get("/home", tenantAuthMiddleware, tenantHomeController.getTenantHomeData);
+router.get("/home", tenantAuthMiddleware, getTenantHomeData);
 
 // ============ TENANT PROFILE ROUTES (Protected) ============
 router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile);
