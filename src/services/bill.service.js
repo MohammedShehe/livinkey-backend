@@ -343,7 +343,18 @@ const getBillById = async (billId) => {
         bill.total_paid = parseFloat(bill.total_paid) || 0;
         bill.total_partial_paid = parseFloat(bill.total_partial_paid) || 0;
         bill.total_cash_paid = parseFloat(bill.total_cash_paid) || 0;
-        bill.due_amount = parseFloat(bill.due_amount) || 0;
+        
+        // ============================================================
+        // FIX: DUE AMOUNT CALCULATION
+        // paid_amount already includes online payments + cash payments
+        // from bill_payments table. Do NOT subtract total_cash_paid
+        // again - that would double-count cash payments.
+        // ============================================================
+        // CORRECT: Due = Total + Fine - Total Paid (all payments combined)
+        const totalPaid = parseFloat(bill.paid_amount || 0);
+        bill.due_amount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - totalPaid;
+        // Cap at 0 (can't be negative - overpayment shouldn't show negative due)
+        if (bill.due_amount < 0) bill.due_amount = 0;
     }
     return bill;
 };
@@ -392,8 +403,9 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
         let qrCodeResourceType = null;
         let qrExpiresAt = null;
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                         parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        // FIX: Use the fixed getBillById calculation
+        const fixedBill = await getBillById(billId);
+        const totalDue = fixedBill.due_amount || 0;
 
         if (activeMessage && activeMessage.qr_expires_at && new Date(activeMessage.qr_expires_at) > new Date()) {
             qrCodeUrl = activeMessage.custom_message_qr;
@@ -511,8 +523,9 @@ const requestCashPaymentOTP = async (billId, paymentData) => {
             throw new Error("Bill is already fully paid");
         }
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                         parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        // FIX: Use the fixed getBillById calculation
+        const fixedBill = await getBillById(billId);
+        const totalDue = fixedBill.due_amount || 0;
         
         if (paymentData.amount > totalDue) {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
@@ -571,8 +584,9 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             throw new Error(verification.message);
         }
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                         parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        // FIX: Use the fixed getBillById calculation
+        const fixedBill = await getBillById(billId);
+        const totalDue = fixedBill.due_amount || 0;
         
         if (paymentData.amount > totalDue) {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
@@ -589,9 +603,9 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             notes: paymentData.notes || null
         });
 
+        // Update paid_amount in bills table
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
-        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                                newPaidAmount - parseFloat(bill.total_cash_paid || 0);
+        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
 
         let newStatus = 'paid';
         if (remainingAmount > 0) {
@@ -602,8 +616,11 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
         await BillModel.clearCashPaymentOTP(connection, billId);
 
         const updatedBill = await BillModel.getBillById(billId);
+        
+        // FIX: Recalculate due amount using the fixed calculation
         const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
-                           parseFloat(updatedBill.paid_amount || 0) - parseFloat(updatedBill.total_cash_paid || 0);
+                           parseFloat(updatedBill.paid_amount || 0);
+        const finalDue = newTotalDue < 0 ? 0 : newTotalDue;
 
         if (updatedBill.payment_qr_public_id) {
             try {
@@ -623,8 +640,8 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
         let partialPublicId = null;
         let partialResourceType = null;
 
-        if (newTotalDue > 0) {
-            const qrResult = await regenerateBillQRCodes(billId, updatedBill, newTotalDue);
+        if (finalDue > 0) {
+            const qrResult = await regenerateBillQRCodes(billId, updatedBill, finalDue);
             fullQr = qrResult.fullQr;
             fullPublicId = qrResult.fullPublicId;
             fullResourceType = qrResult.fullResourceType;
@@ -893,8 +910,9 @@ const addPayment = async (billId, paymentData) => {
             throw new Error("Bill is already fully paid");
         }
 
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                         parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        // FIX: Use the fixed getBillById calculation
+        const fixedBill = await getBillById(billId);
+        const totalDue = fixedBill.due_amount || 0;
         
         if (paymentData.amount > totalDue) {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
@@ -909,8 +927,7 @@ const addPayment = async (billId, paymentData) => {
         });
 
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
-        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                                newPaidAmount - parseFloat(bill.total_cash_paid || 0);
+        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
 
         let newStatus = 'paid';
         if (remainingAmount > 0) {
@@ -924,8 +941,11 @@ const addPayment = async (billId, paymentData) => {
         await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
 
         const updatedBill = await BillModel.getBillById(billId);
+        
+        // FIX: Recalculate due amount using the fixed calculation
         const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
-                           parseFloat(updatedBill.paid_amount || 0) - parseFloat(updatedBill.total_cash_paid || 0);
+                           parseFloat(updatedBill.paid_amount || 0);
+        const finalDue = newTotalDue < 0 ? 0 : newTotalDue;
 
         if (updatedBill.payment_qr_public_id) {
             try {
@@ -945,8 +965,8 @@ const addPayment = async (billId, paymentData) => {
         let partialPublicId = null;
         let partialResourceType = null;
 
-        if (newTotalDue > 0) {
-            const qrResult = await regenerateBillQRCodes(billId, updatedBill, newTotalDue);
+        if (finalDue > 0) {
+            const qrResult = await regenerateBillQRCodes(billId, updatedBill, finalDue);
             fullQr = qrResult.fullQr;
             fullPublicId = qrResult.fullPublicId;
             fullResourceType = qrResult.fullResourceType;
@@ -1011,8 +1031,9 @@ const generateBillPaymentOptions = async (billId) => {
         throw new Error("Tenant not found");
     }
 
-    const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                     parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+    // FIX: Use the fixed getBillById calculation
+    const fixedBill = await getBillById(billId);
+    const totalDue = fixedBill.due_amount || 0;
 
     if (totalDue <= 0) {
         throw new Error("No amount due for this bill");

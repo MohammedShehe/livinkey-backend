@@ -16,39 +16,23 @@ router.post("/forgot-password", guestAuthController.forgotPassword);
 router.post("/verify-otp", guestAuthController.verifyOTP);
 router.post("/reset-password", guestAuthController.resetPassword);
 
-// ============ PROTECTED GUEST ROUTES ============
-router.use(guestAuthMiddleware);
+// ============================================================
+// ADMIN ROUTES - Mounted BEFORE guestAuthMiddleware
+// ============================================================
 
-// Dashboard with greeting
-router.get("/dashboard", guestProfileController.getGuestDashboard);
-
-// Profile routes
-router.get("/profile", guestProfileController.getProfile);
-router.put("/profile", guestProfileController.updateProfile);
-router.put("/change-password", guestProfileController.changePassword);
-
-// Guest notifications
-router.get("/notifications/unread/count", guestNotificationController.getUnreadCount);
-router.get("/notifications/unread", guestNotificationController.getUnreadNotifications);
-router.get("/notifications", guestNotificationController.getNotifications);
-router.put("/notifications/:id/read", guestNotificationController.markAsRead);
-router.put("/notifications/read-all", guestNotificationController.markAllAsRead);
-router.delete("/notifications/:id", guestNotificationController.deleteNotification);
-
-// ============ ADMIN ROUTES FOR GUESTS ============
-// Admin routes for guest management - Requires guests module permissions
 const adminRouter = express.Router();
 adminRouter.use(authMiddleware);
 adminRouter.use(roleMiddleware("super_admin", "admin"));
 
-// GET ALL GUESTS - Requires guests.view permission
+// FIX: Removed duplicate "/admin" prefix from all routes
+// The full path becomes: /api/guests/admin/all (correct!)
+
 adminRouter.get(
-    "/admin/all",
+    "/all",  // Was "/admin/all"
     permissionMiddleware("guests", "view"),
     async (req, res) => {
         try {
             const tenantController = require("../controllers/tenant.controller");
-            // Reuse the tenant controller's getAllTenants with role filter
             req.query.role = 'guest';
             await tenantController.getAllTenants(req, res);
         } catch (error) {
@@ -61,9 +45,8 @@ adminRouter.get(
     }
 );
 
-// GET GUEST STATS - Requires guests.view permission
 adminRouter.get(
-    "/admin/stats",
+    "/stats",  // Was "/admin/stats"
     permissionMiddleware("guests", "view"),
     async (req, res) => {
         try {
@@ -79,14 +62,12 @@ adminRouter.get(
     }
 );
 
-// UPDATE GUEST - Requires guests.edit permission
 adminRouter.put(
-    "/admin/:id",
+    "/:id",  // Was "/admin/:id"
     permissionMiddleware("guests", "edit"),
     async (req, res) => {
         try {
             const tenantController = require("../controllers/tenant.controller");
-            // Ensure role is set to guest
             req.body.role = 'guest';
             await tenantController.updateTenant(req, res);
         } catch (error) {
@@ -99,9 +80,8 @@ adminRouter.put(
     }
 );
 
-// DELETE GUEST - Requires guests.delete permission
 adminRouter.delete(
-    "/admin/:id",
+    "/:id",  // Was "/admin/:id"
     permissionMiddleware("guests", "delete"),
     async (req, res) => {
         try {
@@ -117,9 +97,8 @@ adminRouter.delete(
     }
 );
 
-// SEND MESSAGE TO GUEST - Requires guests.edit permission
 adminRouter.post(
-    "/admin/:id/send-message",
+    "/:id/send-message",  // Was "/admin/:id/send-message"
     permissionMiddleware("guests", "edit"),
     async (req, res) => {
         try {
@@ -137,5 +116,23 @@ adminRouter.post(
 
 // Mount admin routes under /admin
 router.use("/admin", adminRouter);
+
+// ============================================================
+// PROTECTED GUEST ROUTES - guestAuthMiddleware ONLY applies here
+// ============================================================
+
+router.use(guestAuthMiddleware);
+
+router.get("/dashboard", guestProfileController.getGuestDashboard);
+router.get("/profile", guestProfileController.getProfile);
+router.put("/profile", guestProfileController.updateProfile);
+router.put("/change-password", guestProfileController.changePassword);
+
+router.get("/notifications/unread/count", guestNotificationController.getUnreadCount);
+router.get("/notifications/unread", guestNotificationController.getUnreadNotifications);
+router.get("/notifications", guestNotificationController.getNotifications);
+router.put("/notifications/:id/read", guestNotificationController.markAsRead);
+router.put("/notifications/read-all", guestNotificationController.markAllAsRead);
+router.delete("/notifications/:id", guestNotificationController.deleteNotification);
 
 module.exports = router;

@@ -73,7 +73,6 @@ const updatePassword = async (id, password) => {
     );
 };
 
-// NEW: Update password and clear must_change_password flag
 const updatePasswordAndClearFlag = async (id, password) => {
     if (!id || !password) return;
     await db.execute(
@@ -299,6 +298,11 @@ const updatePermission = async (
     return result;
 };
 
+// ============================================================
+// FIX: getAdminById no longer filters by role='admin'
+// This allows the auth flow (login/verifyOTP) to fetch full
+// profile for super_admin as well as normal admins.
+// ============================================================
 const getAdminById = async (adminId) => {
     if (!adminId) return null;
     const [rows] = await db.execute(
@@ -323,10 +327,7 @@ const getAdminById = async (adminId) => {
         FROM admins a
         LEFT JOIN admin_permissions ap
         ON a.id = ap.admin_id
-        WHERE
-            a.id=?
-        AND
-            a.role='admin'
+        WHERE a.id=?
         `,
         [adminId]
     );
@@ -402,6 +403,9 @@ const deleteAdmin = async (id) => {
     );
 };
 
+// ============================================================
+// EXPORTS - Make sure all functions are exported properly
+// ============================================================
 module.exports = {
     findByEmail,
     updateOTP,
