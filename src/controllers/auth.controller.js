@@ -48,17 +48,17 @@ exports.login = async (req, res) => {
                 must_change_password: true
             });
 
-            // Return user without OTP
-            delete admin.password;
-            delete admin.otp;
-            delete admin.otp_expiry;
+            // FIX: Fetch full admin record (with permissions) instead of
+            // returning the raw row from findByEmail, which has no
+            // permissions attached at all.
+            const fullAdmin = await Admin.getAdminById(admin.id);
 
             return res.json({
                 success: true,
                 message: "Please change your password before continuing.",
                 must_change_password: true,
                 token,
-                user: admin
+                user: fullAdmin
             });
         }
 
@@ -119,15 +119,21 @@ exports.verifyOTP = async (req, res) => {
 
         const token = generateToken(admin);
 
-        delete admin.password;
-        delete admin.otp;
-        delete admin.otp_expiry;
+        // FIX: The `admin` object here comes from Admin.findByEmail(), a
+        // plain `SELECT * FROM admins` with no join to admin_permissions.
+        // That means every login was handing the frontend an empty
+        // permissions object, regardless of what the super admin had
+        // actually configured on the Admins Management page. Fetch the
+        // full record (name/email/phone/permissions) the same way the
+        // Admins page does, via getAdminById, so the session the client
+        // stores actually reflects granted view/add/edit/delete access.
+        const fullAdmin = await Admin.getAdminById(admin.id);
 
         return res.json({
             success: true,
             message: "Login successful.",
             token,
-            user: admin
+            user: fullAdmin
         });
 
     } catch (error) {
