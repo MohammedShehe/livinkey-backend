@@ -1,17 +1,18 @@
+// middleware/tenant.auth.middleware.js
 const jwt = require("jsonwebtoken");
 
 const tenantAuthMiddleware = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
+        let token = null;
 
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return res.status(401).json({
-                success: false,
-                message: "Access denied. No token provided."
-            });
+        // Check both headers AND query params (for downloads opened in new tab)
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            token = authHeader.split(" ")[1];
+        } else if (req.query && req.query.token) {
+            // Fallback for requests that can't set headers (e.g., window.open/download)
+            token = req.query.token;
         }
-
-        const token = authHeader.split(" ")[1];
 
         if (!token) {
             return res.status(401).json({
