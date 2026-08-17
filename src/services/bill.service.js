@@ -221,6 +221,9 @@ const createBill = async (billData, files = {}) => {
             throw qrError;
         }
 
+        // ============================================================
+        // FIXED: Upload admin QR code when admin attaches one
+        // ============================================================
         let adminQr = null;
         let adminQrPublicId = null;
         let adminQrResourceType = null;
@@ -239,6 +242,7 @@ const createBill = async (billData, files = {}) => {
                     adminQrPublicId = uploadResult.public_id;
                     adminQrResourceType = uploadResult.resource_type;
                     uploadedCloudFiles.push({ public_id: adminQrPublicId, resource_type: adminQrResourceType });
+                    console.log("Admin QR uploaded successfully:", adminQr);
                 }
             } catch (adminQrError) {
                 console.warn("Admin-uploaded paymentQr failed to upload:", adminQrError.message);
@@ -248,6 +252,9 @@ const createBill = async (billData, files = {}) => {
         const sentAt = new Date();
         const validUntil = new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+        // ============================================================
+        // FIXED: Pass admin_qr to BillModel.createBill
+        // ============================================================
         const billId = await BillModel.createBill(connection, {
             tenant_id: billData.tenant_id,
             rent_amount: parseFloat(billData.rent_amount),
@@ -264,6 +271,12 @@ const createBill = async (billData, files = {}) => {
             partial_payment_qr: partialQr,
             partial_payment_qr_public_id: partialQrPublicId,
             partial_payment_qr_resource_type: partialQrResourceType,
+            // ============================================================
+            // FIXED: Pass admin_qr fields to the model
+            // ============================================================
+            admin_qr: adminQr,
+            admin_qr_public_id: adminQrPublicId,
+            admin_qr_resource_type: adminQrResourceType,
             sent_at: sentAt,
             valid_until: validUntil,
             created_by: billData.created_by,
@@ -285,7 +298,7 @@ const createBill = async (billData, files = {}) => {
                 paymentQr,
                 partialQr,
                 meterImage,
-                adminQr
+                adminQr  // Pass adminQr to email as well
             );
             emailSent = true;
         } catch (emailError) {

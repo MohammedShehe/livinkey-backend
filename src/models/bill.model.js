@@ -19,6 +19,9 @@ const createBill = async (connection, billData) => {
             partial_payment_qr,
             partial_payment_qr_public_id,
             partial_payment_qr_resource_type,
+            admin_qr,
+            admin_qr_public_id,
+            admin_qr_resource_type,
             sent_at,
             valid_until,
             created_by,
@@ -26,7 +29,7 @@ const createBill = async (connection, billData) => {
             last_fine_email_sent,
             initial_email_sent,
             qr_expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
@@ -44,6 +47,9 @@ const createBill = async (connection, billData) => {
             billData.partial_payment_qr || null,
             billData.partial_payment_qr_public_id || null,
             billData.partial_payment_qr_resource_type || null,
+            billData.admin_qr || null,
+            billData.admin_qr_public_id || null,
+            billData.admin_qr_resource_type || null,
             billData.sent_at,
             billData.valid_until,
             billData.created_by,
