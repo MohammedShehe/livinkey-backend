@@ -163,7 +163,9 @@ exports.getAllPGs = async (req, res) => {
     }
 };
 
-// Get PG Details by ID (Public - No Auth)
+// ============================================================
+// FIXED: Get PG Details by ID - Now includes room counts AND images
+// ============================================================
 exports.getPGDetails = async (req, res) => {
     try {
         const { id } = req.params;
@@ -183,9 +185,15 @@ exports.getPGDetails = async (req, res) => {
                 p.created_at,
                 p.updated_at,
                 ROUND(COALESCE(AVG(tf.overall_rating), 0), 1) as overall_rating,
-                COUNT(DISTINCT tf.id) as total_reviews
+                COUNT(DISTINCT tf.id) as total_reviews,
+                COUNT(DISTINCT r.id) as total_rooms,
+                COALESCE(SUM(r.capacity), 0) as total_capacity,
+                COALESCE(SUM(ro.occupied_count), 0) as total_occupied
             FROM pgs p
             LEFT JOIN tenant_feedbacks tf ON p.id = tf.pg_id
+            LEFT JOIN floors f ON p.id = f.pg_id
+            LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
+            LEFT JOIN room_occupancy ro ON r.id = ro.room_id
             WHERE p.id = ?
             GROUP BY p.id
             `,
@@ -202,6 +210,15 @@ exports.getPGDetails = async (req, res) => {
 
         const pg = pgRows[0];
 
+        const totalRooms = parseInt(pg.total_rooms) || 0;
+        const totalCapacity = parseInt(pg.total_capacity) || 0;
+        const totalOccupied = parseInt(pg.total_occupied) || 0;
+
+        pg.status_text = totalOccupied === 0 ? 'Vacant' :
+                         totalOccupied >= totalCapacity ? 'Full Occupied' :
+                         'Partially Occupied';
+        pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
+
         const [amenities] = await connection.execute(
             `
             SELECT id, amenity_name, is_custom 
@@ -213,16 +230,20 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.amenities = amenities;
 
+        // ============================================================
+        // FIXED: Get images as flat array of URLs
+        // ============================================================
         const [images] = await connection.execute(
             `
-            SELECT id, image_url, display_order 
+            SELECT image_url 
             FROM pg_images 
             WHERE pg_id = ? 
             ORDER BY display_order ASC
             `,
             [id]
         );
-        pg.images = images;
+        // Return as flat array of strings
+        pg.images = images.map(img => img.image_url);
 
         const [floors] = await connection.execute(
             `
@@ -284,10 +305,6 @@ exports.getPGDetails = async (req, res) => {
             [id]
         );
         pg.reviews = reviews;
-
-        const totalRooms = floors.reduce((sum, f) => sum + f.total_rooms, 0);
-        const totalCapacity = floors.reduce((sum, f) => sum + f.total_capacity, 0);
-        const totalOccupied = floors.reduce((sum, f) => sum + f.total_occupied, 0);
 
         pg.stats = {
             total_rooms: totalRooms,
