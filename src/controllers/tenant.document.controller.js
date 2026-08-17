@@ -176,7 +176,44 @@ const deleteAllDocumentsAdmin = async (req, res) => {
     }
 };
 
+// ============================================================
+// FIXED: Download multiple documents as zip - Using buffer approach
+// ============================================================
 const downloadDocuments = async (req, res) => {
+    try {
+        const { documentIds } = req.body;
+
+        if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Document IDs are required"
+            });
+        }
+
+        // Use the buffer-based download method
+        const zipBuffer = await tenantDocumentService.downloadDocumentsAsZipBuffer(documentIds);
+
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="documents_${Date.now()}.zip"`);
+        res.setHeader('Content-Length', zipBuffer.length);
+        
+        // Send the zip buffer
+        return res.send(zipBuffer);
+
+    } catch (error) {
+        console.error("Download Documents Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+// ============================================================
+// OPTIONAL: Download as file path (if you need temp file approach)
+// ============================================================
+const downloadDocumentsAsFile = async (req, res) => {
     try {
         const { documentIds } = req.body;
 
@@ -189,9 +226,14 @@ const downloadDocuments = async (req, res) => {
 
         const zipFilePath = await tenantDocumentService.downloadDocumentsAsZip(documentIds);
 
-        res.download(zipFilePath, 'documents.zip', (err) => {
+        res.download(zipFilePath, `documents_${Date.now()}.zip`, (err) => {
+            // Clean up the temp file after download
             if (fs.existsSync(zipFilePath)) {
-                fs.unlinkSync(zipFilePath);
+                try {
+                    fs.unlinkSync(zipFilePath);
+                } catch (unlinkError) {
+                    console.error("Failed to delete temp file:", unlinkError);
+                }
             }
             if (err) {
                 console.error("Download Error:", err);
@@ -234,5 +276,6 @@ module.exports = {
     deleteDocumentAdmin,
     deleteAllDocumentsAdmin,
     downloadDocuments,
+    downloadDocumentsAsFile, // Export both methods
     getTenantDocumentsAdmin
 };

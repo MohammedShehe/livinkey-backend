@@ -3,10 +3,11 @@ const TenantDocumentModel = require("../models/tenant.document.model");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS } = require("../config/document.types");
-const archiver = require('archiver');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const axios = require('axios');
+const JSZip = require('jszip'); // Using JSZip instead of archiver
 
 // Get required documents based on tenant residency
 const getRequiredDocuments = (residency) => {
@@ -236,62 +237,139 @@ const getDocumentTypesByResidency = (residency) => {
     return getRequiredDocuments(residency);
 };
 
-// Download multiple documents as zip
+// ============================================================
+// FIXED: Download multiple documents as zip - Using JSZip
+// ============================================================
 const downloadDocumentsAsZip = async (documentIds) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const documents = [];
-            for (const id of documentIds) {
-                const doc = await TenantDocumentModel.getDocumentById(id);
-                if (doc) {
-                    documents.push(doc);
-                }
+    try {
+        const documents = [];
+        for (const id of documentIds) {
+            const doc = await TenantDocumentModel.getDocumentById(id);
+            if (doc) {
+                documents.push(doc);
             }
-
-            if (documents.length === 0) {
-                throw new Error("No documents found to download");
-            }
-
-            // Create temp directory
-            const tempDir = os.tmpdir();
-            const zipFileName = `documents_${Date.now()}.zip`;
-            const zipFilePath = path.join(tempDir, zipFileName);
-
-            // Create zip archive
-            const output = fs.createWriteStream(zipFilePath);
-            const archive = archiver('zip', {
-                zlib: { level: 9 }
-            });
-
-            archive.pipe(output);
-
-            // Add each document to zip
-            for (const doc of documents) {
-                try {
-                    // Download file from Cloudinary
-                    const response = await fetch(doc.document_url);
-                    const buffer = await response.arrayBuffer();
-                    const fileName = `${doc.tenant_name || 'tenant'}_${doc.document_type}_${Date.now()}.${doc.document_resource_type === 'image' ? 'jpg' : 'pdf'}`;
-                    archive.append(Buffer.from(buffer), { name: fileName });
-                } catch (error) {
-                    console.error(`Failed to download document ${doc.id}:`, error);
-                }
-            }
-
-            await archive.finalize();
-
-            output.on('close', () => {
-                resolve(zipFilePath);
-            });
-
-            output.on('error', (error) => {
-                reject(error);
-            });
-
-        } catch (error) {
-            reject(error);
         }
-    });
+
+        if (documents.length === 0) {
+            throw new Error("No documents found to download");
+        }
+
+        // Create a new JSZip instance
+        const zip = new JSZip();
+
+        let addedCount = 0;
+
+        // Download each document and add to zip
+        for (const doc of documents) {
+            try {
+                // Get file extension from URL
+                let extension = 'jpg';
+                if (doc.document_url) {
+                    const urlParts = doc.document_url.split('.');
+                    const ext = urlParts[urlParts.length - 1].split('?')[0];
+                    if (ext && ext.length <= 5) {
+                        extension = ext;
+                    }
+                }
+                
+                const fileName = `${doc.tenant_name || 'tenant'}_${doc.document_type || 'document'}_${Date.now()}.${extension}`;
+                
+                // Download the file from Cloudinary
+                const response = await axios({
+                    method: 'get',
+                    url: doc.document_url,
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                });
+
+                // Add the file to the zip
+                zip.file(fileName, response.data);
+                addedCount++;
+                
+            } catch (error) {
+                console.error(`Failed to download document ${doc.id}:`, error.message);
+                // Continue with other documents
+            }
+        }
+
+        if (addedCount === 0) {
+            throw new Error("Failed to download any documents");
+        }
+
+        // Generate the zip file
+        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+        // Save to temp file
+        const tempDir = os.tmpdir();
+        const zipFileName = `documents_${Date.now()}.zip`;
+        const zipFilePath = path.join(tempDir, zipFileName);
+        
+        fs.writeFileSync(zipFilePath, zipBuffer);
+
+        return zipFilePath;
+
+    } catch (error) {
+        console.error("Download Documents Error:", error);
+        throw error;
+    }
+};
+
+// Alternative: Return zip as buffer directly (for streaming response)
+const downloadDocumentsAsZipBuffer = async (documentIds) => {
+    try {
+        const documents = [];
+        for (const id of documentIds) {
+            const doc = await TenantDocumentModel.getDocumentById(id);
+            if (doc) {
+                documents.push(doc);
+            }
+        }
+
+        if (documents.length === 0) {
+            throw new Error("No documents found to download");
+        }
+
+        const zip = new JSZip();
+        let addedCount = 0;
+
+        for (const doc of documents) {
+            try {
+                let extension = 'jpg';
+                if (doc.document_url) {
+                    const urlParts = doc.document_url.split('.');
+                    const ext = urlParts[urlParts.length - 1].split('?')[0];
+                    if (ext && ext.length <= 5) {
+                        extension = ext;
+                    }
+                }
+                
+                const fileName = `${doc.tenant_name || 'tenant'}_${doc.document_type || 'document'}_${Date.now()}.${extension}`;
+                
+                const response = await axios({
+                    method: 'get',
+                    url: doc.document_url,
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                });
+
+                zip.file(fileName, response.data);
+                addedCount++;
+                
+            } catch (error) {
+                console.error(`Failed to download document ${doc.id}:`, error.message);
+            }
+        }
+
+        if (addedCount === 0) {
+            throw new Error("Failed to download any documents");
+        }
+
+        return await zip.generateAsync({ type: 'nodebuffer' });
+
+    } catch (error) {
+        console.error("Download Documents Error:", error);
+        throw error;
+    }
 };
 
 module.exports = {
@@ -304,5 +382,6 @@ module.exports = {
     getDocumentsAdmin,
     getDocumentTypesByResidency,
     getRequiredDocuments,
-    downloadDocumentsAsZip
+    downloadDocumentsAsZip,
+    downloadDocumentsAsZipBuffer
 };
