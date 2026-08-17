@@ -1,22 +1,45 @@
 const db = require("../config/db");
 
-// Get Welcome Message for Public (NEW)
+// ============================================================
+// FIXED: Get Welcome Message with dynamic stats
+// ============================================================
 exports.getWelcomeMessage = async (req, res) => {
-    const hours = new Date().getHours();
-    let greeting = '';
-    if (hours >= 5 && hours < 12) greeting = 'Good Morning';
-    else if (hours >= 12 && hours < 17) greeting = 'Good Afternoon';
-    else if (hours >= 17 && hours < 21) greeting = 'Good Evening';
-    else greeting = 'Good Night';
+    try {
+        const connection = await db.getConnection();
+        
+        // Get total active PGs count
+        const [pgCount] = await connection.execute(
+            `SELECT COUNT(*) as total FROM pgs WHERE is_active = 1`
+        );
+        const totalPGs = pgCount[0]?.total || 0;
+        
+        connection.release();
 
-    return res.json({
-        success: true,
-        data: {
-            greeting: greeting,
-            message: 'Welcome to Livinkey! Find your perfect PG today.',
-            description: 'Browse through our verified PGs, check reviews, and find the perfect place to stay.'
-        }
-    });
+        const hours = new Date().getHours();
+        let greeting = '';
+        if (hours >= 5 && hours < 12) greeting = 'Good Morning';
+        else if (hours >= 12 && hours < 17) greeting = 'Good Afternoon';
+        else if (hours >= 17 && hours < 21) greeting = 'Good Evening';
+        else greeting = 'Good Night';
+
+        return res.json({
+            success: true,
+            data: {
+                greeting: greeting,
+                total_pgs: totalPGs,
+                message: totalPGs > 0 
+                    ? `Find your perfect home among ${totalPGs} PGs` 
+                    : 'Find your perfect home',
+                description: 'Browse through our verified PGs, check reviews, and find the perfect place to stay.'
+            }
+        });
+    } catch (error) {
+        console.error("Get Welcome Message Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
 };
 
 // Get all PGs with details (Public - No Auth)
@@ -63,7 +86,7 @@ exports.getAllPGs = async (req, res) => {
             LEFT JOIN room_occupancy ro ON r.id = ro.room_id
             LEFT JOIN pg_amenities pa ON p.id = pa.pg_id
             LEFT JOIN tenant_feedbacks tf ON p.id = tf.pg_id
-            WHERE 1=1
+            WHERE p.is_active = 1
         `;
 
         const params = [];
@@ -128,6 +151,8 @@ exports.getAllPGs = async (req, res) => {
 
         const [rows] = await connection.execute(query, params);
 
+        // Calculate vacancy count and update status_text
+        let vacantCount = 0;
         for (const pg of rows) {
             const [images] = await connection.execute(
                 `
@@ -144,6 +169,10 @@ exports.getAllPGs = async (req, res) => {
             pg.status_text = pg.total_occupied === 0 ? 'Vacant' :
                             pg.total_occupied >= pg.total_capacity ? 'Full Occupied' :
                             'Partially Occupied';
+            
+            if (pg.status_text === 'Vacant') {
+                vacantCount++;
+            }
         }
 
         connection.release();
@@ -151,6 +180,7 @@ exports.getAllPGs = async (req, res) => {
         return res.json({
             success: true,
             count: rows.length,
+            vacant_count: vacantCount,
             data: rows
         });
 
@@ -164,7 +194,7 @@ exports.getAllPGs = async (req, res) => {
 };
 
 // ============================================================
-// FIXED: Get PG Details by ID - Now includes room counts AND images
+// FIXED: Get PG Details by ID
 // ============================================================
 exports.getPGDetails = async (req, res) => {
     try {
@@ -230,9 +260,6 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.amenities = amenities;
 
-        // ============================================================
-        // FIXED: Get images as flat array of URLs
-        // ============================================================
         const [images] = await connection.execute(
             `
             SELECT image_url 
@@ -242,7 +269,6 @@ exports.getPGDetails = async (req, res) => {
             `,
             [id]
         );
-        // Return as flat array of strings
         pg.images = images.map(img => img.image_url);
 
         const [floors] = await connection.execute(
@@ -339,14 +365,9 @@ exports.getPGStats = async (req, res) => {
         const connection = await db.getConnection();
 
         const [totalResult] = await connection.execute(
-            `SELECT COUNT(*) as total FROM pgs`
+            `SELECT COUNT(*) as total FROM pgs WHERE is_active = 1`
         );
         const total = totalResult[0].total;
-
-        const [activeResult] = await connection.execute(
-            `SELECT COUNT(*) as active FROM pgs WHERE is_active = 1`
-        );
-        const active = activeResult[0].active;
 
         const [statusResult] = await connection.execute(
             `
@@ -388,11 +409,12 @@ exports.getPGStats = async (req, res) => {
             success: true,
             data: {
                 total_pgs: total,
-                active_pgs: active,
-                inactive_pgs: total - active,
                 vacant_pgs: vacant,
                 full_pgs: full,
-                partial_pgs: partial
+                partial_pgs: partial,
+                // Additional useful stats
+                has_pgs: total > 0,
+                vacancy_percentage: total > 0 ? Math.round((vacant / total) * 100) : 0
             }
         });
 
