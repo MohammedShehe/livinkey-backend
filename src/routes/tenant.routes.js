@@ -1,26 +1,32 @@
 const express = require("express");
 const router = express.Router();
 
-// FIXED: Import each controller properly
 const tenantController = require("../controllers/tenant.controller");
 const tenantAuthController = require("../controllers/tenant.auth.controller");
 const tenantProfileController = require("../controllers/tenant.profile.controller");
-const { getTenantHomeData } = require("../controllers/tenant.home.controller");
+const tenantHomeController = require("../controllers/tenant.home.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
 const upload = require("../middleware/upload.middleware");
 
-// ============ TENANT AUTH ROUTES (Public) ============
+// ============ TENANT AUTH ROUTES ============
+// Public routes (no authentication needed)
 router.post("/auth/login", tenantAuthController.login);
-router.post("/auth/change-password", tenantAuthController.changePassword);
 router.post("/auth/forgot-password", tenantAuthController.forgotPassword);
 router.post("/auth/verify-otp", tenantAuthController.verifyOTP);
 router.post("/auth/reset-password", tenantAuthController.resetPassword);
 
+// ============================================================
+// FIXED: Change password route now requires tenant authentication
+// This is the key fix - the route now uses tenantAuthMiddleware
+// so req.tenant is populated with the tenant's ID from the token
+// ============================================================
+router.post("/auth/change-password", tenantAuthMiddleware, tenantAuthController.changePassword);
+
 // ============ TENANT HOME ROUTE (Protected) ============
-router.get("/home", tenantAuthMiddleware, getTenantHomeData);
+router.get("/home", tenantAuthMiddleware, tenantHomeController.getTenantHomeData);
 
 // ============ TENANT PROFILE ROUTES (Protected) ============
 router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile);

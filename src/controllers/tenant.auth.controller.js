@@ -84,6 +84,9 @@ exports.login = async (req, res) => {
                 role: 'tenant'
             });
 
+            // Remove sensitive data
+            delete tenant.password;
+
             return res.json({
                 success: true,
                 message: "Please change your password.",
@@ -125,17 +128,23 @@ exports.login = async (req, res) => {
     }
 };
 
+// ============================================================
+// FIXED: changePassword - Now uses tenantAuthMiddleware via route
+// The tenant ID comes from req.tenant (set by tenantAuthMiddleware)
+// ============================================================
 exports.changePassword = async (req, res) => {
     try {
-        const tenantId = req.tenant?.id || req.body.tenant_id;
-        const { current_password, new_password, confirm_password } = req.body;
+        // Get tenant ID from authenticated token (set by tenantAuthMiddleware)
+        const tenantId = req.tenant?.id;
 
         if (!tenantId) {
             return res.status(401).json({
                 success: false,
-                message: "Unauthorized. Tenant ID required."
+                message: "Unauthorized. Please login again."
             });
         }
+
+        const { current_password, new_password, confirm_password } = req.body;
 
         if (!current_password || !new_password || !confirm_password) {
             return res.status(400).json({
@@ -200,7 +209,7 @@ exports.changePassword = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "Password changed successfully."
+            message: "Password changed successfully. Please login again."
         });
 
     } catch (error) {
