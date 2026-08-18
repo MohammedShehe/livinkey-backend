@@ -13,8 +13,9 @@ const createTenant = async (connection, tenantData) => {
             gender,
             password,
             created_by,
-            residency
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            residency,
+            must_change_password
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             tenantData.role,
@@ -26,7 +27,22 @@ const createTenant = async (connection, tenantData) => {
             tenantData.gender,
             tenantData.password,
             tenantData.created_by,
-            tenantData.residency || null
+            tenantData.residency || null,
+            // ============================================================
+            // FIX: Tenants (and guests) created by an admin are given an
+            // auto-generated temporary password (see tenant.service.js ->
+            // generatePassword()). The `must_change_password` column
+            // defaults to 0 in the schema, so without explicitly setting
+            // it to 1 here, the "force change password on first login"
+            // flow in tenant.auth.controller.js / the mobile app's
+            // LoginScreen was never actually triggered — the flag was
+            // simply never turned on for any tenant. Only tenants (role
+            // === 'tenant') go through the mandatory PG onboarding flow
+            // with an admin-set password; guests set their own password
+            // at registration time, so they don't need to be forced to
+            // change it.
+            // ============================================================
+            tenantData.role === 'tenant' ? 1 : 0
         ]
     );
     return result.insertId;
@@ -243,6 +259,7 @@ const findById = async (id) => {
             t.phone,
             t.gender,
             t.password,
+            t.must_change_password,
             t.created_at,
             t.updated_at,
             td.pg_id,
