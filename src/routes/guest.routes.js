@@ -5,6 +5,7 @@ const guestAuthController = require("../controllers/guest.auth.controller");
 const guestProfileController = require("../controllers/guest.profile.controller");
 const guestNotificationController = require("../controllers/guest.notification.controller");
 const guestAuthMiddleware = require("../middleware/guest.auth.middleware");
+const guestOrTenantAuthMiddleware = require("../middleware/guest.or.tenant.auth.middleware");
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
@@ -17,9 +18,17 @@ router.post("/verify-otp", guestAuthController.verifyOTP);
 router.post("/reset-password", guestAuthController.resetPassword);
 
 // ============================================================
+// FIXED: Use guestOrTenantAuthMiddleware for routes that accept BOTH
+// guest AND tenant tokens (for the "Enter as Guest" feature)
+// ============================================================
+router.get("/dashboard", guestOrTenantAuthMiddleware, guestProfileController.getGuestDashboard);
+router.get("/profile", guestOrTenantAuthMiddleware, guestProfileController.getProfile);
+router.put("/profile", guestOrTenantAuthMiddleware, guestProfileController.updateProfile);
+router.post("/change-password", guestOrTenantAuthMiddleware, guestProfileController.changePassword);
+
+// ============================================================
 // ADMIN ROUTES - Mounted BEFORE guestAuthMiddleware
 // ============================================================
-
 const adminRouter = express.Router();
 adminRouter.use(authMiddleware);
 adminRouter.use(roleMiddleware("super_admin", "admin"));
@@ -33,9 +42,6 @@ adminRouter.get(
             const tenantService = require("../services/tenant.service");
             const { search, gender, bill_status, pg_id } = req.query;
 
-            // Pass 'guest' directly to the service layer instead of
-            // mutating req.query (which Express re-parses from the URL
-            // on every access, silently dropping the injected role).
             const guests = await tenantService.getAllTenants(
                 search,
                 'guest',
@@ -136,15 +142,12 @@ adminRouter.post(
 router.use("/admin", adminRouter);
 
 // ============================================================
-// PROTECTED GUEST ROUTES - guestAuthMiddleware ONLY applies here
+// PROTECTED GUEST ROUTES - ONLY for real guests
+// These routes require guestAuthMiddleware (rejects tenant tokens)
 // ============================================================
 
+// Guest notifications - only real guests can access these
 router.use(guestAuthMiddleware);
-
-router.get("/dashboard", guestProfileController.getGuestDashboard);
-router.get("/profile", guestProfileController.getProfile);
-router.put("/profile", guestProfileController.updateProfile);
-router.put("/change-password", guestProfileController.changePassword);
 
 router.get("/notifications/unread/count", guestNotificationController.getUnreadCount);
 router.get("/notifications/unread", guestNotificationController.getUnreadNotifications);
