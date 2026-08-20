@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const TenantNotificationModel = require("../models/tenant.notification.model");
 const TenantModel = require("../models/tenant.model");
+const firebase = require("../config/firebase");
 
 /**
  * Notification Types for Tenants
@@ -72,7 +73,6 @@ const TENANT_NOTIFICATION_TYPES = {
         color: '#e74c3c',
         linkPrefix: '/payments/'
     },
-    // NEW: Feedback submission confirmation
     FEEDBACK_SUBMITTED: {
         type: 'feedback_submitted',
         icon: '⭐',
@@ -82,15 +82,21 @@ const TENANT_NOTIFICATION_TYPES = {
 };
 
 /**
- * Send notification to a single tenant
+ * Send notification to a single tenant (with push notification support)
+ * @param {number} tenantId - Tenant ID
+ * @param {string} type - Notification type key
+ * @param {Object} data - Notification data
+ * @param {Object} pushData - Optional push notification data (title, body)
+ * @returns {Promise<number|null>} Notification ID or null
  */
-const sendTenantNotification = async (tenantId, type, data) => {
+const sendTenantNotification = async (tenantId, type, data, pushData = null) => {
     try {
         const config = TENANT_NOTIFICATION_TYPES[type];
         if (!config) {
             throw new Error(`Invalid notification type: ${type}`);
         }
 
+        // Create notification in database
         const notificationId = await TenantNotificationModel.createTenantNotification(tenantId, {
             type: config.type,
             title: data.title,
@@ -102,6 +108,35 @@ const sendTenantNotification = async (tenantId, type, data) => {
             color: data.color || config.color
         });
 
+        // ============================================================
+        // NEW: Send push notification if enabled
+        // ============================================================
+        if (process.env.ENABLE_PUSH_NOTIFICATIONS === 'true') {
+            try {
+                const fcmTokens = await firebase.getTenantFCMTokens(tenantId);
+                
+                if (fcmTokens.length > 0) {
+                    const pushTitle = pushData?.title || data.title;
+                    const pushBody = pushData?.body || data.message;
+                    
+                    await firebase.sendPushNotificationToMultiple(
+                        fcmTokens,
+                        {
+                            title: pushTitle,
+                            body: pushBody,
+                        },
+                        {
+                            type: type.toLowerCase(),
+                            entity_id: data.entity_id || '',
+                            action: 'open',
+                        }
+                    );
+                }
+            } catch (pushError) {
+                console.error('Failed to send push notification:', pushError);
+            }
+        }
+
         return notificationId;
     } catch (error) {
         console.error('Error sending tenant notification:', error);
@@ -110,11 +145,16 @@ const sendTenantNotification = async (tenantId, type, data) => {
 };
 
 /**
- * Send notification to multiple tenants
+ * Send notification to multiple tenants (with push notification support)
+ * @param {Array<number>} tenantIds - Array of tenant IDs
+ * @param {string} type - Notification type key
+ * @param {Object} data - Notification data
+ * @param {Object} pushData - Optional push notification data
+ * @returns {Promise<number>} Number of tenants notified
  */
-const sendNotificationsToTenants = async (tenantIds, type, data) => {
+const sendNotificationsToTenants = async (tenantIds, type, data, pushData = null) => {
     try {
-        if (!tenantIds || tenantIds.length === 0) return [];
+        if (!tenantIds || tenantIds.length === 0) return 0;
 
         const config = TENANT_NOTIFICATION_TYPES[type];
         if (!config) {
@@ -132,7 +172,41 @@ const sendNotificationsToTenants = async (tenantIds, type, data) => {
             color: data.color || config.color
         };
 
+        // Create notifications in database
         await TenantNotificationModel.createNotificationsForTenants(tenantIds, notificationData);
+
+        // ============================================================
+        // NEW: Send push notifications if enabled
+        // ============================================================
+        if (process.env.ENABLE_PUSH_NOTIFICATIONS === 'true') {
+            try {
+                // Get all FCM tokens for all tenants
+                for (const tenantId of tenantIds) {
+                    const fcmTokens = await firebase.getTenantFCMTokens(tenantId);
+                    
+                    if (fcmTokens.length > 0) {
+                        const pushTitle = pushData?.title || data.title;
+                        const pushBody = pushData?.body || data.message;
+                        
+                        await firebase.sendPushNotificationToMultiple(
+                            fcmTokens,
+                            {
+                                title: pushTitle,
+                                body: pushBody,
+                            },
+                            {
+                                type: type.toLowerCase(),
+                                entity_id: data.entity_id || '',
+                                action: 'open',
+                            }
+                        );
+                    }
+                }
+            } catch (pushError) {
+                console.error('Failed to send push notifications:', pushError);
+            }
+        }
+
         return tenantIds.length;
     } catch (error) {
         console.error('Error sending notifications to tenants:', error);
@@ -273,7 +347,6 @@ const generateTenantNotificationMessages = {
         entity_type: 'payment'
     }),
 
-    // NEW: Feedback submission confirmation message
     feedbackSubmitted: () => ({
         title: 'Thank You for Your Feedback!',
         message: 'We appreciate you taking the time to share your experience with us.',

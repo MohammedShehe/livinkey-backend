@@ -1,4 +1,16 @@
 # ===========================
+# Firebase (SECURITY CRITICAL - NEVER COMMIT)
+# ===========================
+src/firebase-service-account.json
+firebase-service-account.json
+*.p12
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+
+# ===========================
 # Dependencies
 # ===========================
 node_modules/
@@ -55,19 +67,43 @@ uploads/
 public/uploads/
 
 # ===========================
+# Secrets & Credentials
+# ===========================
+*.secret
+secrets/
+credentials/
+*.keystore
+*.jks
+
+# ===========================
 # IDEs
 # ===========================
 .vscode/
 .idea/
+*.iml
+*.ipr
+*.iws
 
 # ===========================
 # OS Files
 # ===========================
 .DS_Store
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
 # ===========================
 # Misc
 # ===========================
 *.swp
 *.swo
+*.backup
+*.bak
+*.orig
+
+# ===========================
+# Package Manager
+# ===========================
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
