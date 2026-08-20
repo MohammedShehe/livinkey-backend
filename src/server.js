@@ -93,8 +93,12 @@ async function startServer() {
         });
         console.log('📅 Payment reminder checker scheduled to run daily at 8:00 AM');
 
-        app.listen(PORT, () => {
-            console.log(`🚀 Server running on http://localhost:${PORT}`);
+        // ════════════════════════════════════════════════════════════════
+        // 🔥 FIX: Listen on ALL network interfaces (0.0.0.0)
+        // ════════════════════════════════════════════════════════════════
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+            console.log(`📱 Access from your phone at: http://<YOUR_IP>:${PORT}`);
         });
 
     } catch (error) {

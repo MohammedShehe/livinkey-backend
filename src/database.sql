@@ -41,7 +41,7 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Happy Living\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-17 20:31:40','2026-08-18 02:18:54'),(2,1,'tenant_registered','New Tenant Registered','Mohammed Aminu has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-17 20:35:14','2026-08-18 02:18:54'),(3,1,'feedback_submitted','New Feedback Received','Mohammed Aminu gave 9.2/10 rating for Happy Living',1,'feedback','/feedbacks/1','⭐','#f39c12',1,'2026-08-17 20:50:08','2026-08-18 02:21:09'),(4,1,'bill_created','New Bill Generated','Bill of ₹12500.00 created for undefined',1,'bill','/bills/1','?','#3498db',1,'2026-08-17 20:53:11','2026-08-18 02:28:44'),(5,1,'maintenance_created','New Maintenance Request','Mohammed Aminu requested AC for Room 402',1,'maintenance','/maintenance/1','?','#3498db',1,'2026-08-17 20:55:17','2026-08-18 02:28:44'),(6,1,'maintenance_updated','Maintenance Request Started','AC request for Room 402 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:55:39','2026-08-18 02:28:44'),(7,1,'maintenance_updated','Maintenance Request Completed','AC request for Room 402 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:57:47','2026-08-18 02:28:44'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-18 08:14:23','2026-08-18 14:01:56');
+INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Happy Living\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-17 20:31:40','2026-08-18 02:18:54'),(2,1,'tenant_registered','New Tenant Registered','Mohammed Aminu has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-17 20:35:14','2026-08-18 02:18:54'),(3,1,'feedback_submitted','New Feedback Received','Mohammed Aminu gave 9.2/10 rating for Happy Living',1,'feedback','/feedbacks/1','⭐','#f39c12',1,'2026-08-17 20:50:08','2026-08-18 02:21:09'),(4,1,'bill_created','New Bill Generated','Bill of ₹12500.00 created for undefined',1,'bill','/bills/1','?','#3498db',1,'2026-08-17 20:53:11','2026-08-18 02:28:44'),(5,1,'maintenance_created','New Maintenance Request','Mohammed Aminu requested AC for Room 402',1,'maintenance','/maintenance/1','?','#3498db',1,'2026-08-17 20:55:17','2026-08-18 02:28:44'),(6,1,'maintenance_updated','Maintenance Request Started','AC request for Room 402 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:55:39','2026-08-18 02:28:44'),(7,1,'maintenance_updated','Maintenance Request Completed','AC request for Room 402 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:57:47','2026-08-18 02:28:44'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-18 08:14:23','2026-08-18 14:01:56'),(9,1,'bill_created','New Bill Generated','Bill of ₹11500.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-20 07:44:50',NULL);
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -227,7 +227,7 @@ CREATE TABLE `bills` (
   KEY `idx_qr_expires_at` (`qr_expires_at`),
   CONSTRAINT `fk_bills_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_bills_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -236,6 +236,7 @@ CREATE TABLE `bills` (
 
 LOCK TABLES `bills` WRITE;
 /*!40000 ALTER TABLE `bills` DISABLE KEYS */;
+INSERT INTO `bills` VALUES (2,3,10000.00,1200.00,NULL,NULL,NULL,300.00,0.00,11500.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787211882/livinkey/bills/qr/idk19ldbg9tnypxttypv.png','livinkey/bills/qr/idk19ldbg9tnypxttypv','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787211883/livinkey/bills/qr/ce0ymk9taqmfsdp1bmv0.png','livinkey/bills/qr/ce0ymk9taqmfsdp1bmv0','image','2026-08-20 13:14:43','2026-08-27 13:14:43',1,'2026-08-20 07:44:43','2026-08-20 07:44:43',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `bills` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -684,6 +685,39 @@ INSERT INTO `tenant_details` VALUES (2,3,1,1,'international','null','null','C1-5
 UNLOCK TABLES;
 
 --
+-- Table structure for table `tenant_devices`
+--
+
+DROP TABLE IF EXISTS `tenant_devices`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant_devices` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `fcm_token` varchar(255) NOT NULL,
+  `device_type` enum('android','ios','web') DEFAULT 'android',
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_tenant_device` (`tenant_id`,`fcm_token`),
+  KEY `idx_tenant_devices_tenant_id` (`tenant_id`),
+  KEY `idx_tenant_devices_fcm_token` (`fcm_token`),
+  KEY `idx_tenant_devices_is_active` (`is_active`),
+  CONSTRAINT `tenant_devices_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tenant_devices`
+--
+
+LOCK TABLES `tenant_devices` WRITE;
+/*!40000 ALTER TABLE `tenant_devices` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tenant_devices` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `tenant_documents`
 --
 
@@ -782,7 +816,7 @@ CREATE TABLE `tenant_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -791,6 +825,7 @@ CREATE TABLE `tenant_notifications` (
 
 LOCK TABLES `tenant_notifications` WRITE;
 /*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
+INSERT INTO `tenant_notifications` VALUES (5,2,'bill_created','New Bill Generated','A new bill of ₹11500.00 has been generated for you.',2,'bill','/tenant-payments/bill','?','#3498db',0,NULL,'2026-08-20 07:44:50');
 /*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -837,7 +872,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (2,'guest','Mohammed Aminu','mosnake111@gmail.com','Indian','+355','7681969865',NULL,'other','national',1,'$2b$12$HC5OyUL6MzEN9n.3G0ygWuIqDDAfPBl0oApved8yVirTI9dTff77C',1,'2026-08-17 21:10:58','2026-08-19 12:59:08',0,NULL,NULL,NULL,NULL,NULL),(3,'tenant','MO11','molittle1011@gmail.com','Tanzanian','+91','7681969865',NULL,'male','international',1,'$2b$12$qZbWiEVvLmgRpxro1mNMPeoQeaHjOfhfnW7RTL7opQYSyyICfM1s6',1,'2026-08-18 08:14:15','2026-08-19 12:43:26',0,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `tenants` VALUES (2,'guest','Mohammed Aminu','mosnake111@gmail.com','Indian','+355','7681969865',NULL,'other','national',1,'$2b$12$HC5OyUL6MzEN9n.3G0ygWuIqDDAfPBl0oApved8yVirTI9dTff77C',1,'2026-08-17 21:10:58','2026-08-19 12:59:08',0,NULL,NULL,NULL,NULL,NULL),(3,'tenant','MO11','molittle1011@gmail.com','Tanzanian','+91','7681969865','+255 677532140','male','international',1,'$2b$12$qZbWiEVvLmgRpxro1mNMPeoQeaHjOfhfnW7RTL7opQYSyyICfM1s6',1,'2026-08-18 08:14:15','2026-08-20 07:24:56',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -850,4 +885,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-20 12:18:46
+-- Dump completed on 2026-08-20 21:12:48
