@@ -10,6 +10,7 @@ const createTenant = async (req, res) => {
             nationality,
             country_code,
             phone,
+            international_phone,
             gender,
             pg_id,
             room_id,
@@ -74,6 +75,7 @@ const createTenant = async (req, res) => {
             nationality,
             country_code,
             phone,
+            international_phone: international_phone || null,
             gender,
             created_by: req.admin.id
         };
@@ -211,6 +213,7 @@ const updateTenant = async (req, res) => {
             nationality,
             country_code,
             phone,
+            international_phone,
             gender,
             pg_id,
             room_id,
@@ -275,6 +278,7 @@ const updateTenant = async (req, res) => {
             nationality,
             country_code,
             phone,
+            international_phone: international_phone || null,
             gender
         };
 
@@ -389,7 +393,6 @@ const sendMessage = async (req, res) => {
     }
 };
 
-// NEW: Get e-FRRO statistics
 const getEFRROStats = async (req, res) => {
     try {
         const stats = await tenantService.getEFRROStats();
@@ -408,10 +411,9 @@ const getEFRROStats = async (req, res) => {
     }
 };
 
-// NEW: Get e-FRRO expiring list
 const getEFRROExpiringList = async (req, res) => {
     try {
-        const { daysRange } = req.query; // urgent, soon, upcoming, expired, valid, no_efrro
+        const { daysRange } = req.query;
         const list = await tenantService.getEFRROExpiringList(daysRange || null);
 
         return res.status(200).json({

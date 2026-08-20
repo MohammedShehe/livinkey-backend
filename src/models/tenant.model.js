@@ -10,12 +10,13 @@ const createTenant = async (connection, tenantData) => {
             nationality,
             country_code,
             phone,
+            international_phone,
             gender,
             password,
             created_by,
             residency,
             must_change_password
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             tenantData.role,
@@ -24,24 +25,11 @@ const createTenant = async (connection, tenantData) => {
             tenantData.nationality,
             tenantData.country_code,
             tenantData.phone,
+            tenantData.international_phone || null,
             tenantData.gender,
             tenantData.password,
             tenantData.created_by,
             tenantData.residency || null,
-            // ============================================================
-            // FIX: Tenants (and guests) created by an admin are given an
-            // auto-generated temporary password (see tenant.service.js ->
-            // generatePassword()). The `must_change_password` column
-            // defaults to 0 in the schema, so without explicitly setting
-            // it to 1 here, the "force change password on first login"
-            // flow in tenant.auth.controller.js / the mobile app's
-            // LoginScreen was never actually triggered — the flag was
-            // simply never turned on for any tenant. Only tenants (role
-            // === 'tenant') go through the mandatory PG onboarding flow
-            // with an admin-set password; guests set their own password
-            // at registration time, so they don't need to be forced to
-            // change it.
-            // ============================================================
             tenantData.role === 'tenant' ? 1 : 0
         ]
     );
@@ -157,10 +145,6 @@ const findPhoneInAnyCountry = async (phone, excludeId = null) => {
     return rows[0] || null;
 };
 
-// ============================================================
-// FIX: Added role filter to findAll - this was the root cause
-// of guests page showing all tenants instead of just guests.
-// ============================================================
 const findAll = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
     let query = `
         SELECT 
@@ -171,6 +155,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             t.nationality,
             t.country_code,
             t.phone,
+            t.international_phone,
             t.gender,
             t.created_at,
             t.updated_at,
@@ -205,10 +190,6 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
     `;
     const params = [];
 
-    // ============================================================
-    // FIX: Add role filter FIRST - this ensures guests page
-    // only shows guests and tenants page only shows tenants
-    // ============================================================
     if (role) {
         query += ` AND t.role = ?`;
         params.push(role);
@@ -257,6 +238,7 @@ const findById = async (id) => {
             t.nationality,
             t.country_code,
             t.phone,
+            t.international_phone,
             t.gender,
             t.password,
             t.must_change_password,
@@ -459,6 +441,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             nationality = ?,
             country_code = ?,
             phone = ?,
+            international_phone = ?,
             gender = ?,
             residency = ?
         WHERE id = ?
@@ -469,6 +452,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             tenantData.nationality,
             tenantData.country_code,
             tenantData.phone,
+            tenantData.international_phone || null,
             tenantData.gender,
             tenantData.residency || null,
             tenantId
@@ -605,7 +589,6 @@ const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
     }
 };
 
-// Get tenants with e-FRRO expiring within the next month
 const getTenantsWithExpiringEFRRO = async () => {
     const [rows] = await db.execute(
         `
@@ -643,7 +626,6 @@ const getTenantsWithExpiringEFRRO = async () => {
     return rows;
 };
 
-// Get super admins for notifications
 const getSuperAdmins = async () => {
     const [rows] = await db.execute(
         `
@@ -658,7 +640,6 @@ const getSuperAdmins = async () => {
     return rows;
 };
 
-// Get tenant by ID for notification
 const getTenantForNotification = async (tenantId) => {
     const [rows] = await db.execute(
         `
@@ -688,7 +669,6 @@ const getTenantForNotification = async (tenantId) => {
     return rows[0] || null;
 };
 
-// NEW: Get e-FRRO expiry statistics
 const getEFRROStats = async () => {
     const [totalInternationalResult] = await db.execute(
         `SELECT COUNT(*) as total_international FROM tenants t 
@@ -850,7 +830,6 @@ const getEFRROStats = async () => {
     };
 };
 
-// NEW: Get detailed e-FRRO expiring tenants list
 const getEFRROExpiringList = async (daysRange = null) => {
     let query = `
         SELECT 
