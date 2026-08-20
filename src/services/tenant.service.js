@@ -492,6 +492,13 @@ const checkAndSendEFRROExpiryNotifications = async () => {
                 tenantEmailErrors++;
                 console.error(`Failed to send e-FRRO expiry email to ${tenant.full_name}:`, error.message);
             }
+
+            // NEW: Push in-app notification to the tenant as well
+            try {
+                await NotificationEventManager.onTenantEFRROExpiry(tenant, tenant.days_until_expiry);
+            } catch (notifError) {
+                console.error(`Failed to send e-FRRO app notification to ${tenant.full_name}:`, notifError.message);
+            }
         }
 
         const superAdmins = await TenantModel.getSuperAdmins();
@@ -536,6 +543,72 @@ const checkAndSendEFRROExpiryNotifications = async () => {
     }
 };
 
+// ============================================================
+// NEW: Check and send document reminder notifications
+// Notifies tenants who are missing required documents based on
+// their residency (national/international), matching the same
+// document catalog used by tenant.document.service.js
+// ============================================================
+const checkAndSendDocumentReminders = async () => {
+    try {
+        console.log("Checking document reminders...");
+
+        const [tenants] = await db.query(
+            `
+            SELECT id, full_name, email, residency
+            FROM tenants
+            WHERE role = 'tenant' AND is_active = 1
+            `
+        );
+
+        if (tenants.length === 0) {
+            return { sent: 0, message: "No active tenants found." };
+        }
+
+        const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS } = require("../config/document.types");
+
+        let notificationsSent = 0;
+        const details = [];
+
+        for (const tenant of tenants) {
+            const requiredDocs = tenant.residency === 'international'
+                ? INTERNATIONAL_DOCUMENTS.filter(d => d.required)
+                : NATIONAL_DOCUMENTS.filter(d => d.required);
+
+            const [uploadedDocs] = await db.query(
+                `SELECT document_type FROM tenant_documents WHERE tenant_id = ?`,
+                [tenant.id]
+            );
+            const uploadedTypes = uploadedDocs.map(d => d.document_type);
+
+            const missingDocs = requiredDocs.filter(d => !uploadedTypes.includes(d.key));
+
+            if (missingDocs.length > 0) {
+                // Send one notification per tenant listing the first missing doc,
+                // to avoid spamming with one notification per missing document.
+                const docLabel = missingDocs.length === 1
+                    ? missingDocs[0].label
+                    : `${missingDocs[0].label} and ${missingDocs.length - 1} other document(s)`;
+
+                try {
+                    await NotificationEventManager.onTenantDocumentReminder(tenant, docLabel);
+                    notificationsSent++;
+                    details.push({ tenant: tenant.full_name, missing: missingDocs.map(d => d.label) });
+                } catch (notifError) {
+                    console.error(`Failed to send document reminder to ${tenant.full_name}:`, notifError.message);
+                }
+            }
+        }
+
+        console.log(`Document reminders sent: ${notificationsSent}`);
+        return { sent: notificationsSent, totalChecked: tenants.length, details };
+
+    } catch (error) {
+        console.error("Error in checkAndSendDocumentReminders:", error);
+        throw error;
+    }
+};
+
 const getEFRROStats = async () => {
     return await TenantModel.getEFRROStats();
 };
@@ -553,6 +626,7 @@ module.exports = {
     updateTenant,
     deleteTenant,
     checkAndSendEFRROExpiryNotifications,
+    checkAndSendDocumentReminders,
     getEFRROStats,
     getEFRROExpiringList
 };

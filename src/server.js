@@ -69,6 +69,30 @@ async function startServer() {
         });
         console.log('📅 Overdue payment notification scheduler running daily at 11:00 AM');
 
+        // Cron job 5: Check document reminders (daily at 9:30 AM)
+        cron.schedule('30 9 * * *', async () => {
+            console.log('🔄 Checking document reminders...');
+            try {
+                const result = await tenantService.checkAndSendDocumentReminders();
+                console.log(`✅ Document reminders sent: ${result.sent} (checked ${result.totalChecked || 0} tenants)`);
+            } catch (error) {
+                console.error('❌ Error checking document reminders:', error);
+            }
+        });
+        console.log('📅 Document reminder checker scheduled to run daily at 9:30 AM');
+
+        // Cron job 6: Check payment reminders (daily at 8:00 AM)
+        cron.schedule('0 8 * * *', async () => {
+            console.log('🔄 Checking payment reminders...');
+            try {
+                const result = await billService.checkAndSendPaymentReminders();
+                console.log(`✅ Payment reminders sent: ${result.sent} (checked ${result.totalChecked || 0} tenants)`);
+            } catch (error) {
+                console.error('❌ Error checking payment reminders:', error);
+            }
+        });
+        console.log('📅 Payment reminder checker scheduled to run daily at 8:00 AM');
+
         app.listen(PORT, () => {
             console.log(`🚀 Server running on http://localhost:${PORT}`);
         });

@@ -760,6 +760,21 @@ const processDelayedPayments = async () => {
             let daysOverdue = Math.floor((today.getTime() - actualFineStartDate.getTime()) / (1000 * 60 * 60 * 24));
             
             if (daysOverdue <= 0) continue;
+
+            // ============================================================
+            // NEW: Notify tenant the first time their bill goes overdue
+            // (i.e. it wasn't already flagged as delayed/overdue before
+            // this cron run). Placed before the fine-specific branch so
+            // it fires exactly once per bill's transition into overdue.
+            // ============================================================
+            if (bill.status !== 'delayed' && bill.status !== 'overdue') {
+                try {
+                    const tenantForNotif = { full_name: bill.tenant_name, id: bill.tenant_id };
+                    await NotificationEventManager.onTenantBillOverdue(bill, tenantForNotif, daysOverdue);
+                } catch (notifError) {
+                    console.error("Failed to send bill overdue notification:", notifError);
+                }
+            }
             
             let shouldApplyFine = false;
             let fineAmount = bill.fine_amount || 0;
@@ -1126,6 +1141,53 @@ const generateBillPaymentOptions = async (billId) => {
     };
 };
 
+// ============================================================
+// NEW: Check and send payment (rent due) reminders
+// Notifies tenants whose paid_till date is approaching within
+// 1, 3, or 7 days
+// ============================================================
+const checkAndSendPaymentReminders = async () => {
+    try {
+        console.log("Checking payment reminders...");
+
+        const [tenants] = await db.query(
+            `
+            SELECT 
+                t.id,
+                t.full_name,
+                t.email,
+                td.paid_till,
+                DATEDIFF(td.paid_till, CURDATE()) as days_left
+            FROM tenants t
+            INNER JOIN tenant_details td ON t.id = td.tenant_id
+            WHERE 
+                t.role = 'tenant'
+                AND t.is_active = 1
+                AND td.paid_till IS NOT NULL
+                AND td.paid_till >= CURDATE()
+                AND DATEDIFF(td.paid_till, CURDATE()) IN (1, 3, 7)
+            `
+        );
+
+        let sent = 0;
+        for (const tenant of tenants) {
+            try {
+                await NotificationEventManager.onTenantPaymentReminder(tenant, tenant.days_left);
+                sent++;
+            } catch (notifError) {
+                console.error(`Failed to send payment reminder to ${tenant.full_name}:`, notifError.message);
+            }
+        }
+
+        console.log(`Payment reminders sent: ${sent}`);
+        return { sent, totalChecked: tenants.length };
+
+    } catch (error) {
+        console.error("Error in checkAndSendPaymentReminders:", error);
+        throw error;
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -1141,5 +1203,6 @@ module.exports = {
     processDelayedPayments,
     addPayment,
     generateBillPaymentOptions,
-    regenerateBillQRCodes
+    regenerateBillQRCodes,
+    checkAndSendPaymentReminders
 };

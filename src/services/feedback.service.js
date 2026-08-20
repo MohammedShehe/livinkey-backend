@@ -81,6 +81,13 @@ const createFeedback = async (tenantId, feedbackData) => {
             console.error("Failed to send feedback notification:", notifError);
         }
 
+        // NEW: Send confirmation/thank-you notification to the tenant themselves
+        try {
+            await NotificationEventManager.onTenantFeedbackSubmitted(tenantId);
+        } catch (notifError) {
+            console.error("Failed to send tenant feedback confirmation:", notifError);
+        }
+
         return feedback;
 
     } catch (error) {

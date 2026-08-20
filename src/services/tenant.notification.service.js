@@ -71,6 +71,13 @@ const TENANT_NOTIFICATION_TYPES = {
         icon: '💸',
         color: '#e74c3c',
         linkPrefix: '/payments/'
+    },
+    // NEW: Feedback submission confirmation
+    FEEDBACK_SUBMITTED: {
+        type: 'feedback_submitted',
+        icon: '⭐',
+        color: '#f39c12',
+        linkPrefix: '/profile'
     }
 };
 
@@ -266,12 +273,11 @@ const generateTenantNotificationMessages = {
         entity_type: 'payment'
     }),
 
-    // Add to generateTenantNotificationMessages:
-    billFineApplied: (bill, fineAmount) => ({
-        title: 'Late Fee Applied',
-        message: `A late fee of ₹${fineAmount} has been applied to your bill.`,
-        entity_id: bill.id,
-        entity_type: 'bill'
+    // NEW: Feedback submission confirmation message
+    feedbackSubmitted: () => ({
+        title: 'Thank You for Your Feedback!',
+        message: 'We appreciate you taking the time to share your experience with us.',
+        entity_type: 'feedback'
     }),
 };
 

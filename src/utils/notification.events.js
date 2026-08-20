@@ -535,6 +535,86 @@ class NotificationEventManager {
             console.error('Error sending PG updated notification to guests:', error);
         }
     }
+
+    // ============================================================
+    // NEW: Document reminder notification to tenant
+    // ============================================================
+    static async onTenantDocumentReminder(tenant, docLabel) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.documentReminder(docLabel);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'DOCUMENT_REMINDER',
+            {
+                ...messageData,
+                link: `/documents`
+            }
+        );
+    }
+
+    // ============================================================
+    // NEW: e-FRRO expiry notification to tenant (in-app)
+    // ============================================================
+    static async onTenantEFRROExpiry(tenant, daysUntilExpiry) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.efrroExpiry(daysUntilExpiry);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'EFRRO_EXPIRY',
+            {
+                ...messageData,
+                link: `/documents`
+            }
+        );
+    }
+
+    // ============================================================
+    // NEW: Payment (rent due) reminder notification to tenant
+    // ============================================================
+    static async onTenantPaymentReminder(tenant, daysLeft) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.paymentReminder(daysLeft);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'PAYMENT_REMINDER',
+            {
+                ...messageData,
+                link: `/tenant-payments/bill`
+            }
+        );
+    }
+
+    // ============================================================
+    // NEW: Bill overdue notification to tenant
+    // ============================================================
+    static async onTenantBillOverdue(bill, tenant, daysOverdue) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.billOverdue(bill, daysOverdue);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'BILL_OVERDUE',
+            {
+                ...messageData,
+                link: `/tenant-payments/bill`
+            }
+        );
+    }
+
+    // ============================================================
+    // NEW: Feedback submission confirmation to tenant
+    // ============================================================
+    static async onTenantFeedbackSubmitted(tenantId) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.feedbackSubmitted();
+
+        await tenantNotificationService.sendTenantNotification(
+            tenantId,
+            'FEEDBACK_SUBMITTED',
+            {
+                ...messageData,
+                link: `/profile`
+            }
+        );
+    }
 }
 
 module.exports = NotificationEventManager;
