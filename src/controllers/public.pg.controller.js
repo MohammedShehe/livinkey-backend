@@ -42,7 +42,9 @@ exports.getWelcomeMessage = async (req, res) => {
     }
 };
 
-// Get all PGs with details (Public - No Auth)
+// ============================================================
+// FIXED: Get all PGs with details (Public - No Auth)
+// ============================================================
 exports.getAllPGs = async (req, res) => {
     try {
         const { 
@@ -57,6 +59,9 @@ exports.getAllPGs = async (req, res) => {
 
         const connection = await db.getConnection();
 
+        // ============================================================
+        // FIX: Use SUBQUERIES instead of JOIN to prevent multiplication
+        // ============================================================
         let query = `
             SELECT 
                 p.id,
@@ -67,12 +72,40 @@ exports.getAllPGs = async (req, res) => {
                 p.number_of_floors,
                 p.is_active,
                 p.created_at,
-                COUNT(DISTINCT r.id) as total_rooms,
-                COALESCE(SUM(r.capacity), 0) as total_capacity,
-                COALESCE(SUM(ro.occupied_count), 0) as total_occupied,
-                ROUND(COALESCE(AVG(tf.overall_rating), 0), 1) as overall_rating,
-                COUNT(DISTINCT tf.id) as total_reviews,
-                GROUP_CONCAT(DISTINCT pa.amenity_name) as amenity_names,
+                COALESCE((
+                    SELECT COUNT(DISTINCT r.id) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) as total_rooms,
+                COALESCE((
+                    SELECT SUM(r.capacity) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) as total_capacity,
+                COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) as total_occupied,
+                ROUND(COALESCE((
+                    SELECT AVG(tf.overall_rating) 
+                    FROM tenant_feedbacks tf 
+                    WHERE tf.pg_id = p.id
+                ), 0), 1) as overall_rating,
+                COALESCE((
+                    SELECT COUNT(*) 
+                    FROM tenant_feedbacks tf 
+                    WHERE tf.pg_id = p.id
+                ), 0) as total_reviews,
+                COALESCE((
+                    SELECT GROUP_CONCAT(DISTINCT pa.amenity_name) 
+                    FROM pg_amenities pa 
+                    WHERE pa.pg_id = p.id
+                ), '') as amenity_names,
                 (
                     SELECT image_url 
                     FROM pg_images 
@@ -81,16 +114,12 @@ exports.getAllPGs = async (req, res) => {
                     LIMIT 1
                 ) as cover_image
             FROM pgs p
-            LEFT JOIN floors f ON p.id = f.pg_id
-            LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
-            LEFT JOIN room_occupancy ro ON r.id = ro.room_id
-            LEFT JOIN pg_amenities pa ON p.id = pa.pg_id
-            LEFT JOIN tenant_feedbacks tf ON p.id = tf.pg_id
             WHERE p.is_active = 1
         `;
 
         const params = [];
 
+        // Apply filters
         if (search) {
             query += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
             const searchPattern = `%${search}%`;
@@ -119,27 +148,78 @@ exports.getAllPGs = async (req, res) => {
             params.push(...amenityList, amenityList.length);
         }
 
+        // Group by for having clauses
         query += ` GROUP BY p.id, p.name, p.location, p.rent, p.security_fee, p.number_of_floors, p.is_active, p.created_at`;
 
         const havingClauses = [];
 
+        // Filter by status (using subqueries in HAVING)
         if (status) {
             if (status === 'vacant') {
-                havingClauses.push(` COALESCE(SUM(ro.occupied_count), 0) = 0`);
+                havingClauses.push(` COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) = 0`);
             } else if (status === 'full_occupied') {
-                havingClauses.push(` COALESCE(SUM(ro.occupied_count), 0) >= COALESCE(SUM(r.capacity), 0) AND COALESCE(SUM(r.capacity), 0) > 0`);
+                havingClauses.push(` COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) >= COALESCE((
+                    SELECT SUM(r.capacity) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) 
+                AND COALESCE((
+                    SELECT SUM(r.capacity) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) > 0`);
             } else if (status === 'partial_occupied') {
-                havingClauses.push(` COALESCE(SUM(ro.occupied_count), 0) > 0 AND COALESCE(SUM(ro.occupied_count), 0) < COALESCE(SUM(r.capacity), 0)`);
+                havingClauses.push(` COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) > 0 
+                AND COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) < COALESCE((
+                    SELECT SUM(r.capacity) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0)`);
             }
         }
 
         if (min_rating) {
-            havingClauses.push(` ROUND(COALESCE(AVG(tf.overall_rating), 0), 1) >= ?`);
+            havingClauses.push(` ROUND(COALESCE((
+                SELECT AVG(tf.overall_rating) 
+                FROM tenant_feedbacks tf 
+                WHERE tf.pg_id = p.id
+            ), 0), 1) >= ?`);
             params.push(parseFloat(min_rating));
         }
 
         if (max_rating) {
-            havingClauses.push(` ROUND(COALESCE(AVG(tf.overall_rating), 0), 1) <= ?`);
+            havingClauses.push(` ROUND(COALESCE((
+                SELECT AVG(tf.overall_rating) 
+                FROM tenant_feedbacks tf 
+                WHERE tf.pg_id = p.id
+            ), 0), 1) <= ?`);
             params.push(parseFloat(max_rating));
         }
 
@@ -154,6 +234,7 @@ exports.getAllPGs = async (req, res) => {
         // Calculate vacancy count and update status_text
         let vacantCount = 0;
         for (const pg of rows) {
+            // Get images separately (subquery already gives cover_image)
             const [images] = await connection.execute(
                 `
                 SELECT image_url, display_order 
@@ -163,16 +244,35 @@ exports.getAllPGs = async (req, res) => {
                 `,
                 [pg.id]
             );
-            pg.images = images;
-            pg.amenity_names = pg.amenity_names ? pg.amenity_names.split(',') : [];
-            pg.occupancy_percentage = pg.total_capacity > 0 ? Math.round((pg.total_occupied / pg.total_capacity) * 100) : 0;
-            pg.status_text = pg.total_occupied === 0 ? 'Vacant' :
-                            pg.total_occupied >= pg.total_capacity ? 'Full Occupied' :
-                            'Partially Occupied';
             
-            if (pg.status_text === 'Vacant') {
+            const totalCapacity = parseInt(pg.total_capacity) || 0;
+            const totalOccupied = parseInt(pg.total_occupied) || 0;
+            
+            // Determine status based on calculated values
+            let statusText = 'Vacant';
+            if (totalCapacity > 0) {
+                if (totalOccupied === 0) {
+                    statusText = 'Vacant';
+                } else if (totalOccupied >= totalCapacity) {
+                    statusText = 'Full Occupied';
+                } else {
+                    statusText = 'Partially Occupied';
+                }
+            }
+            
+            if (statusText === 'Vacant') {
                 vacantCount++;
             }
+            
+            // Parse amenity_names
+            pg.amenity_names = pg.amenity_names ? pg.amenity_names.split(',') : [];
+            pg.images = images;
+            pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
+            pg.status_text = statusText;
+            pg.total_capacity = totalCapacity;
+            pg.total_occupied = totalOccupied;
+            pg.rent = parseFloat(pg.rent) || 0;
+            pg.security_fee = parseFloat(pg.security_fee) || 0;
         }
 
         connection.release();
@@ -202,6 +302,9 @@ exports.getPGDetails = async (req, res) => {
 
         const connection = await db.getConnection();
 
+        // ============================================================
+        // FIX: Use subqueries for accurate counts
+        // ============================================================
         const [pgRows] = await connection.execute(
             `
             SELECT 
@@ -214,18 +317,37 @@ exports.getPGDetails = async (req, res) => {
                 p.is_active,
                 p.created_at,
                 p.updated_at,
-                ROUND(COALESCE(AVG(tf.overall_rating), 0), 1) as overall_rating,
-                COUNT(DISTINCT tf.id) as total_reviews,
-                COUNT(DISTINCT r.id) as total_rooms,
-                COALESCE(SUM(r.capacity), 0) as total_capacity,
-                COALESCE(SUM(ro.occupied_count), 0) as total_occupied
+                ROUND(COALESCE((
+                    SELECT AVG(tf.overall_rating) 
+                    FROM tenant_feedbacks tf 
+                    WHERE tf.pg_id = p.id
+                ), 0), 1) as overall_rating,
+                COALESCE((
+                    SELECT COUNT(*) 
+                    FROM tenant_feedbacks tf 
+                    WHERE tf.pg_id = p.id
+                ), 0) as total_reviews,
+                COALESCE((
+                    SELECT COUNT(DISTINCT r.id) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) as total_rooms,
+                COALESCE((
+                    SELECT SUM(r.capacity) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    WHERE f.pg_id = p.id
+                ), 0) as total_capacity,
+                COALESCE((
+                    SELECT SUM(ro.occupied_count) 
+                    FROM floors f 
+                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
+                    JOIN room_occupancy ro ON r.id = ro.room_id
+                    WHERE f.pg_id = p.id
+                ), 0) as total_occupied
             FROM pgs p
-            LEFT JOIN tenant_feedbacks tf ON p.id = tf.pg_id
-            LEFT JOIN floors f ON p.id = f.pg_id
-            LEFT JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
-            LEFT JOIN room_occupancy ro ON r.id = ro.room_id
             WHERE p.id = ?
-            GROUP BY p.id
             `,
             [id]
         );
@@ -244,11 +366,22 @@ exports.getPGDetails = async (req, res) => {
         const totalCapacity = parseInt(pg.total_capacity) || 0;
         const totalOccupied = parseInt(pg.total_occupied) || 0;
 
-        pg.status_text = totalOccupied === 0 ? 'Vacant' :
-                         totalOccupied >= totalCapacity ? 'Full Occupied' :
-                         'Partially Occupied';
+        // Determine status
+        let statusText = 'Vacant';
+        if (totalCapacity > 0) {
+            if (totalOccupied === 0) {
+                statusText = 'Vacant';
+            } else if (totalOccupied >= totalCapacity) {
+                statusText = 'Full Occupied';
+            } else {
+                statusText = 'Partially Occupied';
+            }
+        }
+
+        pg.status_text = statusText;
         pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
 
+        // Get amenities
         const [amenities] = await connection.execute(
             `
             SELECT id, amenity_name, is_custom 
@@ -260,6 +393,7 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.amenities = amenities;
 
+        // Get images
         const [images] = await connection.execute(
             `
             SELECT image_url 
@@ -271,6 +405,7 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.images = images.map(img => img.image_url);
 
+        // Get floors with rooms and occupancy
         const [floors] = await connection.execute(
             `
             SELECT 
@@ -315,6 +450,7 @@ exports.getPGDetails = async (req, res) => {
 
         pg.floors = floors;
 
+        // Get reviews
         const [reviews] = await connection.execute(
             `
             SELECT 
@@ -338,9 +474,7 @@ exports.getPGDetails = async (req, res) => {
             total_occupied: totalOccupied,
             available_spots: totalCapacity - totalOccupied,
             occupancy_percentage: totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0,
-            status: totalOccupied === 0 ? 'Vacant' :
-                    totalOccupied >= totalCapacity ? 'Full Occupied' :
-                    'Partially Occupied'
+            status: statusText
         };
 
         connection.release();
@@ -359,7 +493,9 @@ exports.getPGDetails = async (req, res) => {
     }
 };
 
+// ============================================================
 // Get PG Stats (Public - No Auth)
+// ============================================================
 exports.getPGStats = async (req, res) => {
     try {
         const connection = await db.getConnection();
@@ -412,7 +548,6 @@ exports.getPGStats = async (req, res) => {
                 vacant_pgs: vacant,
                 full_pgs: full,
                 partial_pgs: partial,
-                // Additional useful stats
                 has_pgs: total > 0,
                 vacancy_percentage: total > 0 ? Math.round((vacant / total) * 100) : 0
             }

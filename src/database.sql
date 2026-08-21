@@ -41,7 +41,7 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Happy Living\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-17 20:31:40','2026-08-18 02:18:54'),(2,1,'tenant_registered','New Tenant Registered','Mohammed Aminu has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-17 20:35:14','2026-08-18 02:18:54'),(3,1,'feedback_submitted','New Feedback Received','Mohammed Aminu gave 9.2/10 rating for Happy Living',1,'feedback','/feedbacks/1','⭐','#f39c12',1,'2026-08-17 20:50:08','2026-08-18 02:21:09'),(4,1,'bill_created','New Bill Generated','Bill of ₹12500.00 created for undefined',1,'bill','/bills/1','?','#3498db',1,'2026-08-17 20:53:11','2026-08-18 02:28:44'),(5,1,'maintenance_created','New Maintenance Request','Mohammed Aminu requested AC for Room 402',1,'maintenance','/maintenance/1','?','#3498db',1,'2026-08-17 20:55:17','2026-08-18 02:28:44'),(6,1,'maintenance_updated','Maintenance Request Started','AC request for Room 402 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:55:39','2026-08-18 02:28:44'),(7,1,'maintenance_updated','Maintenance Request Completed','AC request for Room 402 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-17 20:57:47','2026-08-18 02:28:44'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',3,'tenant','/tenants/3','?','#2ecc71',1,'2026-08-18 08:14:23','2026-08-18 14:01:56'),(9,1,'bill_created','New Bill Generated','Bill of ₹11500.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-20 07:44:50',NULL);
+INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Najaribu\" has been created',1,'pg','/pgs/1','?','#2ecc71',0,'2026-08-21 03:38:11',NULL),(2,2,'pg_created','New PG Created','PG \"Najaribu\" has been created',1,'pg','/pgs/1','?','#2ecc71',0,'2026-08-21 03:38:11',NULL);
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -123,7 +123,7 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'Livinkey','livinkey@gmail.com',NULL,'$2b$12$q1Tx2qG4rk1N8SIOYuxaJuHbgzJnw1V4ulOGvfJoU88xT36a5Zaxa',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-17 20:20:43','2026-08-17 20:24:27','2026-08-18 01:53:47',NULL,NULL);
+INSERT INTO `admins` VALUES (1,'MO11','molittle@gmail.com',NULL,'$2b$12$HYQamwmk2/1TCHeTqtWrdeEnmMvbY6vdvxUFCs13kBFSzHzioSMea',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-21 03:35:45','2026-08-21 03:35:45',NULL,NULL,NULL),(2,'MO11','molittle1011@gmail.com',NULL,'$2b$12$HYQamwmk2/1TCHeTqtWrdeEnmMvbY6vdvxUFCs13kBFSzHzioSMea',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-21 03:36:55','2026-08-21 03:37:18','2026-08-21 09:07:03',NULL,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -227,7 +227,7 @@ CREATE TABLE `bills` (
   KEY `idx_qr_expires_at` (`qr_expires_at`),
   CONSTRAINT `fk_bills_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_bills_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -236,7 +236,6 @@ CREATE TABLE `bills` (
 
 LOCK TABLES `bills` WRITE;
 /*!40000 ALTER TABLE `bills` DISABLE KEYS */;
-INSERT INTO `bills` VALUES (2,3,10000.00,1200.00,NULL,NULL,NULL,300.00,0.00,11500.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787211882/livinkey/bills/qr/idk19ldbg9tnypxttypv.png','livinkey/bills/qr/idk19ldbg9tnypxttypv','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787211883/livinkey/bills/qr/ce0ymk9taqmfsdp1bmv0.png','livinkey/bills/qr/ce0ymk9taqmfsdp1bmv0','image','2026-08-20 13:14:43','2026-08-27 13:14:43',1,'2026-08-20 07:44:43','2026-08-20 07:44:43',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `bills` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -297,7 +296,7 @@ CREATE TABLE `floors` (
   UNIQUE KEY `unique_pg_floor` (`pg_id`,`floor_number`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_floors_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -306,7 +305,7 @@ CREATE TABLE `floors` (
 
 LOCK TABLES `floors` WRITE;
 /*!40000 ALTER TABLE `floors` DISABLE KEYS */;
-INSERT INTO `floors` VALUES (1,1,1,'2026-08-17 20:31:40','2026-08-17 20:31:40'),(2,1,2,'2026-08-17 20:31:40','2026-08-17 20:31:40'),(3,1,3,'2026-08-17 20:31:40','2026-08-17 20:31:40'),(4,1,4,'2026-08-17 20:31:40','2026-08-17 20:31:40');
+INSERT INTO `floors` VALUES (1,1,1,'2026-08-21 03:38:11','2026-08-21 03:38:11');
 /*!40000 ALTER TABLE `floors` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -378,7 +377,7 @@ CREATE TABLE `maintenance_requests` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `maintenance_requests_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `maintenance_requests_ibfk_2` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -421,7 +420,7 @@ CREATE TABLE `payment_proofs` (
   CONSTRAINT `payment_proofs_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_3` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -464,7 +463,7 @@ CREATE TABLE `payment_transactions` (
   KEY `idx_status` (`status`),
   CONSTRAINT `fk_payment_transactions_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_payment_transactions_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -492,7 +491,7 @@ CREATE TABLE `pg_amenities` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_amenities_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -501,7 +500,7 @@ CREATE TABLE `pg_amenities` (
 
 LOCK TABLES `pg_amenities` WRITE;
 /*!40000 ALTER TABLE `pg_amenities` DISABLE KEYS */;
-INSERT INTO `pg_amenities` VALUES (1,1,'Free WiFi',0,'2026-08-17 20:31:34'),(2,1,'24×7 Assistance',0,'2026-08-17 20:31:34'),(3,1,'24×7 Power Backup',0,'2026-08-17 20:31:34'),(4,1,'Free Housekeeping',0,'2026-08-17 20:31:34'),(5,1,'AC',0,'2026-08-17 20:31:34');
+INSERT INTO `pg_amenities` VALUES (1,1,'Free WiFi',0,'2026-08-21 03:38:06'),(2,1,'AC',0,'2026-08-21 03:38:06');
 /*!40000 ALTER TABLE `pg_amenities` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -523,7 +522,7 @@ CREATE TABLE `pg_images` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_images_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -532,7 +531,7 @@ CREATE TABLE `pg_images` (
 
 LOCK TABLES `pg_images` WRITE;
 /*!40000 ALTER TABLE `pg_images` DISABLE KEYS */;
-INSERT INTO `pg_images` VALUES (1,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786998695/livinkey/pgs/images/cqv8ppksj6aw6s6e3cpb.jpg','livinkey/pgs/images/cqv8ppksj6aw6s6e3cpb','image',0,'2026-08-17 20:31:35'),(2,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786998697/livinkey/pgs/images/zdxnxrmx5yhpgja6jnvm.png','livinkey/pgs/images/zdxnxrmx5yhpgja6jnvm','image',1,'2026-08-17 20:31:37'),(3,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786998699/livinkey/pgs/images/ze4szaneggnqhaw9aolh.webp','livinkey/pgs/images/ze4szaneggnqhaw9aolh','image',2,'2026-08-17 20:31:39'),(4,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786998701/livinkey/pgs/images/tunvs5onne4lefpyrani.jpg','livinkey/pgs/images/tunvs5onne4lefpyrani','image',3,'2026-08-17 20:31:40');
+INSERT INTO `pg_images` VALUES (1,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283488/livinkey/pgs/images/s9tgs48ncugfvwb8hhbu.png','livinkey/pgs/images/s9tgs48ncugfvwb8hhbu','image',0,'2026-08-21 03:38:09'),(2,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283489/livinkey/pgs/images/ogdwht9ka2updpt65f0e.webp','livinkey/pgs/images/ogdwht9ka2updpt65f0e','image',1,'2026-08-21 03:38:10'),(3,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283490/livinkey/pgs/images/u3owvhpnq9cognpxf3lf.jpg','livinkey/pgs/images/u3owvhpnq9cognpxf3lf','image',2,'2026-08-21 03:38:11');
 /*!40000 ALTER TABLE `pg_images` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -569,7 +568,7 @@ CREATE TABLE `pgs` (
 
 LOCK TABLES `pgs` WRITE;
 /*!40000 ALTER TABLE `pgs` DISABLE KEYS */;
-INSERT INTO `pgs` VALUES (1,'Happy Living','Plot no. 39, 40 University View Estate',4,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1786998694/livinkey/pgs/qr/hwerxtgoqkwm12cuxgme.jpg','livinkey/pgs/qr/hwerxtgoqkwm12cuxgme','image',1,1,'2026-08-17 20:31:34','2026-08-17 20:31:34',11000.00,11000.00);
+INSERT INTO `pgs` VALUES (1,'Najaribu','Najaribu Address',1,NULL,NULL,NULL,1,2,'2026-08-21 03:38:06','2026-08-21 03:38:06',11000.00,11000.00);
 /*!40000 ALTER TABLE `pgs` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -588,7 +587,7 @@ CREATE TABLE `room_occupancy` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -597,7 +596,6 @@ CREATE TABLE `room_occupancy` (
 
 LOCK TABLES `room_occupancy` WRITE;
 /*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
-INSERT INTO `room_occupancy` VALUES (1,11,0,'2026-08-18 08:12:44'),(2,1,1,'2026-08-18 08:14:15');
 /*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -621,7 +619,7 @@ CREATE TABLE `rooms` (
   UNIQUE KEY `unique_floor_room` (`floor_id`,`room_number`),
   KEY `idx_floor_id` (`floor_id`),
   CONSTRAINT `fk_rooms_floor_id` FOREIGN KEY (`floor_id`) REFERENCES `floors` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -630,7 +628,7 @@ CREATE TABLE `rooms` (
 
 LOCK TABLES `rooms` WRITE;
 /*!40000 ALTER TABLE `rooms` DISABLE KEYS */;
-INSERT INTO `rooms` VALUES (1,1,'101',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(2,1,'102',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(3,1,'103',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(4,2,'201',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(5,2,'202',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(6,2,'203',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(7,3,'301',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(8,3,'302',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(9,3,'303',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(10,4,'401',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(11,4,'402',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00),(12,4,'403',2,1,'2026-08-17 20:31:40','2026-08-17 20:31:40',10000.00);
+INSERT INTO `rooms` VALUES (1,1,'101',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00),(2,1,'102',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00),(3,1,'103',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00);
 /*!40000 ALTER TABLE `rooms` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -671,7 +669,7 @@ CREATE TABLE `tenant_details` (
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -680,7 +678,6 @@ CREATE TABLE `tenant_details` (
 
 LOCK TABLES `tenant_details` WRITE;
 /*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
-INSERT INTO `tenant_details` VALUES (2,3,1,1,'international','null','null','C1-56fgdgs','2026-07-22','2026-09-30',11000.00,11000.00,14,'2026-06-14','2026-08-14','2026-06-14',NULL,NULL,NULL,'2026-08-18 08:14:15','2026-08-18 08:14:15');
 /*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -738,7 +735,7 @@ CREATE TABLE `tenant_documents` (
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   CONSTRAINT `fk_tenant_documents_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -747,7 +744,6 @@ CREATE TABLE `tenant_documents` (
 
 LOCK TABLES `tenant_documents` WRITE;
 /*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
-INSERT INTO `tenant_documents` VALUES (3,3,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787042166/livinkey/tenants/3/documents/t3brvcyf0ihalhrfhhq9.jpg','livinkey/tenants/3/documents/t3brvcyf0ihalhrfhhq9','image','passport_photo','2026-08-18 08:36:06','doc_1787042162472.jpg',55931,'2026-08-18 08:36:06');
 /*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -778,7 +774,7 @@ CREATE TABLE `tenant_feedbacks` (
   KEY `idx_rating` (`overall_rating`),
   CONSTRAINT `tenant_feedbacks_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tenant_feedbacks_ibfk_2` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -816,7 +812,7 @@ CREATE TABLE `tenant_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -825,7 +821,6 @@ CREATE TABLE `tenant_notifications` (
 
 LOCK TABLES `tenant_notifications` WRITE;
 /*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
-INSERT INTO `tenant_notifications` VALUES (5,2,'bill_created','New Bill Generated','A new bill of ₹11500.00 has been generated for you.',2,'bill','/tenant-payments/bill','?','#3498db',0,NULL,'2026-08-20 07:44:50');
 /*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -863,7 +858,7 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -872,7 +867,6 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (2,'guest','Mohammed Aminu','mosnake111@gmail.com','Indian','+355','7681969865',NULL,'other','national',1,'$2b$12$HC5OyUL6MzEN9n.3G0ygWuIqDDAfPBl0oApved8yVirTI9dTff77C',1,'2026-08-17 21:10:58','2026-08-19 12:59:08',0,NULL,NULL,NULL,NULL,NULL),(3,'tenant','MO11','molittle1011@gmail.com','Tanzanian','+91','7681969865','+255 677532140','male','international',1,'$2b$12$qZbWiEVvLmgRpxro1mNMPeoQeaHjOfhfnW7RTL7opQYSyyICfM1s6',1,'2026-08-18 08:14:15','2026-08-20 07:24:56',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -885,4 +879,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-20 21:12:48
+-- Dump completed on 2026-08-21  9:10:47
