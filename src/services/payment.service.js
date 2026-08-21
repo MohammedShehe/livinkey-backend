@@ -20,6 +20,64 @@ const PAYMENT_CONFIG = {
     payu_environment: process.env.PAYU_ENVIRONMENT || 'test',
 };
 
+/**
+ * Update tenant paid_till based on actual payment amount
+ */
+const updateTenantPaidTill = async (connection, tenantId, newPaidTill = null) => {
+    const [tenantDetails] = await connection.execute(
+        `SELECT rent, paid_till, paid_from FROM tenant_details WHERE tenant_id = ?`,
+        [tenantId]
+    );
+
+    if (tenantDetails.length === 0) return null;
+    
+    const tenant = tenantDetails[0];
+    const monthlyRent = parseFloat(tenant.rent) || 0;
+    
+    // Calculate how many months are paid based on bills table
+    const [paidData] = await connection.execute(
+        `
+        SELECT COALESCE(SUM(paid_amount), 0) as total_paid
+        FROM bills 
+        WHERE tenant_id = ?
+        `,
+        [tenantId]
+    );
+    const totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
+    
+    const monthsPaid = Math.floor(totalPaid / monthlyRent);
+    const remainingBalance = totalPaid % monthlyRent;
+    
+    // Calculate new paid_till date
+    let paidTillDate;
+    if (newPaidTill) {
+        paidTillDate = new Date(newPaidTill);
+    } else if (tenant.paid_from) {
+        paidTillDate = new Date(tenant.paid_from);
+        paidTillDate.setMonth(paidTillDate.getMonth() + monthsPaid);
+    } else {
+        paidTillDate = new Date();
+        paidTillDate.setMonth(paidTillDate.getMonth() + monthsPaid);
+    }
+
+    await connection.execute(
+        `
+        UPDATE tenant_details 
+        SET paid_till = ?
+        WHERE tenant_id = ?
+        `,
+        [paidTillDate.toISOString().split('T')[0], tenantId]
+    );
+    
+    return {
+        paid_till: paidTillDate.toISOString().split('T')[0],
+        total_paid: totalPaid,
+        is_fully_paid: remainingBalance === 0 && monthsPaid > 0,
+        months_paid: monthsPaid,
+        remaining_balance: remainingBalance
+    };
+};
+
 const createRazorpayOrder = async (orderData) => {
     const { amount, currency = 'INR', receipt, notes = {} } = orderData;
     
@@ -377,6 +435,9 @@ const processWebhook = async (gateway, payload) => {
                         [newPaidAmount, newStatus, billId]
                     );
 
+                    // Update tenant_details paid_till based on actual amount
+                    await updateTenantPaidTill(connection, bill.tenant_id, null);
+
                     // Delete QR codes if fully paid
                     if (newStatus === 'paid') {
                         const [billData] = await connection.execute(
@@ -430,4 +491,5 @@ module.exports = {
     createPaymentTransaction,
     updateTransactionStatus,
     processWebhook,
+    updateTenantPaidTill
 };

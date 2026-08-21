@@ -126,10 +126,33 @@ const getAllTenants = async (req, res) => {
         const { search, role, gender, bill_status, pg_id } = req.query;
         const tenants = await tenantService.getAllTenants(search, role, gender, bill_status, pg_id);
 
+        // Format dates for each tenant
+        const formatDateString = (dateStr) => {
+            if (!dateStr) return null;
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                return d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const formattedTenants = tenants.map(tenant => ({
+            ...tenant,
+            paid_from: formatDateString(tenant.paid_from),
+            paid_till: formatDateString(tenant.paid_till),
+            arrival_date: formatDateString(tenant.arrival_date),
+            efrro_from: formatDateString(tenant.efrro_from),
+            efrro_till: formatDateString(tenant.efrro_till)
+        }));
+
         return res.status(200).json({
             success: true,
-            count: tenants.length,
-            data: tenants
+            count: formattedTenants.length,
+            data: formattedTenants
         });
 
     } catch (error) {
@@ -189,9 +212,32 @@ const getTenantById = async (req, res) => {
             });
         }
 
+        // Format dates
+        const formatDateString = (dateStr) => {
+            if (!dateStr) return null;
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                return d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const formattedTenant = {
+            ...tenant,
+            paid_from: formatDateString(tenant.paid_from),
+            paid_till: formatDateString(tenant.paid_till),
+            arrival_date: formatDateString(tenant.arrival_date),
+            efrro_from: formatDateString(tenant.efrro_from),
+            efrro_till: formatDateString(tenant.efrro_till)
+        };
+
         return res.status(200).json({
             success: true,
-            data: tenant
+            data: formattedTenant
         });
 
     } catch (error) {
@@ -416,10 +462,30 @@ const getEFRROExpiringList = async (req, res) => {
         const { daysRange } = req.query;
         const list = await tenantService.getEFRROExpiringList(daysRange || null);
 
+        // Format dates
+        const formatDateString = (dateStr) => {
+            if (!dateStr) return null;
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                return d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const formattedList = list.map(item => ({
+            ...item,
+            efrro_from: formatDateString(item.efrro_from),
+            efrro_till: formatDateString(item.efrro_till)
+        }));
+
         return res.status(200).json({
             success: true,
-            count: list.length,
-            data: list
+            count: formattedList.length,
+            data: formattedList
         });
 
     } catch (error) {

@@ -20,6 +20,88 @@ const {
     getQRExpiryTime
 } = require("../utils/helpers");
 
+/**
+ * FIXED: Update tenant paid_till using admin-provided date
+ * NO MORE CALCULATION - just use what admin entered
+ */
+const updateTenantPaidTill = async (connection, tenantId, paidTillDate) => {
+    if (!paidTillDate) {
+        throw new Error("paid_till date is required to update tenant");
+    }
+
+    await connection.execute(
+        `UPDATE tenant_details 
+         SET paid_till = ? 
+         WHERE tenant_id = ?`,
+        [paidTillDate, tenantId]
+    );
+    
+    return { paid_till: paidTillDate };
+};
+
+/**
+ * FIXED: Update tenant paid_from and paid_till together
+ */
+const updateTenantPaymentDates = async (connection, tenantId, paidFrom, paidTill) => {
+    if (!paidFrom || !paidTill) {
+        throw new Error("Both paid_from and paid_till are required");
+    }
+
+    await connection.execute(
+        `UPDATE tenant_details 
+         SET paid_from = ?, paid_till = ? 
+         WHERE tenant_id = ?`,
+        [paidFrom, paidTill, tenantId]
+    );
+    
+    return { paid_from: paidFrom, paid_till: paidTill };
+};
+
+/**
+ * FIXED: Get tenant payment status from bills table (single source of truth)
+ */
+const getTenantPaymentStatus = async (tenantId) => {
+    const [billData] = await db.execute(
+        `
+        SELECT 
+            status,
+            total_amount,
+            paid_amount,
+            fine_amount,
+            created_at,
+            valid_until
+        FROM bills 
+        WHERE tenant_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+        `,
+        [tenantId]
+    );
+    
+    if (billData.length === 0) {
+        return { 
+            status: 'unpaid', 
+            message: 'No bills found for this tenant',
+            has_bill: false 
+        };
+    }
+    
+    const bill = billData[0];
+    const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - parseFloat(bill.paid_amount || 0);
+    
+    return {
+        status: bill.status,
+        has_bill: true,
+        total_amount: parseFloat(bill.total_amount),
+        paid_amount: parseFloat(bill.paid_amount),
+        fine_amount: parseFloat(bill.fine_amount || 0),
+        total_due: totalDue,
+        bill_date: bill.created_at,
+        valid_until: bill.valid_until,
+        is_overdue: bill.status !== 'paid' && new Date(bill.valid_until) < new Date()
+    };
+};
+
 // ============ REGENERATE BILL QR CODES ============
 const regenerateBillQRCodes = async (billId, billData, totalDue) => {
     const connection = await db.getConnection();
@@ -126,9 +208,18 @@ const createBill = async (billData, files = {}) => {
     try {
         await connection.beginTransaction();
 
+        const [tenantExists] = await connection.execute(
+            `SELECT id, full_name, email FROM tenants WHERE id = ? AND role = 'tenant' AND is_active = 1`,
+            [billData.tenant_id]
+        );
+
+        if (tenantExists.length === 0) {
+            throw new Error(`Tenant with ID ${billData.tenant_id} does not exist or is not an active tenant`);
+        }
+
         const unpaidTenants = await BillModel.getUnpaidTenants();
-        const tenantExists = unpaidTenants.some(t => t.id === billData.tenant_id);
-        if (!tenantExists) {
+        const tenantExistsInUnpaid = unpaidTenants.some(t => t.id === billData.tenant_id);
+        if (!tenantExistsInUnpaid) {
             throw new Error("Selected tenant is not eligible for a bill (either already paid or not a tenant)");
         }
 
@@ -221,9 +312,6 @@ const createBill = async (billData, files = {}) => {
             throw qrError;
         }
 
-        // ============================================================
-        // FIXED: Upload admin QR code when admin attaches one
-        // ============================================================
         let adminQr = null;
         let adminQrPublicId = null;
         let adminQrResourceType = null;
@@ -252,9 +340,6 @@ const createBill = async (billData, files = {}) => {
         const sentAt = new Date();
         const validUntil = new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-        // ============================================================
-        // FIXED: Pass admin_qr to BillModel.createBill
-        // ============================================================
         const billId = await BillModel.createBill(connection, {
             tenant_id: billData.tenant_id,
             rent_amount: parseFloat(billData.rent_amount),
@@ -271,9 +356,6 @@ const createBill = async (billData, files = {}) => {
             partial_payment_qr: partialQr,
             partial_payment_qr_public_id: partialQrPublicId,
             partial_payment_qr_resource_type: partialQrResourceType,
-            // ============================================================
-            // FIXED: Pass admin_qr fields to the model
-            // ============================================================
             admin_qr: adminQr,
             admin_qr_public_id: adminQrPublicId,
             admin_qr_resource_type: adminQrResourceType,
@@ -298,7 +380,7 @@ const createBill = async (billData, files = {}) => {
                 paymentQr,
                 partialQr,
                 meterImage,
-                adminQr  // Pass adminQr to email as well
+                adminQr
             );
             emailSent = true;
         } catch (emailError) {
@@ -345,7 +427,6 @@ const getBills = async (filters = {}) => {
 const getBillById = async (billId) => {
     const bill = await BillModel.getBillById(billId);
     if (bill) {
-        // Ensure all numeric values are properly parsed
         bill.total_amount = parseFloat(bill.total_amount) || 0;
         bill.paid_amount = parseFloat(bill.paid_amount) || 0;
         bill.fine_amount = parseFloat(bill.fine_amount) || 0;
@@ -357,16 +438,8 @@ const getBillById = async (billId) => {
         bill.total_partial_paid = parseFloat(bill.total_partial_paid) || 0;
         bill.total_cash_paid = parseFloat(bill.total_cash_paid) || 0;
         
-        // ============================================================
-        // FIX: DUE AMOUNT CALCULATION
-        // paid_amount already includes online payments + cash payments
-        // from bill_payments table. Do NOT subtract total_cash_paid
-        // again - that would double-count cash payments.
-        // ============================================================
-        // CORRECT: Due = Total + Fine - Total Paid (all payments combined)
         const totalPaid = parseFloat(bill.paid_amount || 0);
         bill.due_amount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - totalPaid;
-        // Cap at 0 (can't be negative - overpayment shouldn't show negative due)
         if (bill.due_amount < 0) bill.due_amount = 0;
     }
     return bill;
@@ -416,7 +489,6 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
         let qrCodeResourceType = null;
         let qrExpiresAt = null;
 
-        // FIX: Use the fixed getBillById calculation
         const fixedBill = await getBillById(billId);
         const totalDue = fixedBill.due_amount || 0;
 
@@ -536,7 +608,6 @@ const requestCashPaymentOTP = async (billId, paymentData) => {
             throw new Error("Bill is already fully paid");
         }
 
-        // FIX: Use the fixed getBillById calculation
         const fixedBill = await getBillById(billId);
         const totalDue = fixedBill.due_amount || 0;
         
@@ -597,7 +668,6 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             throw new Error(verification.message);
         }
 
-        // FIX: Use the fixed getBillById calculation
         const fixedBill = await getBillById(billId);
         const totalDue = fixedBill.due_amount || 0;
         
@@ -605,6 +675,7 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
         }
 
+        // ✅ FIXED: Store paid_from and paid_till from admin input
         await BillModel.createCashPayment(connection, {
             bill_id: billId,
             tenant_id: bill.tenant_id,
@@ -616,9 +687,9 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             notes: paymentData.notes || null
         });
 
-        // Update paid_amount in bills table
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
-        const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
+        const totalAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0);
+        const remainingAmount = totalAmount - newPaidAmount;
 
         let newStatus = 'paid';
         if (remainingAmount > 0) {
@@ -628,9 +699,16 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
         await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
         await BillModel.clearCashPaymentOTP(connection, billId);
 
+        // ✅ FIXED: Update tenant_details with admin-provided paid_till
+        await updateTenantPaymentDates(
+            connection, 
+            bill.tenant_id, 
+            paymentData.paid_from, 
+            paymentData.paid_till
+        );
+
         const updatedBill = await BillModel.getBillById(billId);
         
-        // FIX: Recalculate due amount using the fixed calculation
         const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
                            parseFloat(updatedBill.paid_amount || 0);
         const finalDue = newTotalDue < 0 ? 0 : newTotalDue;
@@ -761,12 +839,6 @@ const processDelayedPayments = async () => {
             
             if (daysOverdue <= 0) continue;
 
-            // ============================================================
-            // NEW: Notify tenant the first time their bill goes overdue
-            // (i.e. it wasn't already flagged as delayed/overdue before
-            // this cron run). Placed before the fine-specific branch so
-            // it fires exactly once per bill's transition into overdue.
-            // ============================================================
             if (bill.status !== 'delayed' && bill.status !== 'overdue') {
                 try {
                     const tenantForNotif = { full_name: bill.tenant_name, id: bill.tenant_id };
@@ -938,7 +1010,6 @@ const addPayment = async (billId, paymentData) => {
             throw new Error("Bill is already fully paid");
         }
 
-        // FIX: Use the fixed getBillById calculation
         const fixedBill = await getBillById(billId);
         const totalDue = fixedBill.due_amount || 0;
         
@@ -946,12 +1017,15 @@ const addPayment = async (billId, paymentData) => {
             throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
         }
 
+        // ✅ FIXED: Store paid_from and paid_till
         await BillModel.createBillPayment(connection, {
             bill_id: billId,
             amount: paymentData.amount,
             payment_method: paymentData.payment_method || 'qr_code',
             transaction_id: paymentData.transaction_id || null,
-            is_partial: paymentData.is_partial || 0
+            is_partial: paymentData.is_partial || 0,
+            paid_from: paymentData.paid_from || null,
+            paid_till: paymentData.paid_till || null
         });
 
         const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
@@ -968,9 +1042,18 @@ const addPayment = async (billId, paymentData) => {
 
         await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
 
+        // ✅ FIXED: Update tenant_details with admin-provided dates
+        if (paymentData.paid_from && paymentData.paid_till) {
+            await updateTenantPaymentDates(
+                connection, 
+                bill.tenant_id, 
+                paymentData.paid_from, 
+                paymentData.paid_till
+            );
+        }
+
         const updatedBill = await BillModel.getBillById(billId);
         
-        // FIX: Recalculate due amount using the fixed calculation
         const newTotalDue = parseFloat(updatedBill.total_amount) + parseFloat(updatedBill.fine_amount || 0) - 
                            parseFloat(updatedBill.paid_amount || 0);
         const finalDue = newTotalDue < 0 ? 0 : newTotalDue;
@@ -1047,7 +1130,7 @@ const addPayment = async (billId, paymentData) => {
     }
 };
 
-// ============ GENERATE BILL PAYMENT OPTIONS (for Payment Link) ============
+// ============ GENERATE BILL PAYMENT OPTIONS ============
 const generateBillPaymentOptions = async (billId) => {
     const bill = await BillModel.getBillById(billId);
     if (!bill) {
@@ -1059,7 +1142,6 @@ const generateBillPaymentOptions = async (billId) => {
         throw new Error("Tenant not found");
     }
 
-    // FIX: Use the fixed getBillById calculation
     const fixedBill = await getBillById(billId);
     const totalDue = fixedBill.due_amount || 0;
 
@@ -1141,38 +1223,50 @@ const generateBillPaymentOptions = async (billId) => {
     };
 };
 
-// ============================================================
-// NEW: Check and send payment (rent due) reminders
-// Notifies tenants whose paid_till date is approaching within
-// 1, 3, or 7 days
-// ============================================================
+// ============ CHECK AND SEND PAYMENT REMINDERS ============
 const checkAndSendPaymentReminders = async () => {
     try {
         console.log("Checking payment reminders...");
 
+        // Get tenants with payment due in 1, 3, or 7 days using bills table
         const [tenants] = await db.query(
             `
             SELECT 
                 t.id,
                 t.full_name,
                 t.email,
-                td.paid_till,
-                DATEDIFF(td.paid_till, CURDATE()) as days_left
+                td.rent,
+                td.paid_from,
+                td.payment_date,
+                b.status as bill_status,
+                b.total_amount,
+                b.paid_amount,
+                b.valid_until,
+                -- Calculate days until next payment date
+                CASE 
+                    WHEN td.payment_date >= DAY(CURDATE()) THEN td.payment_date - DAY(CURDATE())
+                    ELSE td.payment_date + DAY(LAST_DAY(CURDATE())) - DAY(CURDATE())
+                END as days_until_due
             FROM tenants t
             INNER JOIN tenant_details td ON t.id = td.tenant_id
+            LEFT JOIN bills b ON t.id = b.tenant_id AND b.status != 'paid'
             WHERE 
                 t.role = 'tenant'
                 AND t.is_active = 1
-                AND td.paid_till IS NOT NULL
-                AND td.paid_till >= CURDATE()
-                AND DATEDIFF(td.paid_till, CURDATE()) IN (1, 3, 7)
+                AND td.paid_from IS NOT NULL
+                AND td.rent > 0
+                AND b.id IS NOT NULL
+                AND CASE 
+                    WHEN td.payment_date >= DAY(CURDATE()) THEN td.payment_date - DAY(CURDATE())
+                    ELSE td.payment_date + DAY(LAST_DAY(CURDATE())) - DAY(CURDATE())
+                END IN (1, 3, 7)
             `
         );
 
         let sent = 0;
         for (const tenant of tenants) {
             try {
-                await NotificationEventManager.onTenantPaymentReminder(tenant, tenant.days_left);
+                await NotificationEventManager.onTenantPaymentReminder(tenant, tenant.days_until_due);
                 sent++;
             } catch (notifError) {
                 console.error(`Failed to send payment reminder to ${tenant.full_name}:`, notifError.message);
@@ -1204,5 +1298,8 @@ module.exports = {
     addPayment,
     generateBillPaymentOptions,
     regenerateBillQRCodes,
-    checkAndSendPaymentReminders
+    checkAndSendPaymentReminders,
+    updateTenantPaidTill,
+    updateTenantPaymentDates,
+    getTenantPaymentStatus
 };

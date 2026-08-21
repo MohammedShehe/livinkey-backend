@@ -37,6 +37,12 @@ const createTenant = async (connection, tenantData) => {
 };
 
 const createTenantDetails = async (connection, detailsData) => {
+    // Helper to convert empty strings to null for date fields
+    const toDateOrNull = (value) => {
+        if (!value || value === '' || value === '0000-00-00') return null;
+        return value;
+    };
+
     const [result] = await connection.execute(
         `
         INSERT INTO tenant_details (
@@ -73,9 +79,9 @@ const createTenantDetails = async (connection, detailsData) => {
             detailsData.rent,
             detailsData.security_fee,
             detailsData.payment_date,
-            detailsData.paid_from,
-            detailsData.paid_till,
-            detailsData.arrival_date,
+            toDateOrNull(detailsData.paid_from),
+            toDateOrNull(detailsData.paid_till),
+            toDateOrNull(detailsData.arrival_date),
             detailsData.document_url || null,
             detailsData.document_public_id || null,
             detailsData.document_resource_type || null
@@ -176,12 +182,39 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             td.document_url,
             p.name as pg_name,
             r.room_number,
-            CASE 
-                WHEN td.paid_till < CURDATE() THEN 'unpaid'
-                WHEN td.paid_from <= CURDATE() AND td.paid_till >= CURDATE() THEN 'paid'
-                WHEN td.paid_from > CURDATE() THEN 'unpaid'
-                ELSE 'unpaid'
-            END as bill_status
+            -- Use bills table as source of truth for payment status
+            COALESCE(
+                (SELECT status 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                'unpaid'
+            ) as bill_status,
+            COALESCE(
+                (SELECT total_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_total_amount,
+            COALESCE(
+                (SELECT paid_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_paid_amount,
+            COALESCE(
+                (SELECT fine_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_fine_amount
         FROM tenants t
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
         LEFT JOIN pgs p ON td.pg_id = p.id
@@ -211,14 +244,13 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
         params.push(gender);
     }
 
+    // Filter by bill_status using the SUBQUERY
     if (bill_status) {
-        if (bill_status === 'paid') {
-            query += ` AND td.paid_from <= CURDATE() AND td.paid_till >= CURDATE()`;
-        } else if (bill_status === 'unpaid') {
-            query += ` AND (td.paid_till < CURDATE() OR td.paid_from > CURDATE())`;
-        } else if (bill_status === 'partially_paid') {
-            query += ` AND td.paid_from <= CURDATE() AND td.paid_till >= CURDATE() AND td.paid_till = CURDATE()`;
-        }
+        query += ` AND COALESCE(
+            (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+            'unpaid'
+        ) = ?`;
+        params.push(bill_status);
     }
 
     query += ` ORDER BY t.created_at DESC`;
@@ -265,12 +297,39 @@ const findById = async (id) => {
             r.room_number,
             r.capacity,
             COALESCE(ro.occupied_count, 0) as occupied_count,
-            CASE 
-                WHEN td.paid_till < CURDATE() THEN 'unpaid'
-                WHEN td.paid_from <= CURDATE() AND td.paid_till >= CURDATE() THEN 'paid'
-                WHEN td.paid_from > CURDATE() THEN 'unpaid'
-                ELSE 'unpaid'
-            END as bill_status
+            -- Use bills table as source of truth for payment status
+            COALESCE(
+                (SELECT status 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                'unpaid'
+            ) as bill_status,
+            COALESCE(
+                (SELECT total_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_total_amount,
+            COALESCE(
+                (SELECT paid_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_paid_amount,
+            COALESCE(
+                (SELECT fine_amount 
+                 FROM bills 
+                 WHERE tenant_id = t.id 
+                 ORDER BY created_at DESC 
+                 LIMIT 1),
+                0
+            ) as bill_fine_amount
         FROM tenants t
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
         LEFT JOIN pgs p ON td.pg_id = p.id
@@ -343,12 +402,18 @@ const getStats = async () => {
     );
     const female = femaleResult[0].female;
 
+    // Use bills table to determine payment status
     const [paidResult] = await db.execute(
         `
         SELECT COUNT(*) as paid 
         FROM tenants t
-        JOIN tenant_details td ON t.id = td.tenant_id
-        WHERE td.paid_from <= CURDATE() AND td.paid_till >= CURDATE()
+        WHERE EXISTS (
+            SELECT 1 FROM bills 
+            WHERE tenant_id = t.id 
+            AND status = 'paid'
+            ORDER BY created_at DESC 
+            LIMIT 1
+        )
         `
     );
     const paid = paidResult[0].paid;
@@ -357,18 +422,29 @@ const getStats = async () => {
         `
         SELECT COUNT(*) as unpaid 
         FROM tenants t
-        JOIN tenant_details td ON t.id = td.tenant_id
-        WHERE td.paid_till < CURDATE() OR td.paid_from > CURDATE()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM bills 
+            WHERE tenant_id = t.id 
+            AND status = 'paid'
+            ORDER BY created_at DESC 
+            LIMIT 1
+        )
         `
     );
     const unpaid = unpaidResult[0].unpaid;
 
+    // Partially paid tenants
     const [partiallyPaidResult] = await db.execute(
         `
         SELECT COUNT(*) as partially_paid 
         FROM tenants t
-        JOIN tenant_details td ON t.id = td.tenant_id
-        WHERE td.paid_from <= CURDATE() AND td.paid_till = CURDATE()
+        WHERE EXISTS (
+            SELECT 1 FROM bills 
+            WHERE tenant_id = t.id 
+            AND status = 'partially_paid'
+            ORDER BY created_at DESC 
+            LIMIT 1
+        )
         `
     );
     const partially_paid = partiallyPaidResult[0].partially_paid;
@@ -631,7 +707,7 @@ const getSuperAdmins = async () => {
         `
         SELECT 
             id,
-            full_name,
+            name as full_name,
             email
         FROM admins
         WHERE role = 'super_admin'

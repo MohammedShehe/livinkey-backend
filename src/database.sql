@@ -41,18 +41,8 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `admin_notifications`
---
-
-LOCK TABLES `admin_notifications` WRITE;
-/*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Najaribu\" has been created',1,'pg','/pgs/1','?','#2ecc71',0,'2026-08-21 03:38:11',NULL),(2,2,'pg_created','New PG Created','PG \"Najaribu\" has been created',1,'pg','/pgs/1','?','#2ecc71',0,'2026-08-21 03:38:11',NULL);
-/*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `admin_permissions`
@@ -75,15 +65,6 @@ CREATE TABLE `admin_permissions` (
   CONSTRAINT `admin_permissions_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `admin_permissions`
---
-
-LOCK TABLES `admin_permissions` WRITE;
-/*!40000 ALTER TABLE `admin_permissions` DISABLE KEYS */;
-/*!40000 ALTER TABLE `admin_permissions` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `admins`
@@ -114,18 +95,8 @@ CREATE TABLE `admins` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
   UNIQUE KEY `phone` (`phone`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `admins`
---
-
-LOCK TABLES `admins` WRITE;
-/*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'MO11','molittle@gmail.com',NULL,'$2b$12$HYQamwmk2/1TCHeTqtWrdeEnmMvbY6vdvxUFCs13kBFSzHzioSMea',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-21 03:35:45','2026-08-21 03:35:45',NULL,NULL,NULL),(2,'MO11','molittle1011@gmail.com',NULL,'$2b$12$HYQamwmk2/1TCHeTqtWrdeEnmMvbY6vdvxUFCs13kBFSzHzioSMea',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-21 03:36:55','2026-08-21 03:37:18','2026-08-21 09:07:03',NULL,NULL);
-/*!40000 ALTER TABLE `admins` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `bill_payments`
@@ -141,22 +112,16 @@ CREATE TABLE `bill_payments` (
   `payment_date` datetime NOT NULL DEFAULT current_timestamp(),
   `payment_method` varchar(50) DEFAULT 'qr_code',
   `transaction_id` varchar(100) DEFAULT NULL,
+  `paid_from` date DEFAULT NULL,
+  `paid_till` date DEFAULT NULL,
   `is_partial` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_bill_id` (`bill_id`),
+  KEY `idx_bill_payments_paid_till` (`paid_till`),
   CONSTRAINT `fk_bill_payments_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `bill_payments`
---
-
-LOCK TABLES `bill_payments` WRITE;
-/*!40000 ALTER TABLE `bill_payments` DISABLE KEYS */;
-/*!40000 ALTER TABLE `bill_payments` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `bills`
@@ -225,19 +190,11 @@ CREATE TABLE `bills` (
   KEY `idx_valid_until` (`valid_until`),
   KEY `fk_bills_created_by` (`created_by`),
   KEY `idx_qr_expires_at` (`qr_expires_at`),
+  KEY `idx_bills_tenant_created` (`tenant_id`,`created_at`),
   CONSTRAINT `fk_bills_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_bills_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `bills`
---
-
-LOCK TABLES `bills` WRITE;
-/*!40000 ALTER TABLE `bills` DISABLE KEYS */;
-/*!40000 ALTER TABLE `bills` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `cash_payments`
@@ -271,15 +228,6 @@ CREATE TABLE `cash_payments` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `cash_payments`
---
-
-LOCK TABLES `cash_payments` WRITE;
-/*!40000 ALTER TABLE `cash_payments` DISABLE KEYS */;
-/*!40000 ALTER TABLE `cash_payments` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `floors`
 --
 
@@ -298,16 +246,6 @@ CREATE TABLE `floors` (
   CONSTRAINT `fk_floors_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `floors`
---
-
-LOCK TABLES `floors` WRITE;
-/*!40000 ALTER TABLE `floors` DISABLE KEYS */;
-INSERT INTO `floors` VALUES (1,1,1,'2026-08-21 03:38:11','2026-08-21 03:38:11');
-/*!40000 ALTER TABLE `floors` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `guest_notifications`
@@ -337,15 +275,6 @@ CREATE TABLE `guest_notifications` (
   CONSTRAINT `guest_notifications_ibfk_1` FOREIGN KEY (`guest_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `guest_notifications`
---
-
-LOCK TABLES `guest_notifications` WRITE;
-/*!40000 ALTER TABLE `guest_notifications` DISABLE KEYS */;
-/*!40000 ALTER TABLE `guest_notifications` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `maintenance_requests`
@@ -381,15 +310,6 @@ CREATE TABLE `maintenance_requests` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `maintenance_requests`
---
-
-LOCK TABLES `maintenance_requests` WRITE;
-/*!40000 ALTER TABLE `maintenance_requests` DISABLE KEYS */;
-/*!40000 ALTER TABLE `maintenance_requests` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `payment_proofs`
 --
 
@@ -402,6 +322,8 @@ CREATE TABLE `payment_proofs` (
   `tenant_id` int(11) NOT NULL,
   `transaction_id` varchar(100) NOT NULL,
   `amount_paid` decimal(10,2) NOT NULL,
+  `paid_from` date DEFAULT NULL,
+  `paid_till` date DEFAULT NULL,
   `proof_url` varchar(500) NOT NULL,
   `proof_public_id` varchar(255) NOT NULL,
   `proof_resource_type` varchar(20) DEFAULT 'image',
@@ -417,20 +339,12 @@ CREATE TABLE `payment_proofs` (
   KEY `verified_by` (`verified_by`),
   KEY `idx_status` (`status`),
   KEY `idx_transaction_id` (`transaction_id`),
+  KEY `idx_payment_proofs_paid_till` (`paid_till`),
   CONSTRAINT `payment_proofs_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_3` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `payment_proofs`
---
-
-LOCK TABLES `payment_proofs` WRITE;
-/*!40000 ALTER TABLE `payment_proofs` DISABLE KEYS */;
-/*!40000 ALTER TABLE `payment_proofs` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `payment_transactions`
@@ -467,15 +381,6 @@ CREATE TABLE `payment_transactions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `payment_transactions`
---
-
-LOCK TABLES `payment_transactions` WRITE;
-/*!40000 ALTER TABLE `payment_transactions` DISABLE KEYS */;
-/*!40000 ALTER TABLE `payment_transactions` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `pg_amenities`
 --
 
@@ -495,16 +400,6 @@ CREATE TABLE `pg_amenities` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `pg_amenities`
---
-
-LOCK TABLES `pg_amenities` WRITE;
-/*!40000 ALTER TABLE `pg_amenities` DISABLE KEYS */;
-INSERT INTO `pg_amenities` VALUES (1,1,'Free WiFi',0,'2026-08-21 03:38:06'),(2,1,'AC',0,'2026-08-21 03:38:06');
-/*!40000 ALTER TABLE `pg_amenities` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `pg_images`
 --
 
@@ -522,18 +417,8 @@ CREATE TABLE `pg_images` (
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_images_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `pg_images`
---
-
-LOCK TABLES `pg_images` WRITE;
-/*!40000 ALTER TABLE `pg_images` DISABLE KEYS */;
-INSERT INTO `pg_images` VALUES (1,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283488/livinkey/pgs/images/s9tgs48ncugfvwb8hhbu.png','livinkey/pgs/images/s9tgs48ncugfvwb8hhbu','image',0,'2026-08-21 03:38:09'),(2,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283489/livinkey/pgs/images/ogdwht9ka2updpt65f0e.webp','livinkey/pgs/images/ogdwht9ka2updpt65f0e','image',1,'2026-08-21 03:38:10'),(3,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787283490/livinkey/pgs/images/u3owvhpnq9cognpxf3lf.jpg','livinkey/pgs/images/u3owvhpnq9cognpxf3lf','image',2,'2026-08-21 03:38:11');
-/*!40000 ALTER TABLE `pg_images` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `pgs`
@@ -563,16 +448,6 @@ CREATE TABLE `pgs` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `pgs`
---
-
-LOCK TABLES `pgs` WRITE;
-/*!40000 ALTER TABLE `pgs` DISABLE KEYS */;
-INSERT INTO `pgs` VALUES (1,'Najaribu','Najaribu Address',1,NULL,NULL,NULL,1,2,'2026-08-21 03:38:06','2026-08-21 03:38:06',11000.00,11000.00);
-/*!40000 ALTER TABLE `pgs` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `room_occupancy`
 --
 
@@ -587,17 +462,8 @@ CREATE TABLE `room_occupancy` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `room_occupancy`
---
-
-LOCK TABLES `room_occupancy` WRITE;
-/*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
-/*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `rooms`
@@ -619,18 +485,8 @@ CREATE TABLE `rooms` (
   UNIQUE KEY `unique_floor_room` (`floor_id`,`room_number`),
   KEY `idx_floor_id` (`floor_id`),
   CONSTRAINT `fk_rooms_floor_id` FOREIGN KEY (`floor_id`) REFERENCES `floors` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `rooms`
---
-
-LOCK TABLES `rooms` WRITE;
-/*!40000 ALTER TABLE `rooms` DISABLE KEYS */;
-INSERT INTO `rooms` VALUES (1,1,'101',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00),(2,1,'102',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00),(3,1,'103',2,1,'2026-08-21 03:38:11','2026-08-21 03:38:11',10000.00);
-/*!40000 ALTER TABLE `rooms` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `tenant_details`
@@ -669,17 +525,8 @@ CREATE TABLE `tenant_details` (
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `tenant_details`
---
-
-LOCK TABLES `tenant_details` WRITE;
-/*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `tenant_devices`
@@ -702,17 +549,8 @@ CREATE TABLE `tenant_devices` (
   KEY `idx_tenant_devices_fcm_token` (`fcm_token`),
   KEY `idx_tenant_devices_is_active` (`is_active`),
   CONSTRAINT `tenant_devices_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `tenant_devices`
---
-
-LOCK TABLES `tenant_devices` WRITE;
-/*!40000 ALTER TABLE `tenant_devices` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenant_devices` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `tenant_documents`
@@ -737,15 +575,6 @@ CREATE TABLE `tenant_documents` (
   CONSTRAINT `fk_tenant_documents_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `tenant_documents`
---
-
-LOCK TABLES `tenant_documents` WRITE;
-/*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `tenant_feedbacks`
@@ -778,15 +607,6 @@ CREATE TABLE `tenant_feedbacks` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `tenant_feedbacks`
---
-
-LOCK TABLES `tenant_feedbacks` WRITE;
-/*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `tenant_notifications`
 --
 
@@ -812,17 +632,8 @@ CREATE TABLE `tenant_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `tenant_notifications`
---
-
-LOCK TABLES `tenant_notifications` WRITE;
-/*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `tenants`
@@ -858,17 +669,8 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `tenants`
---
-
-LOCK TABLES `tenants` WRITE;
-/*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-/*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
-UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -879,4 +681,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-21  9:10:47
+-- Dump completed on 2026-08-21 18:35:29

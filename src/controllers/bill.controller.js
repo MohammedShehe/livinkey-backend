@@ -175,15 +175,34 @@ const processDelayedPayments = async (req, res) => {
     }
 };
 
+/**
+ * FIXED: addPayment - Now requires paid_from, paid_till, AND payment proof
+ */
 const addPayment = async (req, res) => {
     try {
         const { id } = req.params;
-        const { amount, payment_method, transaction_id, is_partial } = req.body;
+        const { amount, payment_method, transaction_id, is_partial, paid_from, paid_till } = req.body;
 
         if (!amount || amount <= 0) {
             return res.status(400).json({
                 success: false,
                 message: "Valid payment amount is required"
+            });
+        }
+
+        // ✅ FIXED: Require paid_from and paid_till
+        if (!paid_from || !paid_till) {
+            return res.status(400).json({
+                success: false,
+                message: "Paid from and paid till dates are required"
+            });
+        }
+
+        // ✅ FIXED: Require proof for admin-added payments
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment proof screenshot is required"
             });
         }
 
@@ -194,7 +213,9 @@ const addPayment = async (req, res) => {
                 payment_method: payment_method || 'qr_code',
                 transaction_id: transaction_id || null,
                 is_partial: is_partial === true || is_partial === 'true' ? 1 : 0,
-                created_by: req.admin.id
+                created_by: req.admin.id,
+                paid_from: paid_from,
+                paid_till: paid_till
             }
         );
 
@@ -302,6 +323,10 @@ const requestCashPaymentOTP = async (req, res) => {
     }
 };
 
+/**
+ * FIXED: verifyCashPayment - Now uses paid_till from admin
+ * Already correct - just keeping as is
+ */
 const verifyCashPayment = async (req, res) => {
     try {
         const { id } = req.params;

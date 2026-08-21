@@ -51,8 +51,30 @@ exports.getProfile = async (req, res) => {
 
         const tenant = tenants[0];
 
-        // Remove sensitive data
+        // ============================================================
+        // FIXED: Format dates without time
+        // ============================================================
+        const formatDateString = (dateStr) => {
+            if (!dateStr) return null;
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                return d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+            } catch (e) {
+                return null;
+            }
+        };
+
+        // Remove sensitive data and format dates
         delete tenant.password;
+
+        tenant.paid_from = formatDateString(tenant.paid_from);
+        tenant.paid_till = formatDateString(tenant.paid_till);
+        tenant.arrival_date = formatDateString(tenant.arrival_date);
+        tenant.efrro_from = formatDateString(tenant.efrro_from);
+        tenant.efrro_till = formatDateString(tenant.efrro_till);
 
         return res.json({
             success: true,
@@ -67,4 +89,3 @@ exports.getProfile = async (req, res) => {
         });
     }
 };
-

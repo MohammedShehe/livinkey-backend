@@ -62,8 +62,9 @@ const createBill = async (connection, billData) => {
     return result.insertId;
 };
 
-// In bill.model.js - getUnpaidTenants
-
+/**
+ * FIXED: Get unpaid tenants using bills table as source of truth
+ */
 const getUnpaidTenants = async () => {
     const [rows] = await db.execute(
         `
@@ -75,21 +76,39 @@ const getUnpaidTenants = async () => {
             t.role,
             td.rent,
             td.paid_till,
+            td.paid_from,
             td.payment_date,
             td.pg_id,
             p.name as pg_name,
-            r.room_number
+            r.room_number,
+            COALESCE(
+                (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                'unpaid'
+            ) as bill_status,
+            COALESCE(
+                (SELECT total_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                0
+            ) as total_amount,
+            COALESCE(
+                (SELECT paid_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                0
+            ) as paid_amount,
+            COALESCE(
+                (SELECT fine_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                0
+            ) as fine_amount
         FROM tenants t
         INNER JOIN tenant_details td ON t.id = td.tenant_id
         INNER JOIN pgs p ON td.pg_id = p.id
         INNER JOIN rooms r ON td.room_id = r.id
         WHERE t.role = 'tenant'
         AND t.is_active = 1
-        AND (
-            td.paid_till IS NULL 
-            OR td.paid_till = '0000-00-00'
-            OR td.paid_till < CURDATE()
-        )
+        AND td.paid_from IS NOT NULL
+        AND td.rent > 0
+        AND COALESCE(
+            (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+            'unpaid'
+        ) != 'paid'
         ORDER BY t.full_name ASC
         `
     );
@@ -281,6 +300,9 @@ const updateBillFine = async (connection, billId, fineAmount, validUntil, fineAp
     return result.affectedRows;
 };
 
+/**
+ * FIXED: Create bill payment with paid_from and paid_till
+ */
 const createBillPayment = async (connection, paymentData) => {
     const [result] = await connection.execute(
         `
@@ -289,20 +311,27 @@ const createBillPayment = async (connection, paymentData) => {
             amount,
             payment_method,
             transaction_id,
-            is_partial
-        ) VALUES (?, ?, ?, ?, ?)
+            is_partial,
+            paid_from,
+            paid_till
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
         [
             paymentData.bill_id,
             paymentData.amount,
             paymentData.payment_method || 'qr_code',
             paymentData.transaction_id || null,
-            paymentData.is_partial || 0
+            paymentData.is_partial || 0,
+            paymentData.paid_from || null,
+            paymentData.paid_till || null
         ]
     );
     return result.insertId;
 };
 
+/**
+ * FIXED: Create cash payment with paid_from and paid_till
+ */
 const createCashPayment = async (connection, paymentData) => {
     const [result] = await connection.execute(
         `

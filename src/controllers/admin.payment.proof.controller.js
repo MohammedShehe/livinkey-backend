@@ -1,6 +1,22 @@
-// controllers/admin.payment.proof.controller.js
 const db = require("../config/db");
 const { deleteFile } = require("../services/upload.service");
+const billService = require("../services/bill.service");
+
+/**
+ * FIXED: Update tenant paid_till based on admin-provided dates
+ */
+const updateTenantPaymentDates = async (connection, tenantId, paidFrom, paidTill) => {
+    if (!paidFrom || !paidTill) {
+        throw new Error("Both paid_from and paid_till are required");
+    }
+
+    await connection.execute(
+        `UPDATE tenant_details 
+         SET paid_from = ?, paid_till = ? 
+         WHERE tenant_id = ?`,
+        [paidFrom, paidTill, tenantId]
+    );
+};
 
 /**
  * Get all payment proofs with filters
@@ -24,6 +40,8 @@ exports.getPaymentProofs = async (req, res) => {
                 pp.tenant_id,
                 pp.transaction_id,
                 pp.amount_paid,
+                pp.paid_from,
+                pp.paid_till,
                 pp.proof_url,
                 pp.proof_public_id,
                 pp.proof_resource_type,
@@ -193,7 +211,8 @@ exports.getPaymentProofById = async (req, res) => {
 };
 
 /**
- * Verify a payment proof (Admin action)
+ * FIXED: Verify a payment proof (Admin action)
+ * Now requires paid_from and paid_till from admin
  * PUT /api/bills/payment-proofs/:id/verify
  */
 exports.verifyPaymentProof = async (req, res) => {
@@ -203,8 +222,17 @@ exports.verifyPaymentProof = async (req, res) => {
         await connection.beginTransaction();
 
         const { id } = req.params;
-        const { admin_notes } = req.body;
+        const { admin_notes, paid_from, paid_till } = req.body; // ← NEW FIELDS
         const adminId = req.admin.id;
+
+        // ✅ Validate required fields
+        if (!paid_from || !paid_till) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: "Both paid_from and paid_till are required to verify payment"
+            });
+        }
 
         // Get the proof
         const [proofRows] = await connection.execute(
@@ -250,7 +278,7 @@ exports.verifyPaymentProof = async (req, res) => {
             });
         }
 
-        // Update proof status
+        // ✅ FIXED: Update proof with paid_from and paid_till
         await connection.execute(
             `
             UPDATE payment_proofs 
@@ -258,10 +286,12 @@ exports.verifyPaymentProof = async (req, res) => {
                 status = 'verified',
                 verified_by = ?,
                 verified_at = NOW(),
-                admin_notes = ?
+                admin_notes = ?,
+                paid_from = ?,
+                paid_till = ?
             WHERE id = ?
             `,
-            [adminId, admin_notes || null, id]
+            [adminId, admin_notes || null, paid_from, paid_till, id]
         );
 
         // Update bill payment
@@ -285,7 +315,7 @@ exports.verifyPaymentProof = async (req, res) => {
             [newPaidAmount, newBillStatus, proof.bill_id]
         );
 
-        // Record in bill_payments table
+        // Record in bill_payments table with dates
         await connection.execute(
             `
             INSERT INTO bill_payments (
@@ -293,16 +323,28 @@ exports.verifyPaymentProof = async (req, res) => {
                 amount,
                 payment_method,
                 transaction_id,
-                is_partial
-            ) VALUES (?, ?, ?, ?, ?)
+                is_partial,
+                paid_from,
+                paid_till
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 proof.bill_id,
                 proof.amount_paid,
                 'payment_proof',
                 proof.transaction_id,
-                remainingAmount > 0 ? 1 : 0
+                remainingAmount > 0 ? 1 : 0,
+                paid_from,
+                paid_till
             ]
+        );
+
+        // ✅ FIXED: Update tenant_details with admin-provided dates
+        await updateTenantPaymentDates(
+            connection,
+            proof.tenant_id,
+            paid_from,
+            paid_till
         );
 
         // Delete QR codes if fully paid
@@ -400,7 +442,6 @@ exports.rejectPaymentProof = async (req, res) => {
         const { id } = req.params;
         const { admin_notes } = req.body;
 
-        // Get the proof
         const [proofRows] = await connection.execute(
             `
             SELECT * FROM payment_proofs WHERE id = ?
@@ -426,7 +467,6 @@ exports.rejectPaymentProof = async (req, res) => {
             });
         }
 
-        // Update proof status
         await connection.execute(
             `
             UPDATE payment_proofs 
@@ -440,7 +480,6 @@ exports.rejectPaymentProof = async (req, res) => {
 
         await connection.commit();
 
-        // Get updated proof
         const [updatedProof] = await connection.execute(
             `
             SELECT 
@@ -484,7 +523,6 @@ exports.deletePaymentProof = async (req, res) => {
 
         const { id } = req.params;
 
-        // Get the proof
         const [proofRows] = await connection.execute(
             `
             SELECT proof_public_id, proof_resource_type, status 
@@ -504,7 +542,6 @@ exports.deletePaymentProof = async (req, res) => {
 
         const proof = proofRows[0];
 
-        // Delete file from Cloudinary
         if (proof.proof_public_id) {
             try {
                 await deleteFile(proof.proof_public_id, proof.proof_resource_type);
@@ -513,7 +550,6 @@ exports.deletePaymentProof = async (req, res) => {
             }
         }
 
-        // Delete from database
         await connection.execute(
             `
             DELETE FROM payment_proofs WHERE id = ?

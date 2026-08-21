@@ -1,4 +1,3 @@
-// tenant.home.controller.js
 const db = require("../config/db");
 
 const getTenantHomeData = async (req, res) => {
@@ -7,7 +6,7 @@ const getTenantHomeData = async (req, res) => {
 
         const connection = await db.getConnection();
 
-        // Get tenant basic info with profile picture
+        // Get tenant basic info with profile picture and payment details
         const [tenantData] = await connection.execute(
             `
             SELECT 
@@ -74,7 +73,7 @@ const getTenantHomeData = async (req, res) => {
 
         const currentBill = billData[0] || null;
 
-        // Get maintenance requests count - Handle if table doesn't exist
+        // Get maintenance requests count
         let maintenance = {
             total: 0,
             pending: 0,
@@ -100,7 +99,6 @@ const getTenantHomeData = async (req, res) => {
                 maintenance = maintenanceData[0];
             }
         } catch (tableError) {
-            // Table doesn't exist yet, use default values
             console.log("Maintenance table not found, using default values");
             maintenance = {
                 total: 0,
@@ -110,24 +108,12 @@ const getTenantHomeData = async (req, res) => {
             };
         }
 
-        connection.release();
-
         // ============================================================
-        // FIXED: Calculate rent status with FLOOR instead of CEIL
-        // to show correct due days (2 days instead of 3)
-        // ============================================================
-        let rentStatus = 'unpaid';
-        let dueDays = 0;
-        let nextPaymentDate = null;
-        let daysLeft = 0;
-
-        // ============================================================
-        // FIXED: Helper to check if a date is valid - handles null/undefined
+        // Date helper functions
         // ============================================================
         const isValidDate = (dateStr) => {
             if (!dateStr) return false;
             if (typeof dateStr !== 'string') {
-                // If it's already a Date object
                 if (dateStr instanceof Date) {
                     return !isNaN(dateStr.getTime());
                 }
@@ -145,10 +131,6 @@ const getTenantHomeData = async (req, res) => {
             }
         };
 
-        // ============================================================
-        // FIXED: Format date without timezone conversion
-        // This ensures the date stays as the correct day (e.g., 14th)
-        // ============================================================
         const formatDate = (date) => {
             if (!date) return null;
             if (!(date instanceof Date)) return null;
@@ -158,35 +140,95 @@ const getTenantHomeData = async (req, res) => {
                    String(date.getDate()).padStart(2, '0');
         };
 
+        // ============================================================
+        // FIXED: Format date strings from database
+        // ============================================================
+        const formatDateString = (dateStr) => {
+            if (!dateStr) return null;
+            if (!isValidDate(dateStr)) return null;
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                return d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+            } catch (e) {
+                return null;
+            }
+        };
+
+        // Get today's date (start of day for accurate comparison)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const monthlyRent = parseFloat(tenant.rent) || 0;
         const paidFromValid = isValidDate(tenant.paid_from);
         const paidTillValid = isValidDate(tenant.paid_till);
 
-        if (paidFromValid && paidTillValid) {
+        let rentStatus = 'unpaid';
+        let dueDays = 0;
+        let nextPaymentDate = null;
+        let daysLeft = 0;
+        let amountOwed = 0;
+        let totalPaid = 0;
+        let expectedPayment = 0;
+        let monthsPaid = 0;
+
+        if (paidFromValid && monthlyRent > 0) {
             try {
-                // Get today's date at midnight for accurate day comparison
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                const paidTill = new Date(tenant.paid_till);
-                paidTill.setHours(0, 0, 0, 0);
-                
                 const paidFrom = new Date(tenant.paid_from);
                 paidFrom.setHours(0, 0, 0, 0);
 
-                if (paidTill >= today) {
+                // Get total paid from bills table
+                const [paidData] = await connection.execute(
+                    `
+                    SELECT COALESCE(SUM(paid_amount), 0) as total_paid
+                    FROM bills 
+                    WHERE tenant_id = ?
+                    `,
+                    [tenantId]
+                );
+                totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
+
+                // Calculate months since paid_from
+                const monthsSinceStart = Math.floor((today - paidFrom) / (1000 * 60 * 60 * 24 * 30));
+                expectedPayment = monthlyRent * Math.max(monthsSinceStart, 1);
+
+                // ============================================================
+                // Calculate paid_till date from totalPaid
+                // ============================================================
+                monthsPaid = Math.floor(totalPaid / monthlyRent);
+                const calculatedPaidTill = new Date(paidFrom);
+                calculatedPaidTill.setMonth(calculatedPaidTill.getMonth() + monthsPaid);
+                calculatedPaidTill.setHours(0, 0, 0, 0);
+
+                // Use the actual paid_till from database if available, otherwise use calculated
+                const effectivePaidTill = paidTillValid ? new Date(tenant.paid_till) : calculatedPaidTill;
+                effectivePaidTill.setHours(0, 0, 0, 0);
+
+                // ============================================================
+                // Check if today is beyond paid_till
+                // ============================================================
+                if (today <= effectivePaidTill) {
+                    // Tenant is paid up to date
                     rentStatus = 'paid';
-                    // Calculate days remaining (full days)
-                    const diffTime = paidTill.getTime() - today.getTime();
+                    const diffTime = effectivePaidTill.getTime() - today.getTime();
                     dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    if (dueDays < 0) dueDays = 0;
                 } else {
+                    // Tenant is overdue
                     rentStatus = 'unpaid';
-                    // Calculate overdue days using FLOOR (not CEIL)
-                    // This gives accurate day difference: Aug 14 to Aug 16 = 2 days
-                    const diffTime = today.getTime() - paidTill.getTime();
+                    const diffTime = today.getTime() - effectivePaidTill.getTime();
                     dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    // Calculate amount owed (rounded up to nearest month)
+                    const overdueMonths = Math.ceil(dueDays / 30);
+                    amountOwed = overdueMonths * monthlyRent;
                 }
 
-                // Calculate next payment date
+                // ============================================================
+                // Calculate next payment date using payment_date
+                // ============================================================
                 if (tenant.payment_date) {
                     const nextDate = new Date(today);
                     const currentMonth = today.getMonth();
@@ -200,12 +242,10 @@ const getTenantHomeData = async (req, res) => {
                     
                     nextDate.setDate(paymentDay);
                     
-                    // If payment date already passed this month, go to next month
                     if (nextDate < today) {
                         nextDate.setMonth(nextDate.getMonth() + 1);
                     }
                     
-                    // If we're in the next month, set to that month's payment day
                     const nextMonth = nextDate.getMonth();
                     const nextYear = nextDate.getFullYear();
                     let nextPaymentDay = parseInt(tenant.payment_date);
@@ -218,6 +258,7 @@ const getTenantHomeData = async (req, res) => {
                     daysLeft = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                     if (daysLeft < 0) daysLeft = 0;
                 }
+
             } catch (dateError) {
                 console.log('Date calculation error:', dateError);
             }
@@ -245,6 +286,27 @@ const getTenantHomeData = async (req, res) => {
             initials = tenant.full_name.substring(0, 2).toUpperCase();
         }
 
+        // Get total paid from bills for response
+        const [paidData] = await connection.execute(
+            `
+            SELECT COALESCE(SUM(paid_amount), 0) as total_paid
+            FROM bills 
+            WHERE tenant_id = ?
+            `,
+            [tenantId]
+        );
+        totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
+
+        // ============================================================
+        // FIXED: Format dates properly without time
+        // ============================================================
+        const formattedPaidFrom = tenant.paid_from && isValidDate(tenant.paid_from) 
+            ? formatDateString(tenant.paid_from) 
+            : null;
+        const formattedPaidTill = tenant.paid_till && isValidDate(tenant.paid_till) 
+            ? formatDateString(tenant.paid_till) 
+            : null;
+
         // Prepare response
         const response = {
             greeting: greeting,
@@ -257,20 +319,22 @@ const getTenantHomeData = async (req, res) => {
                 room_number: tenant.room_number || 'Not Assigned',
                 profile_picture: tenant.profile_picture || null,
                 placeholder_initials: initials.toUpperCase(),
-                residency: tenant.residency || 'national'
+                residency: tenant.residency || 'national',
+                monthly_rent: monthlyRent
             },
             rent_status: {
                 status: rentStatus,
                 due_days: dueDays,
-                // ============================================================
-                // FIXED: Use formatDate() instead of toISOString() to avoid
-                // timezone conversion that changes the day
-                // ============================================================
                 next_payment_date: formatDate(nextPaymentDate),
                 days_left: daysLeft,
                 payment_date_of_month: tenant.payment_date || null,
-                paid_from: tenant.paid_from && isValidDate(tenant.paid_from) ? tenant.paid_from : null,
-                paid_till: tenant.paid_till && isValidDate(tenant.paid_till) ? tenant.paid_till : null
+                paid_from: formattedPaidFrom,
+                paid_till: formattedPaidTill,
+                total_paid: totalPaid,
+                expected_payment: expectedPayment,
+                amount_owed: Math.max(amountOwed, 0),
+                months_paid: monthsPaid,
+                monthly_rent: monthlyRent
             },
             current_bill: currentBill ? {
                 id: currentBill.id,
@@ -290,6 +354,8 @@ const getTenantHomeData = async (req, res) => {
                 completed: maintenance.completed || 0
             }
         };
+
+        connection.release();
 
         return res.json({
             success: true,
