@@ -15,13 +15,11 @@ const createPG = async (pgData, files = {}) => {
     try {
         await connection.beginTransaction();
 
-        // Check for duplicate PG name
         const existingPG = await PGModel.findByName(pgData.name);
         if (existingPG) {
             throw new Error(`PG with name "${pgData.name}" already exists`);
         }
 
-        // 1. Upload Payment QR if provided
         let paymentQr = null;
         let paymentQrPublicId = null;
         let paymentQrResourceType = null;
@@ -39,7 +37,6 @@ const createPG = async (pgData, files = {}) => {
             }
         }
 
-        // 2. Create PG
         const pgId = await PGModel.createPG(connection, {
             name: pgData.name,
             location: pgData.location,
@@ -52,7 +49,6 @@ const createPG = async (pgData, files = {}) => {
             created_by: pgData.created_by
         });
 
-        // 3. Add Amenities
         const amenities = pgData.amenities || [];
         for (const amenity of amenities) {
             await PGModel.createAmenity(
@@ -63,7 +59,6 @@ const createPG = async (pgData, files = {}) => {
             );
         }
 
-        // 4. Upload PG Images
         const imageFiles = files.images || [];
         for (let i = 0; i < Math.min(imageFiles.length, 5); i++) {
             const file = imageFiles[i];
@@ -85,7 +80,6 @@ const createPG = async (pgData, files = {}) => {
             }
         }
 
-        // 5. Create Floors and Rooms
         const floors = pgData.floors || [];
         for (const floorData of floors) {
             const floorId = await PGModel.createFloor(
@@ -108,12 +102,11 @@ const createPG = async (pgData, files = {}) => {
 
         await connection.commit();
 
-        // Get the complete PG data
         createdPG = await PGModel.getPGWithDetails(pgId);
 
-        // Send notifications
         try {
             await NotificationEventManager.onPGCreated(createdPG);
+            await NotificationEventManager.onGuestPGAdded(createdPG);
         } catch (notifError) {
             console.error("Failed to send PG notification:", notifError);
         }
@@ -142,6 +135,9 @@ const getPGStats = async () => {
     return await PGModel.getPGStats();
 };
 
+// ============================================
+// FIXED: updatePG - Safe room preservation
+// ============================================
 const updatePG = async (pgId, pgData, files = {}) => {
     const connection = await db.getConnection();
     let updatedPG = null;
@@ -154,12 +150,54 @@ const updatePG = async (pgId, pgData, files = {}) => {
             throw new Error("PG not found");
         }
 
+        // 1. Check duplicate name
         const duplicatePG = await PGModel.findByName(pgData.name, pgId);
         if (duplicatePG) {
             throw new Error(`PG with name "${pgData.name}" already exists`);
         }
 
-        // 1. Handle Payment QR update
+        // 2. Get current active rooms
+        const currentRooms = await PGModel.getRoomsByPGId(pgId);
+        const currentRoomIds = currentRooms.map(r => r.id);
+        const currentRoomNumbers = currentRooms.map(r => r.room_number);
+
+        // 3. Extract new room numbers from request
+        const newRoomNumbers = [];
+        for (const floor of pgData.floors) {
+            for (const room of floor.rooms) {
+                newRoomNumbers.push(room.room_number);
+            }
+        }
+
+        // 4. Identify rooms being removed
+        const removedRoomNumbers = currentRoomNumbers.filter(
+            rn => !newRoomNumbers.includes(rn)
+        );
+        
+        // 5. CRITICAL: Check if removed rooms have tenants
+        if (removedRoomNumbers.length > 0) {
+            const removedRooms = currentRooms.filter(
+                r => removedRoomNumbers.includes(r.room_number)
+            );
+            const removedRoomIds = removedRooms.map(r => r.id);
+            
+            const occupiedRooms = await PGModel.checkRoomsHaveTenants(
+                connection,
+                removedRoomIds
+            );
+            
+            if (occupiedRooms.length > 0) {
+                const details = occupiedRooms.map(r => 
+                    `Room "${r.room_number}" has ${r.tenant_count} tenant(s) (${r.tenant_names})`
+                ).join(', ');
+                
+                throw new Error(
+                    `Cannot remove rooms with active tenants: ${details}. Please relocate tenants first.`
+                );
+            }
+        }
+
+        // 6. Handle Payment QR update
         let paymentQr = existingPG.payment_qr;
         let paymentQrPublicId = existingPG.payment_qr_public_id;
         let paymentQrResourceType = existingPG.payment_qr_resource_type;
@@ -202,7 +240,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
             paymentQrResourceType = null;
         }
 
-        // 2. Update PG
+        // 7. Update PG basic info
         await PGModel.updatePG(connection, pgId, {
             name: pgData.name,
             location: pgData.location,
@@ -214,7 +252,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
             payment_qr_resource_type: paymentQrResourceType
         });
 
-        // 3. Update Amenities
+        // 8. Update Amenities
         await PGModel.deleteAmenitiesByPGId(connection, pgId);
         const amenities = pgData.amenities || [];
         for (const amenity of amenities) {
@@ -226,7 +264,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
             );
         }
 
-        // 4. Update Images - FIXED: Keep existing images if no new ones uploaded
+        // 9. Update Images - Only if new images uploaded
         if (files.images && files.images.length > 0) {
             const oldImages = await PGModel.getImagesByPGId(pgId);
             for (const image of oldImages) {
@@ -258,27 +296,88 @@ const updatePG = async (pgId, pgData, files = {}) => {
             }
         }
 
-        // 5. Update Floors and Rooms
-        await PGModel.deleteFloorsByPGId(connection, pgId);
-        const floors = pgData.floors || [];
-        for (const floorData of floors) {
-            const floorId = await PGModel.createFloor(
-                connection,
-                pgId,
-                parseInt(floorData.floor_number)
-            );
+        // 10. Process new floor structure - PRESERVE existing rooms when possible
+        const newFloorNumbers = pgData.floors.map(f => parseInt(f.floor_number));
+        
+        // 10a. Soft delete floors that are no longer present
+        await PGModel.softDeleteFloorsByPGId(connection, pgId, newFloorNumbers);
 
-            const rooms = floorData.rooms || [];
-            for (const roomData of rooms) {
-                await PGModel.createRoom(
-                    connection,
-                    floorId,
-                    roomData.room_number,
-                    parseInt(roomData.capacity),
-                    roomData.rent || pgData.rent || 0
+        // 10b. Track room IDs to keep
+        const activeRoomIds = [];
+
+        for (const floorData of pgData.floors) {
+            // Get or create floor
+            let [floor] = await connection.execute(
+                `SELECT id FROM floors WHERE pg_id = ? AND floor_number = ? AND is_active = 1`,
+                [pgId, parseInt(floorData.floor_number)]
+            );
+            
+            let floorId;
+            if (floor.length === 0) {
+                // Check if floor exists but is soft-deleted - reactivate it
+                const [deletedFloor] = await connection.execute(
+                    `SELECT id FROM floors WHERE pg_id = ? AND floor_number = ? AND is_active = 0`,
+                    [pgId, parseInt(floorData.floor_number)]
                 );
+                
+                if (deletedFloor.length > 0) {
+                    await connection.execute(
+                        `UPDATE floors SET is_active = 1 WHERE id = ?`,
+                        [deletedFloor[0].id]
+                    );
+                    floorId = deletedFloor[0].id;
+                } else {
+                    const [result] = await connection.execute(
+                        `INSERT INTO floors (pg_id, floor_number, is_active) VALUES (?, ?, 1)`,
+                        [pgId, parseInt(floorData.floor_number)]
+                    );
+                    floorId = result.insertId;
+                }
+            } else {
+                floorId = floor[0].id;
+            }
+            
+            for (const roomData of floorData.rooms) {
+                // Check if room already exists in this floor
+                const [existingRoom] = await connection.execute(
+                    `SELECT id, room_number, is_active FROM rooms 
+                     WHERE floor_id = ? AND room_number = ?`,
+                    [floorId, roomData.room_number]
+                );
+                
+                if (existingRoom.length > 0) {
+                    // ✅ UPDATE existing room (KEEPS SAME ID - TENANTS SAFE!)
+                    await connection.execute(
+                        `UPDATE rooms 
+                         SET capacity = ?, rent = ?, is_active = 1, deleted_at = NULL 
+                         WHERE id = ? AND room_number = ?`,
+                        [
+                            parseInt(roomData.capacity), 
+                            roomData.rent || pgData.rent || 0,
+                            existingRoom[0].id,
+                            roomData.room_number
+                        ]
+                    );
+                    activeRoomIds.push(existingRoom[0].id);
+                } else {
+                    // ✅ INSERT new room
+                    const [result] = await connection.execute(
+                        `INSERT INTO rooms (floor_id, room_number, capacity, rent, is_active)
+                         VALUES (?, ?, ?, ?, 1)`,
+                        [
+                            floorId,
+                            roomData.room_number,
+                            parseInt(roomData.capacity),
+                            roomData.rent || pgData.rent || 0
+                        ]
+                    );
+                    activeRoomIds.push(result.insertId);
+                }
             }
         }
+
+        // 10c. Soft delete rooms that are no longer present (only if no tenants)
+        await PGModel.softDeleteRoomsByPGId(connection, pgId, activeRoomIds);
 
         await connection.commit();
 
@@ -286,6 +385,7 @@ const updatePG = async (pgId, pgData, files = {}) => {
 
         try {
             await NotificationEventManager.onPGUpdated(updatedPG);
+            await NotificationEventManager.onGuestPGUpdated(updatedPG);
         } catch (notifError) {
             console.error("Failed to send PG update notification:", notifError);
         }
@@ -301,6 +401,9 @@ const updatePG = async (pgId, pgData, files = {}) => {
     }
 };
 
+// ============================================
+// FIXED: deletePG - Check for tenants before deletion
+// ============================================
 const deletePG = async (pgId) => {
     const connection = await db.getConnection();
 
@@ -312,6 +415,15 @@ const deletePG = async (pgId) => {
             throw new Error("PG not found");
         }
 
+        // CRITICAL: Check if PG has active tenants
+        const hasTenants = await PGModel.hasActiveTenants(connection, pgId);
+        if (hasTenants) {
+            throw new Error(
+                "Cannot delete PG with active tenants. Please relocate or deactivate all tenants first."
+            );
+        }
+
+        // Delete QR code
         if (pg.payment_qr_public_id) {
             try {
                 await deleteFile(
@@ -323,6 +435,7 @@ const deletePG = async (pgId) => {
             }
         }
 
+        // Delete images
         const images = await PGModel.getImagesByPGId(pgId);
         for (const image of images) {
             try {

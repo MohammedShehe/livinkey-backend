@@ -24,7 +24,6 @@ const createPG = async (req, res) => {
             });
         }
 
-        // Validate rent
         if (!rent || rent <= 0) {
             return res.status(400).json({
                 success: false,
@@ -32,7 +31,6 @@ const createPG = async (req, res) => {
             });
         }
 
-        // Parse JSON fields if they come as strings
         let parsedAmenities = amenities;
         let parsedFloors = floors;
 
@@ -58,9 +56,6 @@ const createPG = async (req, res) => {
             }
         }
 
-        // ============================================
-        // FIX: Validate floors and rooms properly
-        // ============================================
         if (!parsedFloors || !Array.isArray(parsedFloors) || parsedFloors.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -68,12 +63,10 @@ const createPG = async (req, res) => {
             });
         }
 
-        // Track empty floors for better error message
         let emptyFloorFound = false;
         let emptyFloorNumber = null;
 
         for (const floor of parsedFloors) {
-            // Check if floor has floor_number
             if (!floor.floor_number && floor.floor_number !== 0) {
                 return res.status(400).json({
                     success: false,
@@ -81,14 +74,12 @@ const createPG = async (req, res) => {
                 });
             }
 
-            // Check if floor has rooms
             if (!floor.rooms || !Array.isArray(floor.rooms) || floor.rooms.length === 0) {
                 emptyFloorFound = true;
                 emptyFloorNumber = floor.floor_number || 'unknown';
                 break;
             }
 
-            // Validate each room
             for (const room of floor.rooms) {
                 if (!room.room_number) {
                     return res.status(400).json({
@@ -112,7 +103,6 @@ const createPG = async (req, res) => {
             });
         }
 
-        // Prepare data for service
         const pgData = {
             name,
             location,
@@ -124,13 +114,11 @@ const createPG = async (req, res) => {
             created_by: req.admin.id
         };
 
-        // Prepare files
         const files = {
             images: req.files?.images || [],
             paymentQr: req.files?.paymentQr || []
         };
 
-        // Limit images to 5
         if (files.images.length > 5) {
             return res.status(400).json({
                 success: false,
@@ -222,6 +210,9 @@ const getPGById = async (req, res) => {
     }
 };
 
+// ============================================
+// FIXED: updatePG - With validation and safe update
+// ============================================
 const updatePG = async (req, res) => {
     try {
         const { id } = req.params;
@@ -236,7 +227,6 @@ const updatePG = async (req, res) => {
             remove_qr
         } = req.body;
 
-        // Validation
         if (!name || !location || !number_of_floors) {
             return res.status(400).json({
                 success: false,
@@ -244,7 +234,6 @@ const updatePG = async (req, res) => {
             });
         }
 
-        // Validate rent
         if (!rent || rent <= 0) {
             return res.status(400).json({
                 success: false,
@@ -252,7 +241,6 @@ const updatePG = async (req, res) => {
             });
         }
 
-        // Parse JSON fields if they come as strings
         let parsedAmenities = amenities;
         let parsedFloors = floors;
 
@@ -278,7 +266,6 @@ const updatePG = async (req, res) => {
             }
         }
 
-        // Validate floors and rooms
         if (!parsedFloors || !Array.isArray(parsedFloors) || parsedFloors.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -286,8 +273,9 @@ const updatePG = async (req, res) => {
             });
         }
 
+        // Validate floor structure
         for (const floor of parsedFloors) {
-            if (!floor.floor_number) {
+            if (!floor.floor_number && floor.floor_number !== 0) {
                 return res.status(400).json({
                     success: false,
                     message: "Each floor must have a floor_number"
@@ -300,16 +288,21 @@ const updatePG = async (req, res) => {
                 });
             }
             for (const room of floor.rooms) {
-                if (!room.room_number || !room.capacity) {
+                if (!room.room_number) {
                     return res.status(400).json({
                         success: false,
-                        message: "Each room must have a room_number and capacity"
+                        message: `Room on floor ${floor.floor_number} is missing a room_number`
+                    });
+                }
+                if (!room.capacity || room.capacity < 1) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Room ${room.room_number} on floor ${floor.floor_number} must have a capacity of at least 1`
                     });
                 }
             }
         }
 
-        // Prepare data for service
         const pgData = {
             name,
             location,
@@ -321,13 +314,11 @@ const updatePG = async (req, res) => {
             remove_qr: remove_qr === true || remove_qr === 'true'
         };
 
-        // Prepare files
         const files = {
             images: req.files?.images || [],
             paymentQr: req.files?.paymentQr || []
         };
 
-        // Limit images to 5
         if (files.images.length > 5) {
             return res.status(400).json({
                 success: false,
@@ -345,16 +336,54 @@ const updatePG = async (req, res) => {
 
     } catch (error) {
         console.error("Update PG Error:", error);
-        return res.status(500).json({
+        
+        // Return a user-friendly error message
+        const errorMessage = error.message || "Internal server error";
+        
+        return res.status(400).json({
             success: false,
-            message: error.message || "Internal server error"
+            message: errorMessage,
+            // Include additional data if available
+            data: error.details || null
         });
     }
 };
 
+// ============================================
+// FIXED: deletePG - Check for tenants before deletion
+// ============================================
 const deletePG = async (req, res) => {
     try {
         const { id } = req.params;
+
+        const pg = await pgService.getPGById(id);
+        if (!pg) {
+            return res.status(404).json({
+                success: false,
+                message: "PG not found"
+            });
+        }
+
+        // Check if PG has active tenants (additional check before service)
+        const connection = await require("../config/db").getConnection();
+        const [tenants] = await connection.execute(
+            `
+            SELECT COUNT(*) as count
+            FROM tenant_details td
+            INNER JOIN rooms r ON td.room_id = r.id
+            INNER JOIN floors f ON r.floor_id = f.id
+            WHERE f.pg_id = ?
+            `,
+            [id]
+        );
+        connection.release();
+
+        if (parseInt(tenants[0]?.count || 0) > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Cannot delete PG with active tenants. Please relocate or deactivate all tenants first."
+            });
+        }
 
         await pgService.deletePG(id);
 
