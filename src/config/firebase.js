@@ -15,7 +15,6 @@ try {
   
   if (fs.existsSync(serviceAccountPath)) {
     serviceAccount = require(serviceAccountPath);
-    console.log('✅ Firebase service account found at:', serviceAccountPath);
   } else {
     console.warn('⚠️ Firebase service account NOT found at:', serviceAccountPath);
     console.warn('⚠️ Please download from Firebase Console and place at this location');
@@ -26,7 +25,6 @@ try {
       credential: admin.credential.cert(serviceAccount),
       projectId: serviceAccount.project_id,
     });
-    console.log('✅ Firebase Admin SDK initialized with service account');
   } else {
     throw new Error('Service account file not found');
   }
@@ -45,7 +43,6 @@ try {
         privateKey: '-----BEGIN PRIVATE KEY-----\nDUMMY\n-----END PRIVATE KEY-----\n',
       })
     });
-    console.log('⚠️ Firebase initialized with dummy credentials (push notifications disabled)');
   } catch (initError) {
     console.error('❌ Failed to initialize Firebase even with dummy credentials:', initError.message);
     // Create a minimal app that won't crash
@@ -111,7 +108,6 @@ const saveFCMToken = async (tenantId, fcmToken, deviceType = 'android') => {
       );
     }
     
-    console.log(`✅ FCM token saved for tenant ${tenantId}`);
   } finally {
     connection.release();
   }
@@ -169,7 +165,6 @@ const sendPushNotification = async (fcmToken, notification, data = {}) => {
     };
 
     const response = await messaging.send(message);
-    console.log(`✅ Push notification sent: ${response}`);
     return response;
   } catch (error) {
     console.error('❌ Failed to send push notification:', error);
@@ -238,7 +233,6 @@ const sendPushNotificationToMultiple = async (fcmTokens, notification, data = {}
         responses: response.responses,
       });
       
-      console.log(`✅ Multicast: ${response.successCount} success, ${response.failureCount} failed`);
     } catch (error) {
       console.error('❌ Multicast failed:', error);
       results.push({ error: error.message });
@@ -261,7 +255,6 @@ const removeFCMToken = async (tenantId, fcmToken) => {
        WHERE tenant_id = ? AND fcm_token = ?`,
       [tenantId, fcmToken]
     );
-    console.log(`✅ FCM token deactivated for tenant ${tenantId}`);
   } finally {
     connection.release();
   }
@@ -280,7 +273,6 @@ const removeAllFCMTokens = async (tenantId) => {
        WHERE tenant_id = ?`,
       [tenantId]
     );
-    console.log(`✅ All FCM tokens deactivated for tenant ${tenantId}`);
   } finally {
     connection.release();
   }

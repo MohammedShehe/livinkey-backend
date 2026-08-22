@@ -465,16 +465,13 @@ const deleteTenant = async (tenantId) => {
 
 const checkAndSendEFRROExpiryNotifications = async () => {
     try {
-        console.log("Checking e-FRRO expiry notifications...");
         
         const expiringTenants = await TenantModel.getTenantsWithExpiringEFRRO();
         
         if (expiringTenants.length === 0) {
-            console.log("No tenants with e-FRRO expiring within 30 days.");
             return { sent: 0, message: "No tenants with e-FRRO expiring soon." };
         }
 
-        console.log(`Found ${expiringTenants.length} tenant(s) with e-FRRO expiring within 30 days.`);
         
         let tenantEmailsSent = 0;
         let tenantEmailErrors = 0;
@@ -487,7 +484,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
                     tenant
                 );
                 tenantEmailsSent++;
-                console.log(`e-FRRO expiry email sent to ${tenant.full_name} (${tenant.email})`);
             } catch (error) {
                 tenantEmailErrors++;
                 console.error(`Failed to send e-FRRO expiry email to ${tenant.full_name}:`, error.message);
@@ -514,7 +510,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
                         expiringTenants
                     );
                     adminEmailsSent++;
-                    console.log(`e-FRRO expiry report sent to super admin ${admin.full_name} (${admin.email})`);
                 } catch (error) {
                     adminEmailErrors++;
                     console.error(`Failed to send e-FRRO expiry report to super admin ${admin.full_name}:`, error.message);
@@ -551,7 +546,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
 // ============================================================
 const checkAndSendDocumentReminders = async () => {
     try {
-        console.log("Checking document reminders...");
 
         const [tenants] = await db.query(
             `
@@ -600,7 +594,6 @@ const checkAndSendDocumentReminders = async () => {
             }
         }
 
-        console.log(`Document reminders sent: ${notificationsSent}`);
         return { sent: notificationsSent, totalChecked: tenants.length, details };
 
     } catch (error) {

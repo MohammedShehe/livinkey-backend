@@ -71,7 +71,6 @@ exports.login = async (req, res) => {
         );
 
     } catch (error) {
-        console.log(error);
         if (error.status === 429) {
             return res.status(429).json(
                 new ApiResponse(false, error.message)
@@ -137,7 +136,6 @@ exports.verifyOTP = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."
@@ -175,7 +173,6 @@ exports.resendOTP = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         if (error.status === 429) {
             return res.status(429).json({
                 success: false,
@@ -212,7 +209,6 @@ exports.forgotPassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         if (error.status === 429) {
             return res.status(429).json({
                 success: false,
@@ -277,7 +273,6 @@ exports.verifyForgotPasswordOTP = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."
@@ -336,7 +331,6 @@ exports.resetPassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."
@@ -403,7 +397,6 @@ exports.changePassword = async (req, res) => {
         });
 
     } catch (error) {
-        console.log(error);
         return res.status(500).json({
             success: false,
             message: "Internal server error."

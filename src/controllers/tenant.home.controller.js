@@ -99,7 +99,6 @@ const getTenantHomeData = async (req, res) => {
                 maintenance = maintenanceData[0];
             }
         } catch (tableError) {
-            console.log("Maintenance table not found, using default values");
             maintenance = {
                 total: 0,
                 pending: 0,
@@ -260,7 +259,6 @@ const getTenantHomeData = async (req, res) => {
                 }
 
             } catch (dateError) {
-                console.log('Date calculation error:', dateError);
             }
         }
 

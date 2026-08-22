@@ -330,7 +330,6 @@ const createBill = async (billData, files = {}) => {
                     adminQrPublicId = uploadResult.public_id;
                     adminQrResourceType = uploadResult.resource_type;
                     uploadedCloudFiles.push({ public_id: adminQrPublicId, resource_type: adminQrResourceType });
-                    console.log("Admin QR uploaded successfully:", adminQr);
                 }
             } catch (adminQrError) {
                 console.warn("Admin-uploaded paymentQr failed to upload:", adminQrError.message);
@@ -1226,7 +1225,6 @@ const generateBillPaymentOptions = async (billId) => {
 // ============ CHECK AND SEND PAYMENT REMINDERS ============
 const checkAndSendPaymentReminders = async () => {
     try {
-        console.log("Checking payment reminders...");
 
         // Get tenants with payment due in 1, 3, or 7 days using bills table
         const [tenants] = await db.query(
@@ -1273,7 +1271,6 @@ const checkAndSendPaymentReminders = async () => {
             }
         }
 
-        console.log(`Payment reminders sent: ${sent}`);
         return { sent, totalChecked: tenants.length };
 
     } catch (error) {
