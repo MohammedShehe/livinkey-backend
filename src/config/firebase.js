@@ -1,59 +1,66 @@
 const admin = require('firebase-admin');
 const path = require('path');
+const fs = require('fs');
 
 // Initialize Firebase Admin SDK
 let firebaseApp;
 let messaging;
+let isFirebaseEnabled = false;
 
 try {
-  // Try to load service account file from src folder
-  const serviceAccountPath = path.join(__dirname, '../firebase-service-account.json');
+  let serviceAccount = null;
   
-  // Check if file exists
-  const fs = require('fs');
-  let serviceAccount;
-  
-  if (fs.existsSync(serviceAccountPath)) {
-    serviceAccount = require(serviceAccountPath);
-  } else {
-    console.warn('⚠️ Firebase service account NOT found at:', serviceAccountPath);
-    console.warn('⚠️ Please download from Firebase Console and place at this location');
+  // Option 1: Try environment variable (Production - Render)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      console.log('✅ Firebase service account loaded from environment variable');
+    } catch (parseError) {
+      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', parseError.message);
+    }
   }
   
+  // Option 2: Try local file (Development - only if env var not found)
+  if (!serviceAccount) {
+    const serviceAccountPath = path.join(__dirname, '../firebase-service-account.json');
+    
+    if (fs.existsSync(serviceAccountPath)) {
+      try {
+        serviceAccount = require(serviceAccountPath);
+        console.log('✅ Firebase service account loaded from local file');
+      } catch (fileError) {
+        console.warn('⚠️ Failed to load local service account file:', fileError.message);
+      }
+    } else {
+      console.log('ℹ️ Local Firebase service account file not found at:', serviceAccountPath);
+    }
+  }
+  
+  // Initialize Firebase if we have service account
   if (serviceAccount) {
     firebaseApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: serviceAccount.project_id,
     });
+    isFirebaseEnabled = true;
+    console.log('✅ Firebase initialized successfully');
   } else {
-    throw new Error('Service account file not found');
+    console.log('ℹ️ Firebase push notifications disabled - no service account found');
   }
 } catch (error) {
-  console.warn('⚠️ Failed to load service account:', error.message);
-  console.warn('⚠️ Firebase push notifications will be disabled.');
-  
-  // Create a dummy app to prevent crashes
-  // This will still allow the server to run, but push notifications won't work
-  try {
-    firebaseApp = admin.initializeApp({
-      projectId: 'dummy-project',
-      credential: admin.credential.cert({
-        projectId: 'dummy-project',
-        clientEmail: 'dummy@example.com',
-        privateKey: '-----BEGIN PRIVATE KEY-----\nDUMMY\n-----END PRIVATE KEY-----\n',
-      })
-    });
-  } catch (initError) {
-    console.error('❌ Failed to initialize Firebase even with dummy credentials:', initError.message);
-    // Create a minimal app that won't crash
-    firebaseApp = { messaging: () => ({ send: async () => {}, sendEachForMulticast: async () => ({}) }) };
-  }
+  console.warn('⚠️ Firebase initialization failed:', error.message);
+  console.log('ℹ️ Firebase push notifications will be disabled');
 }
 
-// Only create messaging if admin is available
-try {
-  messaging = admin.messaging ? admin.messaging() : null;
-} catch (e) {
+// Only create messaging if Firebase is enabled
+if (isFirebaseEnabled && admin.messaging) {
+  try {
+    messaging = admin.messaging();
+  } catch (e) {
+    console.warn('⚠️ Failed to initialize Firebase messaging:', e.message);
+    messaging = null;
+  }
+} else {
   messaging = null;
 }
 
@@ -122,9 +129,9 @@ const sendPushNotification = async (fcmToken, notification, data = {}) => {
     return null;
   }
 
-  // Skip if messaging is not available
-  if (!messaging) {
-    console.warn('⚠️ Firebase messaging not available, skipping push notification');
+  // Skip if Firebase is not enabled
+  if (!isFirebaseEnabled || !messaging) {
+    console.log('ℹ️ Push notification skipped - Firebase not configured');
     return null;
   }
 
@@ -181,9 +188,9 @@ const sendPushNotificationToMultiple = async (fcmTokens, notification, data = {}
     return null;
   }
 
-  // Skip if messaging is not available
-  if (!messaging) {
-    console.warn('⚠️ Firebase messaging not available, skipping push notifications');
+  // Skip if Firebase is not enabled
+  if (!isFirebaseEnabled || !messaging) {
+    console.log('ℹ️ Push notifications skipped - Firebase not configured');
     return null;
   }
 
@@ -285,4 +292,5 @@ module.exports = {
   sendPushNotificationToMultiple,
   removeFCMToken,
   removeAllFCMTokens,
+  isFirebaseEnabled,  // Export this so other modules can check
 };
