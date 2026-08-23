@@ -376,7 +376,7 @@ const generatePaymentReceipt = (paymentData, type) => {
                     This is a system-generated receipt. For any queries, please contact support.
                 </p>
                 <p style="font-size: 11px; color: #ccc; margin-top: 4px;">
-                    © ${new Date().getFullYear()} Livinkey. All rights reserved.
+                    © 2022 Livinkey. All rights reserved.
                 </p>
             </div>
         </div>
