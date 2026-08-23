@@ -29,9 +29,21 @@ exports.getProfile = async (req, res) => {
                 td.security_fee,
                 td.payment_date,
                 td.arrival_date,
+                td.paid_from,
+                td.paid_till,
                 p.name as pg_name,
                 r.room_number,
-                r.capacity
+                r.capacity,
+                -- ============================================================
+                -- FIXED: Get profile picture from passport_photo document
+                -- ============================================================
+                (
+                    SELECT document_url 
+                    FROM tenant_documents 
+                    WHERE tenant_id = t.id 
+                    AND document_type = 'passport_photo' 
+                    LIMIT 1
+                ) as profile_picture
             FROM tenants t
             LEFT JOIN tenant_details td ON t.id = td.tenant_id
             LEFT JOIN pgs p ON td.pg_id = p.id

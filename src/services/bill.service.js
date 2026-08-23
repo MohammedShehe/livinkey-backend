@@ -203,7 +203,6 @@ const createBill = async (billData, files = {}) => {
     const uploadedCloudFiles = [];
     let tempFiles = [];
     let createdBill = null;
-    let tenant = null;
 
     try {
         await connection.beginTransaction();
@@ -369,13 +368,26 @@ const createBill = async (billData, files = {}) => {
 
         await connection.commit();
 
+        // ============================================================
+        // FIXED: `tenant` is no longer reused to hold the bill row.
+        // Previously this variable was assigned the bill row (which has
+        // `tenant_email`/`tenant_name`, not `id`/`full_name`) and was
+        // then passed straight into the tenant notification helpers,
+        // which read `tenant.id` expecting the TENANT's id but actually
+        // got the BILL's id. That silently wrote every "bill created"
+        // notification against the wrong tenant_id, so the real tenant
+        // never saw it. `billForEmail` is now used only for sending the
+        // email, and a separate, correctly-shaped `tenantForNotif`
+        // object is built from `createdBill` for the notification calls.
+        // ============================================================
         let emailSent = false;
+        let billForEmail = null;
         try {
-            tenant = await BillModel.getBillById(billId);
+            billForEmail = await BillModel.getBillById(billId);
             await sendBillEmail(
-                tenant.tenant_email,
-                tenant.tenant_name,
-                tenant,
+                billForEmail.tenant_email,
+                billForEmail.tenant_name,
+                billForEmail,
                 paymentQr,
                 partialQr,
                 meterImage,
@@ -389,10 +401,12 @@ const createBill = async (billData, files = {}) => {
         createdBill = await BillModel.getBillById(billId);
 
         try {
-            if (tenant) {
-                await NotificationEventManager.onBillCreated(createdBill, tenant);
-                await NotificationEventManager.onTenantBillCreated(createdBill, tenant);
-            }
+            const tenantForNotif = {
+                id: createdBill.tenant_id,
+                full_name: createdBill.tenant_name
+            };
+            await NotificationEventManager.onBillCreated(createdBill, tenantForNotif);
+            await NotificationEventManager.onTenantBillCreated(createdBill, tenantForNotif);
         } catch (notifError) {
             console.error("Failed to send bill notification:", notifError);
         }
@@ -807,6 +821,7 @@ const processDelayedPayments = async () => {
             WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
             AND b.valid_until < NOW()
             AND b.sent_at IS NOT NULL
+            AND b.initial_email_sent = 1
             ORDER BY b.valid_until ASC
             FOR UPDATE
             `

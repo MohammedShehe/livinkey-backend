@@ -83,6 +83,15 @@ const NOTIFICATION_TYPES = {
         color: '#2ecc71',
         linkPrefix: '/bills/'
     },
+    // ============================================================
+    // FIXED: Added PAYMENT_PROOF_SUBMITTED type
+    // ============================================================
+    PAYMENT_PROOF_SUBMITTED: {
+        type: 'payment_proof_submitted',
+        icon: '📥',
+        color: '#3498db',
+        linkPrefix: '/bills/payment-proofs/'
+    },
     
     // PG related
     PG_CREATED: {
@@ -405,6 +414,16 @@ const generateNotificationMessages = {
         message: `Cash payment of ₹${bill.total_amount} verified for ${tenant.full_name}`,
         entity_id: bill.id,
         entity_type: 'bill'
+    }),
+    
+    // ============================================================
+    // FIXED: Added paymentProofSubmitted
+    // ============================================================
+    paymentProofSubmitted: (proof) => ({
+        title: 'New Payment Proof Submitted',
+        message: `${proof.tenant_name} submitted a payment proof of ₹${proof.amount_paid}`,
+        entity_id: proof.id,
+        entity_type: 'payment_proof'
     }),
     
     // PG events

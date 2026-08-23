@@ -13,6 +13,7 @@ exports.getGuestDashboard = async (req, res) => {
         let userName = 'Guest User';
         let userRole = 'guest';
         let isTenantViewingAsGuest = false;
+        let profilePicture = null;
 
         if (req.guest) {
             // Real guest login
@@ -28,10 +29,12 @@ exports.getGuestDashboard = async (req, res) => {
             
             if (users.length > 0) {
                 userName = users[0].full_name;
+                // Real guests: NO profile picture
+                profilePicture = null;
             }
         } else if (req.tenant) {
             // ============================================================
-            // FIXED: Tenant entering as guest - show THEIR name
+            // FIXED: Tenant entering as guest - show THEIR name AND passport photo
             // ============================================================
             userId = req.tenant.id;
             userRole = 'tenant';
@@ -39,13 +42,29 @@ exports.getGuestDashboard = async (req, res) => {
             
             const connection = await db.getConnection();
             const [users] = await connection.execute(
-                `SELECT full_name FROM tenants WHERE id = ? AND role = 'tenant' AND is_active = 1`,
+                `
+                SELECT 
+                    full_name,
+                    -- ============================================================
+                    -- FIXED: Get profile picture from passport_photo document
+                    -- ============================================================
+                    (
+                        SELECT document_url 
+                        FROM tenant_documents 
+                        WHERE tenant_id = t.id 
+                        AND document_type = 'passport_photo' 
+                        LIMIT 1
+                    ) as profile_picture
+                FROM tenants t
+                WHERE id = ? AND role = 'tenant' AND is_active = 1
+                `,
                 [userId]
             );
             connection.release();
             
             if (users.length > 0) {
                 userName = users[0].full_name;
+                profilePicture = users[0].profile_picture;
             }
         }
         // If no user at all, use generic "Guest User"
@@ -81,7 +100,8 @@ exports.getGuestDashboard = async (req, res) => {
                 role: userRole,
                 is_tenant_viewing_as_guest: isTenantViewingAsGuest,
                 total_pgs: pgCount[0]?.total || 0,
-                message: message
+                message: message,
+                profile_picture: profilePicture
             }
         });
 
@@ -124,17 +144,29 @@ exports.getProfile = async (req, res) => {
         const [users] = await connection.execute(
             `
             SELECT 
-                id,
-                full_name,
-                email,
-                nationality,
-                country_code,
-                phone,
-                gender,
-                is_active,
-                created_at
-            FROM tenants 
-            WHERE id = ? AND is_active = 1
+                t.id,
+                t.full_name,
+                t.email,
+                t.nationality,
+                t.country_code,
+                t.phone,
+                t.gender,
+                t.is_active,
+                t.created_at,
+                t.role,
+                -- ============================================================
+                -- FIXED: Get profile picture from passport_photo document
+                -- Only for tenants viewing as guest
+                -- ============================================================
+                (
+                    SELECT document_url 
+                    FROM tenant_documents 
+                    WHERE tenant_id = t.id 
+                    AND document_type = 'passport_photo' 
+                    LIMIT 1
+                ) as profile_picture
+            FROM tenants t
+            WHERE t.id = ? AND t.is_active = 1
             `,
             [userId]
         );
@@ -149,12 +181,27 @@ exports.getProfile = async (req, res) => {
 
         const user = users[0];
 
+        // ============================================================
+        // FIXED: Only return profile picture if tenant is viewing as guest
+        // Real guests should NOT have a profile picture
+        // ============================================================
+        const profilePicture = isTenantViewingAsGuest ? user.profile_picture : null;
+
         return res.json({
             success: true,
             data: {
-                ...user,
-                role: userRole,
-                is_tenant_viewing_as_guest: isTenantViewingAsGuest
+                id: user.id,
+                full_name: user.full_name,
+                email: user.email,
+                nationality: user.nationality,
+                country_code: user.country_code,
+                phone: user.phone,
+                gender: user.gender,
+                is_active: user.is_active,
+                created_at: user.created_at,
+                role: user.role,
+                is_tenant_viewing_as_guest: isTenantViewingAsGuest,
+                profile_picture: profilePicture
             }
         });
 

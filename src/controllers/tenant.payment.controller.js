@@ -1,6 +1,8 @@
 const db = require("../config/db");
 const { uploadFile } = require("../services/upload.service");
 const { generatePaymentReceipt } = require("../services/receipt.service");
+// FIXED: needed to notify admins when a tenant submits a payment proof
+const NotificationEventManager = require("../utils/notification.events");
 
 const getBillDetails = async (req, res) => {
     try {
@@ -178,8 +180,19 @@ const submitPaymentProof = async (req, res) => {
             });
         }
 
+        // ============================================================
+        // FIXED: capture the tenant's name (for the admin notification
+        // message) and the inserted proof's id (needed as the
+        // notification's entity_id / link target).
+        // ============================================================
+        const [tenantRows] = await connection.execute(
+            `SELECT full_name FROM tenants WHERE id = ?`,
+            [tenantId]
+        );
+        const tenantName = tenantRows[0]?.full_name || 'Tenant';
+
         // Insert payment proof
-        await connection.execute(
+        const [proofResult] = await connection.execute(
             `
             INSERT INTO payment_proofs (
                 bill_id,
@@ -205,6 +218,22 @@ const submitPaymentProof = async (req, res) => {
         );
 
         connection.release();
+
+        // ============================================================
+        // FIXED: this previously never notified anyone. Admins now get
+        // a "new payment proof submitted" notification.
+        // ============================================================
+        try {
+            await NotificationEventManager.onPaymentProofSubmitted({
+                id: proofResult.insertId,
+                bill_id,
+                tenant_id: tenantId,
+                tenant_name: tenantName,
+                amount_paid
+            });
+        } catch (notifError) {
+            console.error("Failed to send payment proof submitted notification:", notifError);
+        }
 
         return res.status(201).json({
             success: true,
@@ -397,7 +426,6 @@ const getPaymentReceipt = async (req, res) => {
             );
             paymentData = rows[0];
         } else if (type === 'cash') {
-            tableName = 'cash_payments';
             const [rows] = await connection.execute(
                 `
                 SELECT 
@@ -435,7 +463,6 @@ const getPaymentReceipt = async (req, res) => {
             );
             paymentData = rows[0];
         } else if (type === 'proof') {
-            tableName = 'payment_proofs';
             const [rows] = await connection.execute(
                 `
                 SELECT 

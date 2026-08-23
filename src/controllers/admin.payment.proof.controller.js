@@ -1,22 +1,9 @@
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const db = require("../config/db");
-const { deleteFile } = require("../services/upload.service");
 const billService = require("../services/bill.service");
-
-/**
- * FIXED: Update tenant paid_till based on admin-provided dates
- */
-const updateTenantPaymentDates = async (connection, tenantId, paidFrom, paidTill) => {
-    if (!paidFrom || !paidTill) {
-        throw new Error("Both paid_from and paid_till are required");
-    }
-
-    await connection.execute(
-        `UPDATE tenant_details 
-         SET paid_from = ?, paid_till = ? 
-         WHERE tenant_id = ?`,
-        [paidFrom, paidTill, tenantId]
-    );
-};
+// FIXED: needed to notify the tenant when their proof is verified/rejected
+const NotificationEventManager = require("../utils/notification.events");
 
 /**
  * Get all payment proofs with filters
@@ -340,7 +327,7 @@ exports.verifyPaymentProof = async (req, res) => {
         );
 
         // ✅ FIXED: Update tenant_details with admin-provided dates
-        await updateTenantPaymentDates(
+        await billService.updateTenantPaymentDates(
             connection,
             proof.tenant_id,
             paid_from,
@@ -411,6 +398,35 @@ exports.verifyPaymentProof = async (req, res) => {
             [id]
         );
 
+        // ============================================================
+        // FIXED: this previously never notified the tenant. Now the
+        // tenant gets both a "payment proof verified" notification and
+        // the matching "bill paid"/"bill partially paid" notification
+        // (which never fired before either, since this route updates
+        // the bill directly instead of going through billService.addPayment).
+        // ============================================================
+        try {
+            const tenantForNotif = {
+                id: updatedProof[0].tenant_id,
+                full_name: updatedProof[0].tenant_name
+            };
+            const billForNotif = {
+                id: proof.bill_id,
+                paid_amount: proof.amount_paid,
+                total_amount: newPaidAmount
+            };
+
+            await NotificationEventManager.onTenantPaymentProofVerified(billForNotif, tenantForNotif);
+
+            if (newBillStatus === 'paid') {
+                await NotificationEventManager.onTenantBillPaid(billForNotif, tenantForNotif);
+            } else if (newBillStatus === 'partially_paid') {
+                await NotificationEventManager.onTenantBillPartiallyPaid(billForNotif, tenantForNotif);
+            }
+        } catch (notifError) {
+            console.error("Failed to send payment proof verified notification:", notifError);
+        }
+
         return res.status(200).json({
             success: true,
             message: "Payment proof verified successfully",
@@ -467,6 +483,8 @@ exports.rejectPaymentProof = async (req, res) => {
             });
         }
 
+        const rejectionNote = admin_notes || 'Payment proof rejected by admin';
+
         await connection.execute(
             `
             UPDATE payment_proofs 
@@ -475,7 +493,7 @@ exports.rejectPaymentProof = async (req, res) => {
                 admin_notes = ?
             WHERE id = ?
             `,
-            [admin_notes || 'Payment proof rejected by admin', id]
+            [rejectionNote, id]
         );
 
         await connection.commit();
@@ -492,6 +510,19 @@ exports.rejectPaymentProof = async (req, res) => {
             `,
             [id]
         );
+
+        // ============================================================
+        // FIXED: previously never notified the tenant that their proof
+        // was rejected. They now get told, including the admin's reason.
+        // ============================================================
+        try {
+            await NotificationEventManager.onTenantPaymentProofRejected(
+                proof.tenant_id,
+                rejectionNote
+            );
+        } catch (notifError) {
+            console.error("Failed to send payment proof rejected notification:", notifError);
+        }
 
         return res.status(200).json({
             success: true,

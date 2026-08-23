@@ -615,6 +615,53 @@ class NotificationEventManager {
             }
         );
     }
+
+    // ============================================================
+    // FIXED: Notify admins when a tenant submits a payment proof
+    // ============================================================
+    static async onPaymentProofSubmitted(proof) {
+        const messageData = generateNotificationMessages.paymentProofSubmitted(proof);
+
+        await NotificationService.sendNotificationToAllAdmins(
+            'PAYMENT_PROOF_SUBMITTED',
+            {
+                ...messageData,
+                link: `/bills/payment-proofs/${proof.id}`
+            }
+        );
+    }
+
+    // ============================================================
+    // FIXED: Notify tenant when their payment proof is verified
+    // ============================================================
+    static async onTenantPaymentProofVerified(bill, tenant) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.paymentProofVerified(bill);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenant.id,
+            'PAYMENT_PROOF_VERIFIED',
+            {
+                ...messageData,
+                link: `/tenant-payments/history`
+            }
+        );
+    }
+
+    // ============================================================
+    // FIXED: Notify tenant when their payment proof is rejected
+    // ============================================================
+    static async onTenantPaymentProofRejected(tenantId, reason) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.paymentProofRejected(reason);
+
+        await tenantNotificationService.sendTenantNotification(
+            tenantId,
+            'PAYMENT_PROOF_REJECTED',
+            {
+                ...messageData,
+                link: `/tenant-payments/history`
+            }
+        );
+    }
 }
 
 module.exports = NotificationEventManager;

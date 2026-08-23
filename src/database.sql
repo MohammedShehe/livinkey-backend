@@ -1,8 +1,8 @@
 -- MySQL dump 10.13  Distrib 8.0.44, for Win64 (x86_64)
 --
--- Host: altaria.proxy.rlwy.net    Database: railway
+-- Host: 127.0.0.1    Database: livinkey
 -- ------------------------------------------------------
--- Server version	9.4.0
+-- Server version	5.5.5-10.4.32-MariaDB
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -23,25 +23,25 @@ DROP TABLE IF EXISTS `admin_notifications`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `admin_notifications` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `admin_id` int NOT NULL COMMENT 'Admin who receives the notification',
-  `type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'tenant_expiry, bill_payment, guest_register, etc.',
-  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Short title',
-  `message` text COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Notification message',
-  `entity_id` int DEFAULT NULL COMMENT 'Related entity ID (tenant_id, bill_id, etc.)',
-  `entity_type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'tenant, bill, guest, pg, etc.',
-  `link` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Frontend URL to navigate to',
-  `icon` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Icon class or name',
-  `color` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Color code for the notification',
-  `is_read` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `admin_id` int(11) NOT NULL COMMENT 'Admin who receives the notification',
+  `type` varchar(50) NOT NULL COMMENT 'tenant_expiry, bill_payment, guest_register, etc.',
+  `title` varchar(255) NOT NULL COMMENT 'Short title',
+  `message` text NOT NULL COMMENT 'Notification message',
+  `entity_id` int(11) DEFAULT NULL COMMENT 'Related entity ID (tenant_id, bill_id, etc.)',
+  `entity_type` varchar(50) DEFAULT NULL COMMENT 'tenant, bill, guest, pg, etc.',
+  `link` varchar(500) DEFAULT NULL COMMENT 'Frontend URL to navigate to',
+  `icon` varchar(50) DEFAULT NULL COMMENT 'Icon class or name',
+  `color` varchar(20) DEFAULT NULL COMMENT 'Color code for the notification',
+  `is_read` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `read_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_admin_id` (`admin_id`),
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=114 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Alishan PG\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-22 13:40:47','2026-08-22 13:55:59'),(2,1,'pg_created','New PG Created','PG \"Happy Living PG\" has been created',2,'pg','/pgs/2','?','#2ecc71',1,'2026-08-22 13:45:54','2026-08-22 13:55:59'),(3,1,'pg_created','New PG Created','PG \"DS Apartment\" has been created',3,'pg','/pgs/3','?','#2ecc71',1,'2026-08-22 13:47:48','2026-08-22 13:55:59'),(4,1,'pg_created','New PG Created','PG \"J T House (Plot No :- 257)\" has been created',4,'pg','/pgs/4','?','#2ecc71',1,'2026-08-22 13:50:08','2026-08-22 13:55:59'),(5,1,'pg_created','New PG Created','PG \"Shree Shyam Apartment\" has been created',5,'pg','/pgs/5','?','#2ecc71',1,'2026-08-22 13:51:22','2026-08-22 13:55:59'),(6,1,'pg_created','New PG Created','PG \"Royal Suits ( (Plot No :- 103,104)\" has been created',6,'pg','/pgs/6','?','#2ecc71',1,'2026-08-22 13:53:59','2026-08-22 13:55:59'),(7,1,'pg_created','New PG Created','PG \"Mannat Apartment (Plot No :- 99)\" has been created',7,'pg','/pgs/7','?','#2ecc71',1,'2026-08-22 13:55:49','2026-08-22 13:55:59'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',0,'2026-08-22 15:56:54',NULL),(9,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 10.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-22 16:54:24',NULL),(10,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',0,'2026-08-22 21:43:56',NULL),(11,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',1,'2026-08-22 21:43:56','2026-08-22 22:10:36'),(12,1,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',0,'2026-08-22 22:18:25',NULL),(13,2,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',0,'2026-08-22 22:18:25',NULL),(15,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',0,'2026-08-22 22:21:31',NULL),(16,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',0,'2026-08-22 22:21:31',NULL),(17,1,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(18,2,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(19,4,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(20,1,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(21,2,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(22,4,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL);
+INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Alishan PG\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-22 13:40:47','2026-08-22 13:55:59'),(2,1,'pg_created','New PG Created','PG \"Happy Living PG\" has been created',2,'pg','/pgs/2','?','#2ecc71',1,'2026-08-22 13:45:54','2026-08-22 13:55:59'),(3,1,'pg_created','New PG Created','PG \"DS Apartment\" has been created',3,'pg','/pgs/3','?','#2ecc71',1,'2026-08-22 13:47:48','2026-08-22 13:55:59'),(4,1,'pg_created','New PG Created','PG \"J T House (Plot No :- 257)\" has been created',4,'pg','/pgs/4','?','#2ecc71',1,'2026-08-22 13:50:08','2026-08-22 13:55:59'),(5,1,'pg_created','New PG Created','PG \"Shree Shyam Apartment\" has been created',5,'pg','/pgs/5','?','#2ecc71',1,'2026-08-22 13:51:22','2026-08-22 13:55:59'),(6,1,'pg_created','New PG Created','PG \"Royal Suits ( (Plot No :- 103,104)\" has been created',6,'pg','/pgs/6','?','#2ecc71',1,'2026-08-22 13:53:59','2026-08-22 13:55:59'),(7,1,'pg_created','New PG Created','PG \"Mannat Apartment (Plot No :- 99)\" has been created',7,'pg','/pgs/7','?','#2ecc71',1,'2026-08-22 13:55:49','2026-08-22 13:55:59'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',1,'2026-08-22 15:56:54','2026-08-23 05:31:01'),(9,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 10.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',1,'2026-08-22 16:54:24','2026-08-23 05:31:01'),(10,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',1,'2026-08-22 21:43:56','2026-08-23 05:31:01'),(11,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',1,'2026-08-22 21:43:56','2026-08-22 22:10:36'),(12,1,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',1,'2026-08-22 22:18:25','2026-08-23 05:31:01'),(13,2,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',0,'2026-08-22 22:18:25',NULL),(15,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',1,'2026-08-22 22:21:31','2026-08-23 05:31:01'),(16,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',0,'2026-08-22 22:21:31',NULL),(17,1,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',1,'2026-08-22 22:23:21','2026-08-23 05:31:01'),(18,2,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(19,4,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(20,1,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-22 22:25:41','2026-08-23 05:31:01'),(21,2,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(22,4,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(23,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',7,'tenant','/tenants/7','?','#2ecc71',1,'2026-08-23 00:02:54','2026-08-23 05:33:07'),(24,2,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',7,'tenant','/tenants/7','?','#2ecc71',0,'2026-08-23 00:02:54',NULL),(25,4,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',7,'tenant','/tenants/7','?','#2ecc71',0,'2026-08-23 00:02:54',NULL),(26,1,'tenant_registered','New Tenant Registered','Abdul-Warith Aminu has been registered as a tenant',8,'tenant','/tenants/8','?','#2ecc71',1,'2026-08-23 00:05:36','2026-08-23 05:36:00'),(27,2,'tenant_registered','New Tenant Registered','Abdul-Warith Aminu has been registered as a tenant',8,'tenant','/tenants/8','?','#2ecc71',0,'2026-08-23 00:05:36',NULL),(28,4,'tenant_registered','New Tenant Registered','Abdul-Warith Aminu has been registered as a tenant',8,'tenant','/tenants/8','?','#2ecc71',0,'2026-08-23 00:05:36',NULL),(29,1,'guest_registered','New Guest Registered','Kinjili has been registered as a guest',9,'guest','/tenants/9','?','#1abc9c',1,'2026-08-23 00:07:26','2026-08-23 05:38:29'),(30,2,'guest_registered','New Guest Registered','Kinjili has been registered as a guest',9,'guest','/tenants/9','?','#1abc9c',0,'2026-08-23 00:07:26',NULL),(31,4,'guest_registered','New Guest Registered','Kinjili has been registered as a guest',9,'guest','/tenants/9','?','#1abc9c',0,'2026-08-23 00:07:26',NULL),(32,1,'admin_created','New Admin Created','Admin \"Mohammed Aminu Shehe\" has been created',5,'admin','/admins/5','?‍?','#3498db',1,'2026-08-23 00:08:06','2026-08-23 05:38:29'),(33,2,'admin_created','New Admin Created','Admin \"Mohammed Aminu Shehe\" has been created',5,'admin','/admins/5','?‍?','#3498db',0,'2026-08-23 00:08:06',NULL),(34,1,'feedback_submitted','New Feedback Received','Abdul-Warith Aminu gave 9.8/10 rating for Happy Living PG',2,'feedback','/feedbacks/2','⭐','#f39c12',1,'2026-08-23 01:03:54','2026-08-23 06:40:31'),(35,2,'feedback_submitted','New Feedback Received','Abdul-Warith Aminu gave 9.8/10 rating for Happy Living PG',2,'feedback','/feedbacks/2','⭐','#f39c12',0,'2026-08-23 01:03:54',NULL),(36,4,'feedback_submitted','New Feedback Received','Abdul-Warith Aminu gave 9.8/10 rating for Happy Living PG',2,'feedback','/feedbacks/2','⭐','#f39c12',0,'2026-08-23 01:03:54',NULL),(37,5,'feedback_submitted','New Feedback Received','Abdul-Warith Aminu gave 9.8/10 rating for Happy Living PG',2,'feedback','/feedbacks/2','⭐','#f39c12',1,'2026-08-23 01:03:54','2026-08-23 06:51:31'),(38,1,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Electrician for Room 101',2,'maintenance','/maintenance/2','?','#3498db',1,'2026-08-23 01:05:11','2026-08-23 06:40:31'),(39,2,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Electrician for Room 101',2,'maintenance','/maintenance/2','?','#3498db',0,'2026-08-23 01:05:11',NULL),(40,4,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Electrician for Room 101',2,'maintenance','/maintenance/2','?','#3498db',0,'2026-08-23 01:05:11',NULL),(41,5,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Electrician for Room 101',2,'maintenance','/maintenance/2','?','#3498db',1,'2026-08-23 01:05:11','2026-08-23 06:51:31'),(42,1,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Cleaning for Room 101',3,'maintenance','/maintenance/3','?','#3498db',1,'2026-08-23 01:05:55','2026-08-23 06:40:31'),(43,2,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Cleaning for Room 101',3,'maintenance','/maintenance/3','?','#3498db',0,'2026-08-23 01:05:55',NULL),(44,4,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Cleaning for Room 101',3,'maintenance','/maintenance/3','?','#3498db',0,'2026-08-23 01:05:55',NULL),(45,5,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Cleaning for Room 101',3,'maintenance','/maintenance/3','?','#3498db',1,'2026-08-23 01:05:55','2026-08-23 06:51:31'),(46,1,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Check-out for Room 101',4,'maintenance','/maintenance/4','?','#3498db',1,'2026-08-23 01:06:14','2026-08-23 06:40:31'),(47,2,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Check-out for Room 101',4,'maintenance','/maintenance/4','?','#3498db',0,'2026-08-23 01:06:14',NULL),(48,4,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Check-out for Room 101',4,'maintenance','/maintenance/4','?','#3498db',0,'2026-08-23 01:06:14',NULL),(49,5,'maintenance_created','New Maintenance Request','Abdul-Warith Aminu requested Check-out for Room 101',4,'maintenance','/maintenance/4','?','#3498db',1,'2026-08-23 01:06:14','2026-08-23 06:51:31'),(50,1,'maintenance_updated','Maintenance Request Started','Check-out request for Room 101 is now in_progress',4,'maintenance','/maintenance/4','?','#f39c12',1,'2026-08-23 01:10:59','2026-08-23 06:43:22'),(51,2,'maintenance_updated','Maintenance Request Started','Check-out request for Room 101 is now in_progress',4,'maintenance','/maintenance/4','?','#f39c12',0,'2026-08-23 01:10:59',NULL),(52,4,'maintenance_updated','Maintenance Request Started','Check-out request for Room 101 is now in_progress',4,'maintenance','/maintenance/4','?','#f39c12',0,'2026-08-23 01:10:59',NULL),(53,5,'maintenance_updated','Maintenance Request Started','Check-out request for Room 101 is now in_progress',4,'maintenance','/maintenance/4','?','#f39c12',1,'2026-08-23 01:10:59','2026-08-23 06:51:31'),(54,1,'maintenance_updated','Maintenance Request Started','Cleaning request for Room 101 is now in_progress',3,'maintenance','/maintenance/3','?','#f39c12',1,'2026-08-23 01:11:28','2026-08-23 06:43:22'),(55,2,'maintenance_updated','Maintenance Request Started','Cleaning request for Room 101 is now in_progress',3,'maintenance','/maintenance/3','?','#f39c12',0,'2026-08-23 01:11:28',NULL),(56,4,'maintenance_updated','Maintenance Request Started','Cleaning request for Room 101 is now in_progress',3,'maintenance','/maintenance/3','?','#f39c12',0,'2026-08-23 01:11:28',NULL),(57,5,'maintenance_updated','Maintenance Request Started','Cleaning request for Room 101 is now in_progress',3,'maintenance','/maintenance/3','?','#f39c12',1,'2026-08-23 01:11:28','2026-08-23 06:51:31'),(58,1,'maintenance_updated','Maintenance Request Started','Electrician request for Room 101 is now in_progress',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-23 01:11:32','2026-08-23 06:43:22'),(59,2,'maintenance_updated','Maintenance Request Started','Electrician request for Room 101 is now in_progress',2,'maintenance','/maintenance/2','?','#f39c12',0,'2026-08-23 01:11:32',NULL),(60,4,'maintenance_updated','Maintenance Request Started','Electrician request for Room 101 is now in_progress',2,'maintenance','/maintenance/2','?','#f39c12',0,'2026-08-23 01:11:32',NULL),(61,5,'maintenance_updated','Maintenance Request Started','Electrician request for Room 101 is now in_progress',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-23 01:11:32','2026-08-23 06:51:31'),(62,1,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 201 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-23 01:11:35','2026-08-23 06:43:22'),(63,2,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 201 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-23 01:11:35',NULL),(64,4,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 201 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-23 01:11:35',NULL),(65,5,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 201 is now completed',1,'maintenance','/maintenance/1','?','#f39c12',1,'2026-08-23 01:11:35','2026-08-23 06:51:31'),(66,1,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 101 is now completed',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-23 01:11:36','2026-08-23 06:43:22'),(67,2,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 101 is now completed',2,'maintenance','/maintenance/2','?','#f39c12',0,'2026-08-23 01:11:36',NULL),(68,4,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 101 is now completed',2,'maintenance','/maintenance/2','?','#f39c12',0,'2026-08-23 01:11:36',NULL),(69,5,'maintenance_updated','Maintenance Request Completed','Electrician request for Room 101 is now completed',2,'maintenance','/maintenance/2','?','#f39c12',1,'2026-08-23 01:11:36','2026-08-23 06:51:31'),(70,1,'maintenance_updated','Maintenance Request Completed','Cleaning request for Room 101 is now completed',3,'maintenance','/maintenance/3','?','#f39c12',1,'2026-08-23 01:11:37','2026-08-23 06:43:22'),(71,2,'maintenance_updated','Maintenance Request Completed','Cleaning request for Room 101 is now completed',3,'maintenance','/maintenance/3','?','#f39c12',0,'2026-08-23 01:11:37',NULL),(72,4,'maintenance_updated','Maintenance Request Completed','Cleaning request for Room 101 is now completed',3,'maintenance','/maintenance/3','?','#f39c12',0,'2026-08-23 01:11:37',NULL),(73,5,'maintenance_updated','Maintenance Request Completed','Cleaning request for Room 101 is now completed',3,'maintenance','/maintenance/3','?','#f39c12',1,'2026-08-23 01:11:37','2026-08-23 06:51:31'),(74,1,'maintenance_updated','Maintenance Request Completed','Check-out request for Room 101 is now completed',4,'maintenance','/maintenance/4','?','#f39c12',1,'2026-08-23 01:11:38','2026-08-23 06:43:22'),(75,2,'maintenance_updated','Maintenance Request Completed','Check-out request for Room 101 is now completed',4,'maintenance','/maintenance/4','?','#f39c12',0,'2026-08-23 01:11:38',NULL),(76,4,'maintenance_updated','Maintenance Request Completed','Check-out request for Room 101 is now completed',4,'maintenance','/maintenance/4','?','#f39c12',0,'2026-08-23 01:11:38',NULL),(77,5,'maintenance_updated','Maintenance Request Completed','Check-out request for Room 101 is now completed',4,'maintenance','/maintenance/4','?','#f39c12',1,'2026-08-23 01:11:38','2026-08-23 06:51:31'),(78,1,'bill_created','New Bill Generated','Bill of ₹13190.00 created for undefined',1,'bill','/bills/1','?','#3498db',1,'2026-08-23 01:14:07','2026-08-23 06:47:02'),(79,2,'bill_created','New Bill Generated','Bill of ₹13190.00 created for undefined',1,'bill','/bills/1','?','#3498db',0,'2026-08-23 01:14:07',NULL),(80,4,'bill_created','New Bill Generated','Bill of ₹13190.00 created for undefined',1,'bill','/bills/1','?','#3498db',0,'2026-08-23 01:14:07',NULL),(81,5,'bill_created','New Bill Generated','Bill of ₹13190.00 created for undefined',1,'bill','/bills/1','?','#3498db',1,'2026-08-23 01:14:07','2026-08-23 06:51:31'),(82,1,'admin_created','New Admin Created','Admin \"Mohammed Aminu Shehe\" has been created',6,'admin','/admins/6','?‍?','#3498db',1,'2026-08-23 01:44:55','2026-08-23 08:55:01'),(83,2,'admin_created','New Admin Created','Admin \"Mohammed Aminu Shehe\" has been created',6,'admin','/admins/6','?‍?','#3498db',0,'2026-08-23 01:44:55',NULL),(84,1,'bill_created','New Bill Generated','Bill of ₹14200.00 created for undefined',2,'bill','/bills/2','?','#3498db',1,'2026-08-23 02:50:24','2026-08-23 08:55:01'),(85,2,'bill_created','New Bill Generated','Bill of ₹14200.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-23 02:50:24',NULL),(86,4,'bill_created','New Bill Generated','Bill of ₹14200.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-23 02:50:24',NULL),(87,5,'bill_created','New Bill Generated','Bill of ₹14200.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-23 02:50:24',NULL),(88,6,'bill_created','New Bill Generated','Bill of ₹14200.00 created for undefined',2,'bill','/bills/2','?','#3498db',0,'2026-08-23 02:50:24',NULL),(89,1,'bill_created','New Bill Generated','Bill of ₹11800.00 created for undefined',3,'bill','/bills/3','?','#3498db',1,'2026-08-23 02:54:12','2026-08-23 08:55:01'),(90,2,'bill_created','New Bill Generated','Bill of ₹11800.00 created for undefined',3,'bill','/bills/3','?','#3498db',0,'2026-08-23 02:54:12',NULL),(91,4,'bill_created','New Bill Generated','Bill of ₹11800.00 created for undefined',3,'bill','/bills/3','?','#3498db',0,'2026-08-23 02:54:12',NULL),(92,5,'bill_created','New Bill Generated','Bill of ₹11800.00 created for undefined',3,'bill','/bills/3','?','#3498db',0,'2026-08-23 02:54:12',NULL),(93,6,'bill_created','New Bill Generated','Bill of ₹11800.00 created for undefined',3,'bill','/bills/3','?','#3498db',0,'2026-08-23 02:54:12',NULL),(94,1,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹11000.0',2,'payment_proof','/bills/payment-proofs/2','?','#3498db',1,'2026-08-23 03:24:07','2026-08-23 08:55:01'),(95,2,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹11000.0',2,'payment_proof','/bills/payment-proofs/2','?','#3498db',0,'2026-08-23 03:24:07',NULL),(96,4,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹11000.0',2,'payment_proof','/bills/payment-proofs/2','?','#3498db',0,'2026-08-23 03:24:07',NULL),(97,5,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹11000.0',2,'payment_proof','/bills/payment-proofs/2','?','#3498db',0,'2026-08-23 03:24:07',NULL),(98,6,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹11000.0',2,'payment_proof','/bills/payment-proofs/2','?','#3498db',0,'2026-08-23 03:24:07',NULL),(99,1,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',3,'payment_proof','/bills/payment-proofs/3','?','#3498db',1,'2026-08-23 03:26:12','2026-08-23 08:57:48'),(100,2,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',3,'payment_proof','/bills/payment-proofs/3','?','#3498db',0,'2026-08-23 03:26:12',NULL),(101,4,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',3,'payment_proof','/bills/payment-proofs/3','?','#3498db',0,'2026-08-23 03:26:12',NULL),(102,5,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',3,'payment_proof','/bills/payment-proofs/3','?','#3498db',0,'2026-08-23 03:26:12',NULL),(103,6,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',3,'payment_proof','/bills/payment-proofs/3','?','#3498db',0,'2026-08-23 03:26:12',NULL),(104,1,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',4,'payment_proof','/bills/payment-proofs/4','?','#3498db',0,'2026-08-23 03:28:09',NULL),(105,2,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',4,'payment_proof','/bills/payment-proofs/4','?','#3498db',0,'2026-08-23 03:28:09',NULL),(106,4,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',4,'payment_proof','/bills/payment-proofs/4','?','#3498db',0,'2026-08-23 03:28:09',NULL),(107,5,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',4,'payment_proof','/bills/payment-proofs/4','?','#3498db',0,'2026-08-23 03:28:09',NULL),(108,6,'payment_proof_submitted','New Payment Proof Submitted','Mohammed Aminu Shehe submitted a payment proof of ₹800.0',4,'payment_proof','/bills/payment-proofs/4','?','#3498db',0,'2026-08-23 03:28:09',NULL),(109,1,'bill_created','New Bill Generated','Bill of ₹11000.00 created for Mohammed Aminu Shehe',4,'bill','/bills/4','?','#3498db',1,'2026-08-23 03:32:08','2026-08-23 09:02:27'),(110,2,'bill_created','New Bill Generated','Bill of ₹11000.00 created for Mohammed Aminu Shehe',4,'bill','/bills/4','?','#3498db',0,'2026-08-23 03:32:08',NULL),(111,4,'bill_created','New Bill Generated','Bill of ₹11000.00 created for Mohammed Aminu Shehe',4,'bill','/bills/4','?','#3498db',0,'2026-08-23 03:32:08',NULL),(112,5,'bill_created','New Bill Generated','Bill of ₹11000.00 created for Mohammed Aminu Shehe',4,'bill','/bills/4','?','#3498db',0,'2026-08-23 03:32:08',NULL),(113,6,'bill_created','New Bill Generated','Bill of ₹11000.00 created for Mohammed Aminu Shehe',4,'bill','/bills/4','?','#3498db',0,'2026-08-23 03:32:08',NULL);
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -62,18 +62,18 @@ DROP TABLE IF EXISTS `admin_permissions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `admin_permissions` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `admin_id` int NOT NULL,
-  `module_name` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `can_view` tinyint(1) DEFAULT '0',
-  `can_add` tinyint(1) DEFAULT '0',
-  `can_edit` tinyint(1) DEFAULT '0',
-  `can_delete` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `admin_id` int(11) NOT NULL,
+  `module_name` varchar(50) NOT NULL,
+  `can_view` tinyint(1) DEFAULT 0,
+  `can_add` tinyint(1) DEFAULT 0,
+  `can_edit` tinyint(1) DEFAULT 0,
+  `can_delete` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `admin_id` (`admin_id`,`module_name`),
   CONSTRAINT `admin_permissions_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -82,7 +82,7 @@ CREATE TABLE `admin_permissions` (
 
 LOCK TABLES `admin_permissions` WRITE;
 /*!40000 ALTER TABLE `admin_permissions` DISABLE KEYS */;
-INSERT INTO `admin_permissions` VALUES (8,4,'tenants',1,0,0,0,'2026-08-22 22:21:28'),(9,4,'guests',0,0,0,0,'2026-08-22 22:21:28'),(10,4,'bills',0,0,0,0,'2026-08-22 22:21:28'),(11,4,'pgs',1,0,0,0,'2026-08-22 22:21:28'),(12,4,'maintenance',1,0,1,0,'2026-08-22 22:21:28'),(13,4,'documents',1,0,1,0,'2026-08-22 22:21:28'),(14,4,'feedbacks',0,0,0,0,'2026-08-22 22:21:28');
+INSERT INTO `admin_permissions` VALUES (8,4,'tenants',1,0,0,0,'2026-08-22 22:21:28'),(9,4,'guests',0,0,0,0,'2026-08-22 22:21:28'),(10,4,'bills',0,0,0,0,'2026-08-22 22:21:28'),(11,4,'pgs',1,0,0,0,'2026-08-22 22:21:28'),(12,4,'maintenance',1,0,1,0,'2026-08-22 22:21:28'),(13,4,'documents',1,0,1,0,'2026-08-22 22:21:28'),(14,4,'feedbacks',0,0,0,0,'2026-08-22 22:21:28'),(15,5,'tenants',1,1,0,0,'2026-08-23 00:08:06'),(16,5,'guests',1,0,0,0,'2026-08-23 00:08:06'),(17,5,'bills',1,0,0,0,'2026-08-23 00:08:06'),(18,5,'pgs',1,0,0,0,'2026-08-23 00:08:06'),(19,5,'maintenance',1,0,0,0,'2026-08-23 00:08:06'),(20,5,'documents',1,0,0,0,'2026-08-23 00:08:06'),(21,5,'feedbacks',1,0,0,0,'2026-08-23 00:08:06'),(22,6,'tenants',0,0,0,0,'2026-08-23 01:44:55'),(23,6,'guests',0,0,0,0,'2026-08-23 01:44:55'),(24,6,'bills',0,0,0,0,'2026-08-23 01:44:55'),(25,6,'pgs',0,0,0,0,'2026-08-23 01:44:55'),(26,6,'maintenance',0,0,0,0,'2026-08-23 01:44:55'),(27,6,'documents',0,0,0,0,'2026-08-23 01:44:55'),(28,6,'feedbacks',0,0,0,0,'2026-08-23 01:44:55');
 /*!40000 ALTER TABLE `admin_permissions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -94,28 +94,28 @@ DROP TABLE IF EXISTS `admins`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `admins` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
-  `email` varchar(150) COLLATE utf8mb4_general_ci NOT NULL,
-  `phone` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `must_change_password` tinyint(1) DEFAULT '1',
-  `role` enum('super_admin','admin') COLLATE utf8mb4_general_ci NOT NULL,
-  `id_document` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `id_document_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `id_document_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `otp` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `email` varchar(150) NOT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `must_change_password` tinyint(1) DEFAULT 1,
+  `role` enum('super_admin','admin') NOT NULL,
+  `id_document` varchar(500) DEFAULT NULL,
+  `id_document_public_id` varchar(255) DEFAULT NULL,
+  `id_document_resource_type` varchar(20) DEFAULT NULL,
+  `otp` varchar(255) DEFAULT NULL,
   `otp_expiry` datetime DEFAULT NULL,
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `otp_sent_at` datetime DEFAULT NULL,
-  `reset_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `reset_token` varchar(255) DEFAULT NULL,
   `reset_token_expiry` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
   UNIQUE KEY `phone` (`phone`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -124,7 +124,7 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'MO11','molittle1011@gmail.com',NULL,'$2b$12$ERndXqISwxL48Vc/RDNhHe0iUhM1omZiqdvOppqFkORhIKX.ZLc/u',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 10:23:04','2026-08-22 13:34:01','2026-08-22 13:33:39',NULL,NULL),(2,'Livinkey Admin','livinkey@gmail.com',NULL,'$2b$12$jPhjgye4s7ASgXnRx8s/qO5Lu9GT7NNA0DhN8xGn4mc1zD5dHLv.6',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 20:44:41','2026-08-22 21:41:17','2026-08-22 21:40:46',NULL,NULL),(4,'Animesh','kanimesh373@gmail.com','8789397542','$2b$12$ZPWsPbF1XLRULoOZjgq5neXu28pg401mKRET6GkUn2wiGKix2Avme',0,'admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 22:21:28','2026-08-22 22:23:49',NULL,NULL,NULL);
+INSERT INTO `admins` VALUES (1,'MO11','molittle1011@gmail.com',NULL,'$2b$12$ERndXqISwxL48Vc/RDNhHe0iUhM1omZiqdvOppqFkORhIKX.ZLc/u',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 10:23:04','2026-08-23 01:39:12','2026-08-23 07:08:58',NULL,NULL),(2,'Livinkey Admin','livinkey@gmail.com',NULL,'$2b$12$jPhjgye4s7ASgXnRx8s/qO5Lu9GT7NNA0DhN8xGn4mc1zD5dHLv.6',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 20:44:41','2026-08-22 21:41:17','2026-08-22 21:40:46',NULL,NULL),(4,'Animesh','kanimesh373@gmail.com','8789397542','$2b$12$ZPWsPbF1XLRULoOZjgq5neXu28pg401mKRET6GkUn2wiGKix2Avme',0,'admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 22:21:28','2026-08-22 22:23:49',NULL,NULL,NULL),(5,'Mohammed Aminu Shehe','mosnake111@gmail.com','7681969865','$2b$12$Ia8ZeExV9BSiqcTsvtYRaedlyrLHiXb2mG/3eAqnw7sy2Is4psd/y',0,'admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-23 00:08:06','2026-08-23 01:22:47','2026-08-23 06:52:33',NULL,NULL),(6,'Mohammed Aminu Shehe','abdulwarithshehe2010@gmail.com','774730606','$2b$12$kranSpvb3YcQo2cb0RlLtOX6rYYqlsP9Hn5V32uDGFi/WZoaTJhky',1,'admin','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787449514/livinkey/admins/xtnsx4o5ldfmm3yn88zn.webp','livinkey/admins/xtnsx4o5ldfmm3yn88zn','image',NULL,NULL,1,'2026-08-23 01:44:55','2026-08-23 01:45:15',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -136,21 +136,21 @@ DROP TABLE IF EXISTS `bill_payments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `bill_payments` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` int NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `bill_id` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
-  `payment_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `payment_method` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'qr_code',
-  `transaction_id` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `payment_date` datetime NOT NULL DEFAULT current_timestamp(),
+  `payment_method` varchar(50) DEFAULT 'qr_code',
+  `transaction_id` varchar(100) DEFAULT NULL,
   `paid_from` date DEFAULT NULL,
   `paid_till` date DEFAULT NULL,
-  `is_partial` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_partial` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_bill_id` (`bill_id`),
   KEY `idx_bill_payments_paid_till` (`paid_till`),
   CONSTRAINT `fk_bill_payments_bill_id` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -159,6 +159,7 @@ CREATE TABLE `bill_payments` (
 
 LOCK TABLES `bill_payments` WRITE;
 /*!40000 ALTER TABLE `bill_payments` DISABLE KEYS */;
+INSERT INTO `bill_payments` VALUES (1,1,13190.00,'2026-08-23 06:46:06','payment_proof','ttyh','2026-07-31','2026-08-30',0,'2026-08-23 01:16:06'),(2,3,11000.00,'2026-08-23 08:54:57','payment_proof','455ookh','2026-07-31','2026-08-30',1,'2026-08-23 03:24:57'),(3,3,800.00,'2026-08-23 08:58:19','payment_proof','hdhud','2026-07-31','2026-08-30',0,'2026-08-23 03:28:19');
 /*!40000 ALTER TABLE `bill_payments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -170,59 +171,59 @@ DROP TABLE IF EXISTS `bills`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `bills` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
   `rent_amount` decimal(10,2) NOT NULL,
-  `electricity_amount` decimal(10,2) DEFAULT '0.00',
-  `electricity_meter_image` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `electricity_meter_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `electricity_meter_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
-  `maintenance_amount` decimal(10,2) DEFAULT '0.00',
-  `other_charges` decimal(10,2) DEFAULT '0.00',
+  `electricity_amount` decimal(10,2) DEFAULT 0.00,
+  `electricity_meter_image` varchar(500) DEFAULT NULL,
+  `electricity_meter_public_id` varchar(255) DEFAULT NULL,
+  `electricity_meter_resource_type` varchar(20) DEFAULT 'image',
+  `maintenance_amount` decimal(10,2) DEFAULT 0.00,
+  `other_charges` decimal(10,2) DEFAULT 0.00,
   `total_amount` decimal(10,2) NOT NULL,
-  `paid_amount` decimal(10,2) DEFAULT '0.00',
-  `fine_amount` decimal(10,2) DEFAULT '0.00',
-  `status` enum('unpaid','partially_paid','paid','delayed','overdue') COLLATE utf8mb4_general_ci DEFAULT 'unpaid',
-  `payment_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `payment_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `payment_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
-  `partial_payment_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `partial_payment_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `partial_payment_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
+  `paid_amount` decimal(10,2) DEFAULT 0.00,
+  `fine_amount` decimal(10,2) DEFAULT 0.00,
+  `status` enum('unpaid','partially_paid','paid','delayed','overdue') DEFAULT 'unpaid',
+  `payment_qr` varchar(500) DEFAULT NULL,
+  `payment_qr_public_id` varchar(255) DEFAULT NULL,
+  `payment_qr_resource_type` varchar(20) DEFAULT 'image',
+  `partial_payment_qr` varchar(500) DEFAULT NULL,
+  `partial_payment_qr_public_id` varchar(255) DEFAULT NULL,
+  `partial_payment_qr_resource_type` varchar(20) DEFAULT 'image',
   `sent_at` datetime NOT NULL,
   `valid_until` datetime NOT NULL,
-  `created_by` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `fine_applied_days` int DEFAULT '0',
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `fine_applied_days` int(11) DEFAULT 0,
   `last_fine_email_sent` datetime DEFAULT NULL,
-  `initial_email_sent` tinyint(1) DEFAULT '0',
-  `admin_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `admin_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `admin_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `initial_email_sent` tinyint(1) DEFAULT 0,
+  `admin_qr` varchar(500) DEFAULT NULL,
+  `admin_qr_public_id` varchar(255) DEFAULT NULL,
+  `admin_qr_resource_type` varchar(20) DEFAULT NULL,
   `last_message_sent` datetime DEFAULT NULL,
-  `custom_message_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `custom_message_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `custom_message_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `custom_message_admin_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `custom_message_admin_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `custom_message_admin_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `last_custom_message` text COLLATE utf8mb4_general_ci,
+  `custom_message_qr` varchar(500) DEFAULT NULL,
+  `custom_message_qr_public_id` varchar(255) DEFAULT NULL,
+  `custom_message_qr_resource_type` varchar(20) DEFAULT NULL,
+  `custom_message_admin_qr` varchar(500) DEFAULT NULL,
+  `custom_message_admin_qr_public_id` varchar(255) DEFAULT NULL,
+  `custom_message_admin_qr_resource_type` varchar(20) DEFAULT NULL,
+  `last_custom_message` text DEFAULT NULL,
   `qr_expires_at` datetime DEFAULT NULL,
-  `cash_payment_otp` varchar(10) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `cash_payment_otp` varchar(10) DEFAULT NULL,
   `cash_payment_otp_expiry` datetime DEFAULT NULL,
-  `cash_payment_verified` tinyint(1) DEFAULT '0',
+  `cash_payment_verified` tinyint(1) DEFAULT 0,
   `cash_payment_requested_at` datetime DEFAULT NULL,
   `cash_payment_verified_at` datetime DEFAULT NULL,
-  `payment_gateway` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'upi',
-  `gateway_payment_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `gateway_order_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `gateway_status` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `gateway_response` text COLLATE utf8mb4_general_ci,
-  `payment_link` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `upi_qr_code` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `upi_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `upi_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `payment_gateway` varchar(50) DEFAULT 'upi',
+  `gateway_payment_id` varchar(255) DEFAULT NULL,
+  `gateway_order_id` varchar(255) DEFAULT NULL,
+  `gateway_status` varchar(50) DEFAULT NULL,
+  `gateway_response` text DEFAULT NULL,
+  `payment_link` varchar(500) DEFAULT NULL,
+  `upi_qr_code` varchar(500) DEFAULT NULL,
+  `upi_qr_public_id` varchar(255) DEFAULT NULL,
+  `upi_qr_resource_type` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   KEY `idx_status` (`status`),
@@ -232,7 +233,7 @@ CREATE TABLE `bills` (
   KEY `idx_bills_tenant_created` (`tenant_id`,`created_at`),
   CONSTRAINT `fk_bills_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_bills_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -241,6 +242,7 @@ CREATE TABLE `bills` (
 
 LOCK TABLES `bills` WRITE;
 /*!40000 ALTER TABLE `bills` DISABLE KEYS */;
+INSERT INTO `bills` VALUES (1,8,11000.00,1890.00,NULL,NULL,NULL,300.00,0.00,13190.00,13190.00,0.00,'paid',NULL,NULL,NULL,NULL,NULL,NULL,'2026-08-23 06:44:03','2026-08-30 06:44:03',1,'2026-08-23 01:14:03','2026-08-23 01:16:09',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(2,7,11000.00,2900.00,NULL,NULL,NULL,300.00,0.00,14200.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787453418/livinkey/bills/qr/safsyfr1h1zsourslbbx.png','livinkey/bills/qr/safsyfr1h1zsourslbbx','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787453419/livinkey/bills/qr/srodsaogp6wqv0lopxrq.png','livinkey/bills/qr/srodsaogp6wqv0lopxrq','image','2026-08-23 08:20:20','2026-08-30 08:20:20',1,'2026-08-23 02:50:20','2026-08-23 02:50:20',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(3,1,11000.00,500.00,NULL,NULL,NULL,300.00,0.00,11800.00,11800.00,0.00,'paid',NULL,NULL,NULL,NULL,NULL,NULL,'2026-08-23 08:24:08','2026-08-30 08:24:08',1,'2026-08-23 02:54:08','2026-08-23 03:28:19',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),(4,7,11000.00,0.00,NULL,NULL,NULL,0.00,0.00,11000.00,0.00,0.00,'unpaid','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787455923/livinkey/bills/qr/hmqw5kn4xvwktqfcjvlw.png','livinkey/bills/qr/hmqw5kn4xvwktqfcjvlw','image','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787455924/livinkey/bills/qr/xnhgpjdft64yaxdnxlbq.png','livinkey/bills/qr/xnhgpjdft64yaxdnxlbq','image','2026-08-23 09:02:04','2026-08-30 09:02:04',1,'2026-08-23 03:32:04','2026-08-23 03:32:04',0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,'upi',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `bills` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -252,18 +254,18 @@ DROP TABLE IF EXISTS `cash_payments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `cash_payments` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` int NOT NULL,
-  `tenant_id` int NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `bill_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
   `paid_from` date NOT NULL,
   `paid_till` date NOT NULL,
-  `payment_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `verified_by` int NOT NULL,
-  `otp` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,
-  `status` enum('pending','verified','cancelled') COLLATE utf8mb4_general_ci DEFAULT 'verified',
-  `notes` text COLLATE utf8mb4_general_ci,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `payment_date` datetime NOT NULL DEFAULT current_timestamp(),
+  `verified_by` int(11) NOT NULL,
+  `otp` varchar(10) NOT NULL,
+  `status` enum('pending','verified','cancelled') DEFAULT 'verified',
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_bill_id` (`bill_id`),
   KEY `idx_tenant_id` (`tenant_id`),
@@ -292,12 +294,12 @@ DROP TABLE IF EXISTS `floors`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `floors` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `pg_id` int NOT NULL,
-  `floor_number` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `is_active` tinyint(1) DEFAULT '1',
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pg_id` int(11) NOT NULL,
+  `floor_number` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `is_active` tinyint(1) DEFAULT 1,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_pg_floor` (`pg_id`,`floor_number`),
@@ -326,19 +328,19 @@ DROP TABLE IF EXISTS `guest_notifications`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `guest_notifications` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `guest_id` int NOT NULL,
-  `type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `message` text COLLATE utf8mb4_general_ci NOT NULL,
-  `entity_id` int DEFAULT NULL,
-  `entity_type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `link` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `icon` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `color` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `is_read` tinyint(1) DEFAULT '0',
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `guest_id` int(11) NOT NULL,
+  `type` varchar(50) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `entity_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `link` varchar(500) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
   `read_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_guest_id` (`guest_id`),
   KEY `idx_is_read` (`is_read`),
@@ -364,20 +366,20 @@ DROP TABLE IF EXISTS `maintenance_requests`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `maintenance_requests` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `room_id` int NOT NULL,
-  `issue_type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `description` text COLLATE utf8mb4_general_ci,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `room_id` int(11) NOT NULL,
+  `issue_type` varchar(50) NOT NULL,
+  `description` text DEFAULT NULL,
   `service_date` date NOT NULL,
-  `free_time` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `image_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `image_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `image_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `status` enum('pending','in_progress','completed') COLLATE utf8mb4_general_ci DEFAULT 'pending',
-  `created_by` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `free_time` varchar(100) DEFAULT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `image_public_id` varchar(255) DEFAULT NULL,
+  `image_resource_type` varchar(20) DEFAULT NULL,
+  `status` enum('pending','in_progress','completed') DEFAULT 'pending',
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `room_id` (`room_id`),
   KEY `idx_status` (`status`),
@@ -386,7 +388,7 @@ CREATE TABLE `maintenance_requests` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `maintenance_requests_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `maintenance_requests_ibfk_2` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -395,7 +397,7 @@ CREATE TABLE `maintenance_requests` (
 
 LOCK TABLES `maintenance_requests` WRITE;
 /*!40000 ALTER TABLE `maintenance_requests` DISABLE KEYS */;
-INSERT INTO `maintenance_requests` VALUES (1,6,32,'Electrician','light issue','2026-08-23','12:00 PM',NULL,NULL,NULL,'in_progress',6,'2026-08-22 22:23:20','2026-08-22 22:25:39');
+INSERT INTO `maintenance_requests` VALUES (1,6,32,'Electrician','light issue','2026-08-23','12:00 PM',NULL,NULL,NULL,'completed',6,'2026-08-22 22:23:20','2026-08-23 01:11:35'),(2,8,15,'Electrician','dddd','2026-08-26','22:50','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787447108/livinkey/maintenance/8/cbya7ubcubq9ifoyqr52.jpg','livinkey/maintenance/8/cbya7ubcubq9ifoyqr52','image','completed',8,'2026-08-23 01:05:11','2026-08-23 01:11:36'),(3,8,15,'Cleaning','tttf','2026-08-26','06:35','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787447150/livinkey/maintenance/8/g8m2cqy4ixlxebj9rpbt.jpg','livinkey/maintenance/8/g8m2cqy4ixlxebj9rpbt','image','completed',8,'2026-08-23 01:05:55','2026-08-23 01:11:37'),(4,8,15,'Check-out','tggg','2026-08-29','14:25',NULL,NULL,NULL,'completed',8,'2026-08-23 01:06:14','2026-08-23 01:11:38');
 /*!40000 ALTER TABLE `maintenance_requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -407,22 +409,22 @@ DROP TABLE IF EXISTS `payment_proofs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `payment_proofs` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` int NOT NULL,
-  `tenant_id` int NOT NULL,
-  `transaction_id` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `bill_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
+  `transaction_id` varchar(100) NOT NULL,
   `amount_paid` decimal(10,2) NOT NULL,
   `paid_from` date DEFAULT NULL,
   `paid_till` date DEFAULT NULL,
-  `proof_url` varchar(500) COLLATE utf8mb4_general_ci NOT NULL,
-  `proof_public_id` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `proof_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
-  `status` enum('pending','verified','rejected') COLLATE utf8mb4_general_ci DEFAULT 'pending',
-  `admin_notes` text COLLATE utf8mb4_general_ci,
-  `verified_by` int DEFAULT NULL,
+  `proof_url` varchar(500) NOT NULL,
+  `proof_public_id` varchar(255) NOT NULL,
+  `proof_resource_type` varchar(20) DEFAULT 'image',
+  `status` enum('pending','verified','rejected') DEFAULT 'pending',
+  `admin_notes` text DEFAULT NULL,
+  `verified_by` int(11) DEFAULT NULL,
   `verified_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `bill_id` (`bill_id`),
   KEY `tenant_id` (`tenant_id`),
@@ -433,7 +435,7 @@ CREATE TABLE `payment_proofs` (
   CONSTRAINT `payment_proofs_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bills` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payment_proofs_ibfk_3` FOREIGN KEY (`verified_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -442,6 +444,7 @@ CREATE TABLE `payment_proofs` (
 
 LOCK TABLES `payment_proofs` WRITE;
 /*!40000 ALTER TABLE `payment_proofs` DISABLE KEYS */;
+INSERT INTO `payment_proofs` VALUES (1,1,8,'ttyh',13190.00,'2026-07-31','2026-08-30','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787447731/livinkey/payments/proofs/8/bfisvousscnuu51u7iwh.jpg','livinkey/payments/proofs/8/bfisvousscnuu51u7iwh','image','verified',NULL,1,'2026-08-23 06:46:06','2026-08-23 01:15:32','2026-08-23 01:16:06'),(2,3,1,'455ookh',11000.00,'2026-07-31','2026-08-30','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787455446/livinkey/payments/proofs/1/w3jqctqnukix2hhq84sd.jpg','livinkey/payments/proofs/1/w3jqctqnukix2hhq84sd','image','verified',NULL,1,'2026-08-23 08:54:57','2026-08-23 03:24:07','2026-08-23 03:24:57'),(3,3,1,'ygi',800.00,NULL,NULL,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787455571/livinkey/payments/proofs/1/oxujbr35pqma5apt4ker.jpg','livinkey/payments/proofs/1/oxujbr35pqma5apt4ker','image','rejected','Not Valid',NULL,NULL,'2026-08-23 03:26:12','2026-08-23 03:27:19'),(4,3,1,'hdhud',800.00,'2026-07-31','2026-08-30','https://res.cloudinary.com/dlokcqf1h/image/upload/v1787455688/livinkey/payments/proofs/1/j2410b7xudlnsoifdrft.jpg','livinkey/payments/proofs/1/j2410b7xudlnsoifdrft','image','verified',NULL,1,'2026-08-23 08:58:19','2026-08-23 03:28:09','2026-08-23 03:28:19');
 /*!40000 ALTER TABLE `payment_proofs` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -453,22 +456,22 @@ DROP TABLE IF EXISTS `payment_transactions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `payment_transactions` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` int NOT NULL,
-  `tenant_id` int NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `bill_id` int(11) NOT NULL,
+  `tenant_id` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
-  `payment_type` enum('upi','card','netbanking','wallet','cash') COLLATE utf8mb4_general_ci DEFAULT 'upi',
-  `gateway` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `gateway_order_id` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `gateway_payment_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `status` enum('pending','processing','success','failed','refunded','cancelled') COLLATE utf8mb4_general_ci DEFAULT 'pending',
-  `payment_link` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `upi_id` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `transaction_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `response_data` text COLLATE utf8mb4_general_ci,
-  `webhook_received` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `payment_type` enum('upi','card','netbanking','wallet','cash') DEFAULT 'upi',
+  `gateway` varchar(50) NOT NULL,
+  `gateway_order_id` varchar(255) NOT NULL,
+  `gateway_payment_id` varchar(255) DEFAULT NULL,
+  `status` enum('pending','processing','success','failed','refunded','cancelled') DEFAULT 'pending',
+  `payment_link` varchar(500) DEFAULT NULL,
+  `upi_id` varchar(100) DEFAULT NULL,
+  `transaction_date` datetime NOT NULL DEFAULT current_timestamp(),
+  `response_data` text DEFAULT NULL,
+  `webhook_received` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_bill_id` (`bill_id`),
   KEY `idx_tenant_id` (`tenant_id`),
@@ -496,11 +499,11 @@ DROP TABLE IF EXISTS `pg_amenities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pg_amenities` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `pg_id` int NOT NULL,
-  `amenity_name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
-  `is_custom` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pg_id` int(11) NOT NULL,
+  `amenity_name` varchar(100) NOT NULL,
+  `is_custom` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_amenities_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
@@ -525,13 +528,13 @@ DROP TABLE IF EXISTS `pg_images`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pg_images` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `pg_id` int NOT NULL,
-  `image_url` varchar(500) COLLATE utf8mb4_general_ci NOT NULL,
-  `public_id` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
-  `display_order` int DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pg_id` int(11) NOT NULL,
+  `image_url` varchar(500) NOT NULL,
+  `public_id` varchar(255) NOT NULL,
+  `resource_type` varchar(20) DEFAULT 'image',
+  `display_order` int(11) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_pg_id` (`pg_id`),
   CONSTRAINT `fk_pg_images_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE
@@ -556,19 +559,19 @@ DROP TABLE IF EXISTS `pgs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pgs` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `location` text COLLATE utf8mb4_general_ci NOT NULL,
-  `number_of_floors` int NOT NULL DEFAULT '1',
-  `payment_qr` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `payment_qr_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `payment_qr_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_by` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `rent` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `security_fee` decimal(10,2) DEFAULT '0.00',
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `location` text NOT NULL,
+  `number_of_floors` int(11) NOT NULL DEFAULT 1,
+  `payment_qr` varchar(500) DEFAULT NULL,
+  `payment_qr_public_id` varchar(255) DEFAULT NULL,
+  `payment_qr_resource_type` varchar(20) DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `rent` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `security_fee` decimal(10,2) DEFAULT 0.00,
   PRIMARY KEY (`id`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_pgs_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
@@ -593,14 +596,14 @@ DROP TABLE IF EXISTS `room_occupancy`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `room_occupancy` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `room_id` int NOT NULL,
-  `occupied_count` int NOT NULL DEFAULT '0',
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `room_id` int(11) NOT NULL,
+  `occupied_count` int(11) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -609,7 +612,7 @@ CREATE TABLE `room_occupancy` (
 
 LOCK TABLES `room_occupancy` WRITE;
 /*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
-INSERT INTO `room_occupancy` VALUES (1,67,1,'2026-08-22 15:56:45'),(2,32,1,'2026-08-22 22:18:15');
+INSERT INTO `room_occupancy` VALUES (1,67,1,'2026-08-22 15:56:45'),(2,32,1,'2026-08-22 22:18:15'),(3,15,2,'2026-08-23 00:05:33');
 /*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -621,13 +624,13 @@ DROP TABLE IF EXISTS `rooms`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `rooms` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `floor_id` int NOT NULL,
-  `room_number` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `capacity` int NOT NULL DEFAULT '1',
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `floor_id` int(11) NOT NULL,
+  `room_number` varchar(50) NOT NULL,
+  `capacity` int(11) NOT NULL DEFAULT 1,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `rent` decimal(10,2) DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -657,27 +660,27 @@ DROP TABLE IF EXISTS `tenant_details`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenant_details` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `pg_id` int NOT NULL,
-  `room_id` int NOT NULL,
-  `residency` enum('national','international') COLLATE utf8mb4_general_ci NOT NULL,
-  `aadhaar_id` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `father_aadhaar_id` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `c_form_number` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `pg_id` int(11) NOT NULL,
+  `room_id` int(11) NOT NULL,
+  `residency` enum('national','international') NOT NULL,
+  `aadhaar_id` varchar(20) DEFAULT NULL,
+  `father_aadhaar_id` varchar(20) DEFAULT NULL,
+  `c_form_number` varchar(50) DEFAULT NULL,
   `efrro_from` date DEFAULT NULL,
   `efrro_till` date DEFAULT NULL,
   `rent` decimal(10,2) NOT NULL,
   `security_fee` decimal(10,2) NOT NULL,
-  `payment_date` int NOT NULL COMMENT 'Day of month (1-31)',
+  `payment_date` int(11) NOT NULL COMMENT 'Day of month (1-31)',
   `paid_from` date NOT NULL,
   `paid_till` date NOT NULL,
   `arrival_date` date NOT NULL,
-  `document_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `document_public_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `document_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `document_url` varchar(500) DEFAULT NULL,
+  `document_public_id` varchar(255) DEFAULT NULL,
+  `document_resource_type` varchar(20) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_tenant` (`tenant_id`),
   KEY `idx_pg_id` (`pg_id`),
@@ -686,7 +689,7 @@ CREATE TABLE `tenant_details` (
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -695,7 +698,7 @@ CREATE TABLE `tenant_details` (
 
 LOCK TABLES `tenant_details` WRITE;
 /*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
-INSERT INTO `tenant_details` VALUES (1,1,2,67,'international','null','null','170626CH433T','2026-07-22','2026-09-30',10000.00,10500.00,14,'2026-06-14','2026-09-13','2026-06-14',NULL,NULL,NULL,'2026-08-22 15:56:44','2026-08-22 15:56:44'),(2,6,2,32,'international','201275598440','201275598440','ADFGBBCX','2026-07-22','2026-09-30',11000.00,8000.00,1,'2026-08-01','2026-09-01','2026-08-01',NULL,NULL,NULL,'2026-08-22 22:18:14','2026-08-22 22:18:14');
+INSERT INTO `tenant_details` VALUES (1,1,2,67,'international','null','null','170626CH433T','2026-07-22','2026-09-30',10000.00,10500.00,14,'2026-07-31','2026-08-30','2026-06-14',NULL,NULL,NULL,'2026-08-22 15:56:44','2026-08-23 03:24:57'),(2,6,2,32,'international','201275598440','201275598440','ADFGBBCX','2026-07-22','2026-09-30',11000.00,8000.00,1,'2026-08-01','2026-09-01','2026-08-01',NULL,NULL,NULL,'2026-08-22 22:18:14','2026-08-22 22:18:14'),(3,7,2,15,'national','201275598440','201275598440','170626CH433T','0000-00-00','0000-00-00',11000.00,10500.00,14,'2026-08-14','2026-09-13','2026-06-14',NULL,NULL,NULL,'2026-08-23 00:02:50','2026-08-23 00:02:50'),(4,8,2,15,'international','null','null','170626CH433T','0000-00-00','2026-09-13',10000.00,10500.00,14,'2026-07-31','2026-08-30','2026-06-14',NULL,NULL,NULL,'2026-08-23 00:05:33','2026-08-23 01:16:06');
 /*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -707,20 +710,20 @@ DROP TABLE IF EXISTS `tenant_devices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenant_devices` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `fcm_token` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `device_type` enum('android','ios','web') COLLATE utf8mb4_general_ci DEFAULT 'android',
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `fcm_token` varchar(255) NOT NULL,
+  `device_type` enum('android','ios','web') DEFAULT 'android',
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_tenant_device` (`tenant_id`,`fcm_token`),
   KEY `idx_tenant_devices_tenant_id` (`tenant_id`),
   KEY `idx_tenant_devices_fcm_token` (`fcm_token`),
   KEY `idx_tenant_devices_is_active` (`is_active`),
   CONSTRAINT `tenant_devices_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -729,7 +732,7 @@ CREATE TABLE `tenant_devices` (
 
 LOCK TABLES `tenant_devices` WRITE;
 /*!40000 ALTER TABLE `tenant_devices` DISABLE KEYS */;
-INSERT INTO `tenant_devices` VALUES (1,1,'eoNVDXU9S0qErgMiF1f2yR:APA91bGbpSm8nCBwDIO-NRVho88_u2ILApjZd43EOATRvu1cGuQvnlrXOj3mPgkf1E_v4CuhiCZ3OXKTemOVn_Tfy1df7XD2pqcepw_1Pl2ZDkxav-in20M','android',1,'2026-08-22 16:50:36','2026-08-22 16:50:36'),(2,6,'dEv9oTDQQ5qTB_f6i8iOG-:APA91bHYgEG5mhNwG3qR1Tleq5It_nzcybCOsUIn8atTD4dy6e5LDezjki5061-Wc8affqVtJ6tQvT26Z5N4Uu_Y0RVg0gmrEkVOFUGR_pM__Ph6NcSC6xs','android',1,'2026-08-22 22:19:47','2026-08-22 22:40:36');
+INSERT INTO `tenant_devices` VALUES (1,1,'eoNVDXU9S0qErgMiF1f2yR:APA91bGbpSm8nCBwDIO-NRVho88_u2ILApjZd43EOATRvu1cGuQvnlrXOj3mPgkf1E_v4CuhiCZ3OXKTemOVn_Tfy1df7XD2pqcepw_1Pl2ZDkxav-in20M','android',0,'2026-08-22 16:50:36','2026-08-23 03:29:36'),(2,6,'dEv9oTDQQ5qTB_f6i8iOG-:APA91bHYgEG5mhNwG3qR1Tleq5It_nzcybCOsUIn8atTD4dy6e5LDezjki5061-Wc8affqVtJ6tQvT26Z5N4Uu_Y0RVg0gmrEkVOFUGR_pM__Ph6NcSC6xs','android',1,'2026-08-22 22:19:47','2026-08-22 22:40:36'),(3,8,'eoNVDXU9S0qErgMiF1f2yR:APA91bGbpSm8nCBwDIO-NRVho88_u2ILApjZd43EOATRvu1cGuQvnlrXOj3mPgkf1E_v4CuhiCZ3OXKTemOVn_Tfy1df7XD2pqcepw_1Pl2ZDkxav-in20M','android',0,'2026-08-23 01:00:30','2026-08-23 02:15:38'),(4,7,'eoNVDXU9S0qErgMiF1f2yR:APA91bGbpSm8nCBwDIO-NRVho88_u2ILApjZd43EOATRvu1cGuQvnlrXOj3mPgkf1E_v4CuhiCZ3OXKTemOVn_Tfy1df7XD2pqcepw_1Pl2ZDkxav-in20M','android',1,'2026-08-23 02:52:06','2026-08-23 03:32:40');
 /*!40000 ALTER TABLE `tenant_devices` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -741,20 +744,20 @@ DROP TABLE IF EXISTS `tenant_documents`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenant_documents` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `document_url` varchar(500) COLLATE utf8mb4_general_ci NOT NULL,
-  `document_public_id` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `document_resource_type` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'image',
-  `document_type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'id_proof',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `original_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `file_size` int DEFAULT NULL,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `document_url` varchar(500) NOT NULL,
+  `document_public_id` varchar(255) NOT NULL,
+  `document_resource_type` varchar(20) DEFAULT 'image',
+  `document_type` varchar(50) DEFAULT 'id_proof',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `original_name` varchar(255) DEFAULT NULL,
+  `file_size` int(11) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   CONSTRAINT `fk_tenant_documents_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -763,6 +766,7 @@ CREATE TABLE `tenant_documents` (
 
 LOCK TABLES `tenant_documents` WRITE;
 /*!40000 ALTER TABLE `tenant_documents` DISABLE KEYS */;
+INSERT INTO `tenant_documents` VALUES (1,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446880/livinkey/tenants/8/documents/nfausevmm86r1vhu5uk7.jpg','livinkey/tenants/8/documents/nfausevmm86r1vhu5uk7','image','passport_photo','2026-08-23 01:01:21','doc_1787446878031.jpg',62897,'2026-08-23 01:01:21'),(2,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446889/livinkey/tenants/8/documents/xhirgossagetsqealo72.jpg','livinkey/tenants/8/documents/xhirgossagetsqealo72','image','passport','2026-08-23 01:01:30','doc_1787446886279.jpg',66095,'2026-08-23 01:01:30'),(3,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446900/livinkey/tenants/8/documents/wxglexixcd4qeqqvteho.jpg','livinkey/tenants/8/documents/wxglexixcd4qeqqvteho','image','visa','2026-08-23 01:01:41','doc_1787446897733.jpg',38207,'2026-08-23 01:01:41'),(4,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446911/livinkey/tenants/8/documents/oznk7wm6bldx132plxnz.jpg','livinkey/tenants/8/documents/oznk7wm6bldx132plxnz','image','arrival_stamp','2026-08-23 01:01:52','doc_1787446908698.jpg',26804,'2026-08-23 01:01:52'),(5,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446919/livinkey/tenants/8/documents/tl3ykoafckp6jn19gwk2.jpg','livinkey/tenants/8/documents/tl3ykoafckp6jn19gwk2','image','c_form','2026-08-23 01:02:00','doc_1787446916210.jpg',47196,'2026-08-23 01:02:00'),(6,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446925/livinkey/tenants/8/documents/foz6qju4s8gg3ynxldnc.jpg','livinkey/tenants/8/documents/foz6qju4s8gg3ynxldnc','image','efrro','2026-08-23 01:02:06','doc_1787446924105.jpg',16677,'2026-08-23 01:02:06'),(7,8,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787446938/livinkey/tenants/8/documents/cdwkww05xwvhebr2r35u.jpg','livinkey/tenants/8/documents/cdwkww05xwvhebr2r35u','image','university_id','2026-08-23 01:02:19','doc_1787446935399.jpg',47196,'2026-08-23 01:02:19'),(8,1,'https://res.cloudinary.com/dlokcqf1h/image/upload/v1787451374/livinkey/tenants/1/documents/fdjjpymzg2zwsppojf0h.jpg','livinkey/tenants/1/documents/fdjjpymzg2zwsppojf0h','image','passport_photo','2026-08-23 02:16:15','doc_1787451371070.jpg',103229,'2026-08-23 02:16:15');
 /*!40000 ALTER TABLE `tenant_documents` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -774,18 +778,18 @@ DROP TABLE IF EXISTS `tenant_feedbacks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenant_feedbacks` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `pg_id` int NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `pg_id` int(11) NOT NULL,
   `living_experience_rating` decimal(3,1) NOT NULL,
   `maintenance_handling_rating` decimal(3,1) NOT NULL,
   `communication_rating` decimal(3,1) NOT NULL,
   `amenities_rating` decimal(3,1) NOT NULL,
   `technology_handling_rating` decimal(3,1) NOT NULL,
   `overall_rating` decimal(3,1) NOT NULL,
-  `comment` text COLLATE utf8mb4_general_ci,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `comment` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_tenant_feedback` (`tenant_id`),
   KEY `idx_pg_id` (`pg_id`),
@@ -793,13 +797,13 @@ CREATE TABLE `tenant_feedbacks` (
   KEY `idx_rating` (`overall_rating`),
   CONSTRAINT `tenant_feedbacks_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tenant_feedbacks_ibfk_2` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `tenant_feedbacks_chk_1` CHECK ((`living_experience_rating` between 1 and 10)),
-  CONSTRAINT `tenant_feedbacks_chk_2` CHECK ((`maintenance_handling_rating` between 1 and 10)),
-  CONSTRAINT `tenant_feedbacks_chk_3` CHECK ((`communication_rating` between 1 and 10)),
-  CONSTRAINT `tenant_feedbacks_chk_4` CHECK ((`amenities_rating` between 1 and 10)),
-  CONSTRAINT `tenant_feedbacks_chk_5` CHECK ((`technology_handling_rating` between 1 and 10)),
-  CONSTRAINT `tenant_feedbacks_chk_6` CHECK ((`overall_rating` between 1 and 10))
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  CONSTRAINT `tenant_feedbacks_chk_1` CHECK (`living_experience_rating` between 1 and 10),
+  CONSTRAINT `tenant_feedbacks_chk_2` CHECK (`maintenance_handling_rating` between 1 and 10),
+  CONSTRAINT `tenant_feedbacks_chk_3` CHECK (`communication_rating` between 1 and 10),
+  CONSTRAINT `tenant_feedbacks_chk_4` CHECK (`amenities_rating` between 1 and 10),
+  CONSTRAINT `tenant_feedbacks_chk_5` CHECK (`technology_handling_rating` between 1 and 10),
+  CONSTRAINT `tenant_feedbacks_chk_6` CHECK (`overall_rating` between 1 and 10)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -808,7 +812,7 @@ CREATE TABLE `tenant_feedbacks` (
 
 LOCK TABLES `tenant_feedbacks` WRITE;
 /*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
-INSERT INTO `tenant_feedbacks` VALUES (1,1,2,10.0,10.0,10.0,10.0,10.0,10.0,'Good Services. The rooms have enough space. They handle maintenance properly','2026-08-22 16:54:23','2026-08-22 16:54:23');
+INSERT INTO `tenant_feedbacks` VALUES (1,1,2,10.0,10.0,10.0,10.0,10.0,10.0,'Good Services. The rooms have enough space. They handle maintenance properly','2026-08-22 16:54:23','2026-08-22 16:54:23'),(2,8,2,10.0,9.0,10.0,10.0,10.0,9.8,NULL,'2026-08-23 01:03:54','2026-08-23 01:03:54');
 /*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -820,25 +824,25 @@ DROP TABLE IF EXISTS `tenant_notifications`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenant_notifications` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int NOT NULL,
-  `type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `message` text COLLATE utf8mb4_general_ci NOT NULL,
-  `entity_id` int DEFAULT NULL,
-  `entity_type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `link` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `icon` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `color` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `is_read` tinyint(1) DEFAULT '0',
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL,
+  `type` varchar(50) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `entity_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `link` varchar(500) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
   `read_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -847,7 +851,7 @@ CREATE TABLE `tenant_notifications` (
 
 LOCK TABLES `tenant_notifications` WRITE;
 /*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
-INSERT INTO `tenant_notifications` VALUES (1,1,'feedback_submitted','Thank You for Your Feedback!','We appreciate you taking the time to share your experience with us.',NULL,'feedback','/profile','⭐','#f39c12',0,NULL,'2026-08-22 16:54:24'),(2,6,'maintenance_created','Maintenance Request Submitted','Your Electrician request has been submitted.',1,'maintenance','/maintenance/my-requests','?','#f39c12',0,NULL,'2026-08-22 22:23:22'),(3,6,'maintenance_started','Maintenance Started','Your Electrician request is now in progress.',1,'maintenance','/maintenance/my-requests','?','#3498db',0,NULL,'2026-08-22 22:25:41');
+INSERT INTO `tenant_notifications` VALUES (2,6,'maintenance_created','Maintenance Request Submitted','Your Electrician request has been submitted.',1,'maintenance','/maintenance/my-requests','?','#f39c12',0,NULL,'2026-08-22 22:23:22'),(3,6,'maintenance_started','Maintenance Started','Your Electrician request is now in progress.',1,'maintenance','/maintenance/my-requests','?','#3498db',0,NULL,'2026-08-22 22:25:41'),(4,8,'feedback_submitted','Thank You for Your Feedback!','We appreciate you taking the time to share your experience with us.',NULL,'feedback','/profile','⭐','#f39c12',1,'2026-08-23 06:39:15','2026-08-23 01:03:54'),(5,8,'maintenance_created','Maintenance Request Submitted','Your Electrician request has been submitted.',2,'maintenance','/maintenance/my-requests','?','#f39c12',1,'2026-08-23 06:39:15','2026-08-23 01:05:11'),(6,8,'maintenance_created','Maintenance Request Submitted','Your Cleaning request has been submitted.',3,'maintenance','/maintenance/my-requests','?','#f39c12',1,'2026-08-23 06:39:15','2026-08-23 01:05:55'),(7,8,'maintenance_created','Maintenance Request Submitted','Your Check-out request has been submitted.',4,'maintenance','/maintenance/my-requests','?','#f39c12',1,'2026-08-23 06:39:15','2026-08-23 01:06:14'),(8,8,'maintenance_started','Maintenance Started','Your Check-out request is now in progress.',4,'maintenance','/maintenance/my-requests','?','#3498db',1,'2026-08-23 06:41:20','2026-08-23 01:10:59'),(9,8,'maintenance_started','Maintenance Started','Your Cleaning request is now in progress.',3,'maintenance','/maintenance/my-requests','?','#3498db',1,'2026-08-23 06:41:59','2026-08-23 01:11:28'),(10,8,'maintenance_started','Maintenance Started','Your Electrician request is now in progress.',2,'maintenance','/maintenance/my-requests','?','#3498db',1,'2026-08-23 06:41:59','2026-08-23 01:11:32'),(11,6,'maintenance_completed','Maintenance Completed','Your Electrician request has been completed.',1,'maintenance','/maintenance/my-requests','✅','#2ecc71',0,NULL,'2026-08-23 01:11:35'),(12,8,'maintenance_completed','Maintenance Completed','Your Electrician request has been completed.',2,'maintenance','/maintenance/my-requests','✅','#2ecc71',1,'2026-08-23 06:41:59','2026-08-23 01:11:36'),(13,8,'maintenance_completed','Maintenance Completed','Your Cleaning request has been completed.',3,'maintenance','/maintenance/my-requests','✅','#2ecc71',1,'2026-08-23 06:41:59','2026-08-23 01:11:37'),(14,8,'maintenance_completed','Maintenance Completed','Your Check-out request has been completed.',4,'maintenance','/maintenance/my-requests','✅','#2ecc71',1,'2026-08-23 06:41:59','2026-08-23 01:11:38'),(15,1,'bill_created','New Bill Generated','A new bill of ₹13190.00 has been generated for you.',1,'bill','/tenant-payments/bill','?','#3498db',1,'2026-08-23 07:46:26','2026-08-23 01:14:07'),(18,1,'payment_proof_verified','Payment Proof Verified','Your payment proof of ₹11000.00 has been verified.',3,'bill','/tenant-payments/history','✅','#2ecc71',1,'2026-08-23 08:55:38','2026-08-23 03:24:57'),(20,1,'payment_proof_rejected','Payment Proof Rejected','Your payment proof was rejected. Reason: Not Valid',NULL,'bill','/tenant-payments/history','❌','#e74c3c',1,'2026-08-23 08:57:32','2026-08-23 03:27:19'),(21,1,'payment_proof_verified','Payment Proof Verified','Your payment proof of ₹800.00 has been verified.',3,'bill','/tenant-payments/history','✅','#2ecc71',1,'2026-08-23 08:58:32','2026-08-23 03:28:19'),(22,1,'bill_paid','Payment Confirmed','Your payment of ₹800.00 has been confirmed.',3,'bill','/tenant-payments/history','✅','#2ecc71',1,'2026-08-23 08:58:31','2026-08-23 03:28:19'),(23,8,'efrro_expiry','e-FRRO Expiry Alert','Your e-FRRO expires in 21 days. Please renew immediately.',NULL,'document','/documents','?','#e74c3c',0,NULL,'2026-08-23 03:30:04'),(24,7,'bill_created','New Bill Generated','A new bill of ₹11000.00 has been generated for you.',4,'bill','/tenant-payments/bill','?','#3498db',1,'2026-08-23 09:02:47','2026-08-23 03:32:08');
 /*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -859,33 +863,33 @@ DROP TABLE IF EXISTS `tenants`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tenants` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `role` enum('tenant','guest') COLLATE utf8mb4_general_ci NOT NULL,
-  `full_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `email` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `nationality` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
-  `country_code` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,
-  `phone` varchar(20) COLLATE utf8mb4_general_ci NOT NULL,
-  `international_phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `gender` enum('male','female','other') COLLATE utf8mb4_general_ci NOT NULL,
-  `residency` enum('national','international') COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `is_active` tinyint(1) DEFAULT '1',
-  `password` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `created_by` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `must_change_password` tinyint(1) DEFAULT '0',
-  `otp` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `role` enum('tenant','guest') NOT NULL,
+  `full_name` varchar(255) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `nationality` varchar(100) NOT NULL,
+  `country_code` varchar(10) NOT NULL,
+  `phone` varchar(20) NOT NULL,
+  `international_phone` varchar(50) DEFAULT NULL,
+  `gender` enum('male','female','other') NOT NULL,
+  `residency` enum('national','international') DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `password` varchar(255) DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `must_change_password` tinyint(1) DEFAULT 0,
+  `otp` varchar(255) DEFAULT NULL,
   `otp_expiry` datetime DEFAULT NULL,
   `otp_sent_at` datetime DEFAULT NULL,
-  `reset_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `reset_token` varchar(255) DEFAULT NULL,
   `reset_token_expiry` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tenants_email` (`email`),
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -894,7 +898,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
-INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+91','7681969865','+255 677 532 140','male','international',1,'$2b$12$IHH5IuHU0rIYD81HIwBJYu9tesed6CcHEXQ7fmWhpz8ht7PJG/HtK',1,'2026-08-22 15:56:43','2026-08-22 16:51:02',0,NULL,NULL,NULL,NULL,NULL),(6,'tenant','Sri Ram','sriramprasad1662@gmail.com','Tanzanian','+91','9381124050',NULL,'male','international',1,'$2b$12$dreVE/r.mK2fWEXr80/5TOMm7z2nJXjgZrrRzj5TGrxcTIqfZhNc2',1,'2026-08-22 22:18:13','2026-08-22 22:20:41',0,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+91','7681969865','+255 677 532 140','male','international',1,'$2b$12$IHH5IuHU0rIYD81HIwBJYu9tesed6CcHEXQ7fmWhpz8ht7PJG/HtK',1,'2026-08-22 15:56:43','2026-08-22 16:51:02',0,NULL,NULL,NULL,NULL,NULL),(6,'tenant','Sri Ram','sriramprasad1662@gmail.com','Tanzanian','+91','9381124050',NULL,'male','international',1,'$2b$12$dreVE/r.mK2fWEXr80/5TOMm7z2nJXjgZrrRzj5TGrxcTIqfZhNc2',1,'2026-08-22 22:18:13','2026-08-22 22:20:41',0,NULL,NULL,NULL,NULL,NULL),(7,'tenant','Mohammed Aminu Shehe','mosnake111@gmail.com','Indian','+91','677532140',NULL,'male','national',1,'$2b$12$71/NNxxWoumM4.tpd1bZquVk6GAmXOBHxOFA6lPYIaUNjO855viqa',1,'2026-08-23 00:02:50','2026-08-23 02:52:22',0,NULL,NULL,NULL,NULL,NULL),(8,'tenant','Abdul-Warith Aminu','fourbrothers10112627@gmail.com','Tanzanian','+91','777730606','+255 677 532 140','male','international',1,'$2b$12$ieuuNh0jsbvzFFXIhf7GyuEmhbqvnne/b6/16cViO8/ob6dIDHZbm',1,'2026-08-23 00:05:33','2026-08-23 01:00:46',0,NULL,NULL,NULL,NULL,NULL),(9,'guest','Kinjili','abdulwarithshehe2010@gmail.com','Mexican','+52','7681969865',NULL,'other',NULL,1,'$2b$12$1/Xy0EuW8b/fu6xE/sHYseA3HQGAoI/lNmWtGTHMOLVCWZ1JjigVG',1,'2026-08-23 00:07:22','2026-08-23 00:07:22',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -907,4 +911,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-23  5:28:16
+-- Dump completed on 2026-08-23  9:05:19

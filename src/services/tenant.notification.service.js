@@ -37,6 +37,21 @@ const TENANT_NOTIFICATION_TYPES = {
         color: '#e74c3c',
         linkPrefix: '/bills/'
     },
+    // ============================================================
+    // FIXED: Added PAYMENT_PROOF_VERIFIED and PAYMENT_PROOF_REJECTED
+    // ============================================================
+    PAYMENT_PROOF_VERIFIED: {
+        type: 'payment_proof_verified',
+        icon: '✅',
+        color: '#2ecc71',
+        linkPrefix: '/tenant-payments/history'
+    },
+    PAYMENT_PROOF_REJECTED: {
+        type: 'payment_proof_rejected',
+        icon: '❌',
+        color: '#e74c3c',
+        linkPrefix: '/tenant-payments/history'
+    },
     MAINTENANCE_CREATED: {
         type: 'maintenance_created',
         icon: '🔧',
@@ -305,6 +320,24 @@ const generateTenantNotificationMessages = {
         title: 'Late Fee Applied',
         message: `A late fee of ₹${fineAmount} has been applied to your bill.`,
         entity_id: bill.id,
+        entity_type: 'bill'
+    }),
+    
+    // ============================================================
+    // FIXED: Added paymentProofVerified and paymentProofRejected
+    // ============================================================
+    paymentProofVerified: (bill) => ({
+        title: 'Payment Proof Verified',
+        message: `Your payment proof of ₹${bill.paid_amount} has been verified.`,
+        entity_id: bill.id,
+        entity_type: 'bill'
+    }),
+
+    paymentProofRejected: (reason) => ({
+        title: 'Payment Proof Rejected',
+        message: reason
+            ? `Your payment proof was rejected. Reason: ${reason}`
+            : 'Your payment proof was rejected.',
         entity_type: 'bill'
     }),
     
