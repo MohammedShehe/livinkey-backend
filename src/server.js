@@ -1,3 +1,5 @@
+// server.js - Complete fixed file with proper startup
+
 require("dotenv").config();
 
 const app = require("./app");
@@ -93,12 +95,11 @@ async function startServer() {
         });
         console.log('📅 Payment reminder checker scheduled to run daily at 8:00 AM');
 
-        // ════════════════════════════════════════════════════════════════
-        // 🔥 FIX: Listen on ALL network interfaces (0.0.0.0)
-        // ════════════════════════════════════════════════════════════════
+        // Start server on all interfaces
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
             console.log(`📱 Access from your phone at: http://<YOUR_IP>:${PORT}`);
+            console.log(`🌐 CORS enabled for production`);
         });
 
     } catch (error) {

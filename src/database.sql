@@ -41,7 +41,7 @@ CREATE TABLE `admin_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_admin_notifications_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `admin_notifications` (
 
 LOCK TABLES `admin_notifications` WRITE;
 /*!40000 ALTER TABLE `admin_notifications` DISABLE KEYS */;
-INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Alishan PG\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-22 13:40:47','2026-08-22 13:55:59'),(2,1,'pg_created','New PG Created','PG \"Happy Living PG\" has been created',2,'pg','/pgs/2','?','#2ecc71',1,'2026-08-22 13:45:54','2026-08-22 13:55:59'),(3,1,'pg_created','New PG Created','PG \"DS Apartment\" has been created',3,'pg','/pgs/3','?','#2ecc71',1,'2026-08-22 13:47:48','2026-08-22 13:55:59'),(4,1,'pg_created','New PG Created','PG \"J T House (Plot No :- 257)\" has been created',4,'pg','/pgs/4','?','#2ecc71',1,'2026-08-22 13:50:08','2026-08-22 13:55:59'),(5,1,'pg_created','New PG Created','PG \"Shree Shyam Apartment\" has been created',5,'pg','/pgs/5','?','#2ecc71',1,'2026-08-22 13:51:22','2026-08-22 13:55:59'),(6,1,'pg_created','New PG Created','PG \"Royal Suits ( (Plot No :- 103,104)\" has been created',6,'pg','/pgs/6','?','#2ecc71',1,'2026-08-22 13:53:59','2026-08-22 13:55:59'),(7,1,'pg_created','New PG Created','PG \"Mannat Apartment (Plot No :- 99)\" has been created',7,'pg','/pgs/7','?','#2ecc71',1,'2026-08-22 13:55:49','2026-08-22 13:55:59');
+INSERT INTO `admin_notifications` VALUES (1,1,'pg_created','New PG Created','PG \"Alishan PG\" has been created',1,'pg','/pgs/1','?','#2ecc71',1,'2026-08-22 13:40:47','2026-08-22 13:55:59'),(2,1,'pg_created','New PG Created','PG \"Happy Living PG\" has been created',2,'pg','/pgs/2','?','#2ecc71',1,'2026-08-22 13:45:54','2026-08-22 13:55:59'),(3,1,'pg_created','New PG Created','PG \"DS Apartment\" has been created',3,'pg','/pgs/3','?','#2ecc71',1,'2026-08-22 13:47:48','2026-08-22 13:55:59'),(4,1,'pg_created','New PG Created','PG \"J T House (Plot No :- 257)\" has been created',4,'pg','/pgs/4','?','#2ecc71',1,'2026-08-22 13:50:08','2026-08-22 13:55:59'),(5,1,'pg_created','New PG Created','PG \"Shree Shyam Apartment\" has been created',5,'pg','/pgs/5','?','#2ecc71',1,'2026-08-22 13:51:22','2026-08-22 13:55:59'),(6,1,'pg_created','New PG Created','PG \"Royal Suits ( (Plot No :- 103,104)\" has been created',6,'pg','/pgs/6','?','#2ecc71',1,'2026-08-22 13:53:59','2026-08-22 13:55:59'),(7,1,'pg_created','New PG Created','PG \"Mannat Apartment (Plot No :- 99)\" has been created',7,'pg','/pgs/7','?','#2ecc71',1,'2026-08-22 13:55:49','2026-08-22 13:55:59'),(8,1,'tenant_registered','New Tenant Registered','Mohammed Aminu Shehe has been registered as a tenant',1,'tenant','/tenants/1','?','#2ecc71',0,'2026-08-22 15:56:54',NULL),(9,1,'feedback_submitted','New Feedback Received','Mohammed Aminu Shehe gave 10.0/10 rating for Happy Living PG',1,'feedback','/feedbacks/1','⭐','#f39c12',0,'2026-08-22 16:54:24',NULL),(10,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',0,'2026-08-22 21:43:56',NULL),(11,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',3,'admin','/admins/3','?‍?','#3498db',1,'2026-08-22 21:43:56','2026-08-22 22:10:36'),(12,1,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',0,'2026-08-22 22:18:25',NULL),(13,2,'tenant_registered','New Tenant Registered','Sri Ram has been registered as a tenant',6,'tenant','/tenants/6','?','#2ecc71',0,'2026-08-22 22:18:25',NULL),(15,1,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',0,'2026-08-22 22:21:31',NULL),(16,2,'admin_created','New Admin Created','Admin \"Animesh\" has been created',4,'admin','/admins/4','?‍?','#3498db',0,'2026-08-22 22:21:31',NULL),(17,1,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(18,2,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(19,4,'maintenance_created','New Maintenance Request','Sri Ram requested Electrician for Room 201',1,'maintenance','/maintenance/1','?','#3498db',0,'2026-08-22 22:23:21',NULL),(20,1,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(21,2,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL),(22,4,'maintenance_updated','Maintenance Request Started','Electrician request for Room 201 is now in_progress',1,'maintenance','/maintenance/1','?','#f39c12',0,'2026-08-22 22:25:41',NULL);
 /*!40000 ALTER TABLE `admin_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -73,7 +73,7 @@ CREATE TABLE `admin_permissions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `admin_id` (`admin_id`,`module_name`),
   CONSTRAINT `admin_permissions_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -82,6 +82,7 @@ CREATE TABLE `admin_permissions` (
 
 LOCK TABLES `admin_permissions` WRITE;
 /*!40000 ALTER TABLE `admin_permissions` DISABLE KEYS */;
+INSERT INTO `admin_permissions` VALUES (8,4,'tenants',1,0,0,0,'2026-08-22 22:21:28'),(9,4,'guests',0,0,0,0,'2026-08-22 22:21:28'),(10,4,'bills',0,0,0,0,'2026-08-22 22:21:28'),(11,4,'pgs',1,0,0,0,'2026-08-22 22:21:28'),(12,4,'maintenance',1,0,1,0,'2026-08-22 22:21:28'),(13,4,'documents',1,0,1,0,'2026-08-22 22:21:28'),(14,4,'feedbacks',0,0,0,0,'2026-08-22 22:21:28');
 /*!40000 ALTER TABLE `admin_permissions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -114,7 +115,7 @@ CREATE TABLE `admins` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
   UNIQUE KEY `phone` (`phone`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -123,7 +124,7 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (1,'MO11','molittle1011@gmail.com',NULL,'$2b$12$ERndXqISwxL48Vc/RDNhHe0iUhM1omZiqdvOppqFkORhIKX.ZLc/u',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 10:23:04','2026-08-22 13:34:01','2026-08-22 13:33:39',NULL,NULL);
+INSERT INTO `admins` VALUES (1,'MO11','molittle1011@gmail.com',NULL,'$2b$12$ERndXqISwxL48Vc/RDNhHe0iUhM1omZiqdvOppqFkORhIKX.ZLc/u',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 10:23:04','2026-08-22 13:34:01','2026-08-22 13:33:39',NULL,NULL),(2,'Livinkey Admin','livinkey@gmail.com',NULL,'$2b$12$jPhjgye4s7ASgXnRx8s/qO5Lu9GT7NNA0DhN8xGn4mc1zD5dHLv.6',0,'super_admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 20:44:41','2026-08-22 21:41:17','2026-08-22 21:40:46',NULL,NULL),(4,'Animesh','kanimesh373@gmail.com','8789397542','$2b$12$ZPWsPbF1XLRULoOZjgq5neXu28pg401mKRET6GkUn2wiGKix2Avme',0,'admin',NULL,NULL,NULL,NULL,NULL,1,'2026-08-22 22:21:28','2026-08-22 22:23:49',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -385,7 +386,7 @@ CREATE TABLE `maintenance_requests` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `maintenance_requests_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `maintenance_requests_ibfk_2` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -394,6 +395,7 @@ CREATE TABLE `maintenance_requests` (
 
 LOCK TABLES `maintenance_requests` WRITE;
 /*!40000 ALTER TABLE `maintenance_requests` DISABLE KEYS */;
+INSERT INTO `maintenance_requests` VALUES (1,6,32,'Electrician','light issue','2026-08-23','12:00 PM',NULL,NULL,NULL,'in_progress',6,'2026-08-22 22:23:20','2026-08-22 22:25:39');
 /*!40000 ALTER TABLE `maintenance_requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -598,7 +600,7 @@ CREATE TABLE `room_occupancy` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_room_occupancy` (`room_id`),
   CONSTRAINT `fk_room_occupancy_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -607,6 +609,7 @@ CREATE TABLE `room_occupancy` (
 
 LOCK TABLES `room_occupancy` WRITE;
 /*!40000 ALTER TABLE `room_occupancy` DISABLE KEYS */;
+INSERT INTO `room_occupancy` VALUES (1,67,1,'2026-08-22 15:56:45'),(2,32,1,'2026-08-22 22:18:15');
 /*!40000 ALTER TABLE `room_occupancy` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -683,7 +686,7 @@ CREATE TABLE `tenant_details` (
   CONSTRAINT `fk_tenant_details_pg_id` FOREIGN KEY (`pg_id`) REFERENCES `pgs` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_room_id` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tenant_details_tenant_id` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -692,6 +695,7 @@ CREATE TABLE `tenant_details` (
 
 LOCK TABLES `tenant_details` WRITE;
 /*!40000 ALTER TABLE `tenant_details` DISABLE KEYS */;
+INSERT INTO `tenant_details` VALUES (1,1,2,67,'international','null','null','170626CH433T','2026-07-22','2026-09-30',10000.00,10500.00,14,'2026-06-14','2026-09-13','2026-06-14',NULL,NULL,NULL,'2026-08-22 15:56:44','2026-08-22 15:56:44'),(2,6,2,32,'international','201275598440','201275598440','ADFGBBCX','2026-07-22','2026-09-30',11000.00,8000.00,1,'2026-08-01','2026-09-01','2026-08-01',NULL,NULL,NULL,'2026-08-22 22:18:14','2026-08-22 22:18:14');
 /*!40000 ALTER TABLE `tenant_details` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -716,7 +720,7 @@ CREATE TABLE `tenant_devices` (
   KEY `idx_tenant_devices_fcm_token` (`fcm_token`),
   KEY `idx_tenant_devices_is_active` (`is_active`),
   CONSTRAINT `tenant_devices_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -725,6 +729,7 @@ CREATE TABLE `tenant_devices` (
 
 LOCK TABLES `tenant_devices` WRITE;
 /*!40000 ALTER TABLE `tenant_devices` DISABLE KEYS */;
+INSERT INTO `tenant_devices` VALUES (1,1,'eoNVDXU9S0qErgMiF1f2yR:APA91bGbpSm8nCBwDIO-NRVho88_u2ILApjZd43EOATRvu1cGuQvnlrXOj3mPgkf1E_v4CuhiCZ3OXKTemOVn_Tfy1df7XD2pqcepw_1Pl2ZDkxav-in20M','android',1,'2026-08-22 16:50:36','2026-08-22 16:50:36'),(2,6,'dEv9oTDQQ5qTB_f6i8iOG-:APA91bHYgEG5mhNwG3qR1Tleq5It_nzcybCOsUIn8atTD4dy6e5LDezjki5061-Wc8affqVtJ6tQvT26Z5N4Uu_Y0RVg0gmrEkVOFUGR_pM__Ph6NcSC6xs','android',1,'2026-08-22 22:19:47','2026-08-22 22:40:36');
 /*!40000 ALTER TABLE `tenant_devices` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -794,7 +799,7 @@ CREATE TABLE `tenant_feedbacks` (
   CONSTRAINT `tenant_feedbacks_chk_4` CHECK ((`amenities_rating` between 1 and 10)),
   CONSTRAINT `tenant_feedbacks_chk_5` CHECK ((`technology_handling_rating` between 1 and 10)),
   CONSTRAINT `tenant_feedbacks_chk_6` CHECK ((`overall_rating` between 1 and 10))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -803,6 +808,7 @@ CREATE TABLE `tenant_feedbacks` (
 
 LOCK TABLES `tenant_feedbacks` WRITE;
 /*!40000 ALTER TABLE `tenant_feedbacks` DISABLE KEYS */;
+INSERT INTO `tenant_feedbacks` VALUES (1,1,2,10.0,10.0,10.0,10.0,10.0,10.0,'Good Services. The rooms have enough space. They handle maintenance properly','2026-08-22 16:54:23','2026-08-22 16:54:23');
 /*!40000 ALTER TABLE `tenant_feedbacks` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -832,7 +838,7 @@ CREATE TABLE `tenant_notifications` (
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `tenant_notifications_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -841,6 +847,7 @@ CREATE TABLE `tenant_notifications` (
 
 LOCK TABLES `tenant_notifications` WRITE;
 /*!40000 ALTER TABLE `tenant_notifications` DISABLE KEYS */;
+INSERT INTO `tenant_notifications` VALUES (1,1,'feedback_submitted','Thank You for Your Feedback!','We appreciate you taking the time to share your experience with us.',NULL,'feedback','/profile','⭐','#f39c12',0,NULL,'2026-08-22 16:54:24'),(2,6,'maintenance_created','Maintenance Request Submitted','Your Electrician request has been submitted.',1,'maintenance','/maintenance/my-requests','?','#f39c12',0,NULL,'2026-08-22 22:23:22'),(3,6,'maintenance_started','Maintenance Started','Your Electrician request is now in progress.',1,'maintenance','/maintenance/my-requests','?','#3498db',0,NULL,'2026-08-22 22:25:41');
 /*!40000 ALTER TABLE `tenant_notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -878,7 +885,7 @@ CREATE TABLE `tenants` (
   UNIQUE KEY `uq_country_phone` (`country_code`,`phone`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_tenants_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -887,6 +894,7 @@ CREATE TABLE `tenants` (
 
 LOCK TABLES `tenants` WRITE;
 /*!40000 ALTER TABLE `tenants` DISABLE KEYS */;
+INSERT INTO `tenants` VALUES (1,'tenant','Mohammed Aminu Shehe','molittle1011@gmail.com','Tanzanian','+91','7681969865','+255 677 532 140','male','international',1,'$2b$12$IHH5IuHU0rIYD81HIwBJYu9tesed6CcHEXQ7fmWhpz8ht7PJG/HtK',1,'2026-08-22 15:56:43','2026-08-22 16:51:02',0,NULL,NULL,NULL,NULL,NULL),(6,'tenant','Sri Ram','sriramprasad1662@gmail.com','Tanzanian','+91','9381124050',NULL,'male','international',1,'$2b$12$dreVE/r.mK2fWEXr80/5TOMm7z2nJXjgZrrRzj5TGrxcTIqfZhNc2',1,'2026-08-22 22:18:13','2026-08-22 22:20:41',0,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `tenants` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -899,4 +907,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-22 19:31:21
+-- Dump completed on 2026-08-23  5:28:16

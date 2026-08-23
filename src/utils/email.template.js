@@ -109,7 +109,7 @@ const buildEmailTemplate = ({
                                     ${footerText}
                                 </p>
                                 <p style="margin: 0; color: #a0aec0; font-size: 11px;">
-                                    &copy; ${new Date().getFullYear()} ${headerLabel}. All rights reserved.
+                                    &copy; 2022 ${headerLabel}. All rights reserved.
                                 </p>
                             </td>
                         </tr>
