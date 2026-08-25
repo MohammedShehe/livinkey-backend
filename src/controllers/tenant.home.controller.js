@@ -189,9 +189,20 @@ const getTenantHomeData = async (req, res) => {
                 );
                 totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
 
-                // Calculate months since paid_from
-                const monthsSinceStart = Math.floor((today - paidFrom) / (1000 * 60 * 60 * 24 * 30));
-                expectedPayment = monthlyRent * Math.max(monthsSinceStart, 1);
+                // ============================================================
+                // FIXED: Calculate months since paid_from safely
+                // ============================================================
+                let monthsSinceStart = 0;
+                if (today >= paidFrom) {
+                    monthsSinceStart = Math.floor((today - paidFrom) / (1000 * 60 * 60 * 24 * 30));
+                    // Ensure at least 1 month
+                    monthsSinceStart = Math.max(monthsSinceStart, 1);
+                } else {
+                    // paid_from is in the future - treat as not started yet
+                    monthsSinceStart = 0;
+                }
+                
+                expectedPayment = monthlyRent * monthsSinceStart;
 
                 // ============================================================
                 // Calculate paid_till date from totalPaid
@@ -259,6 +270,8 @@ const getTenantHomeData = async (req, res) => {
                 }
 
             } catch (dateError) {
+                // If date calculation fails, use fallback values
+                console.error("Date calculation error:", dateError);
             }
         }
 

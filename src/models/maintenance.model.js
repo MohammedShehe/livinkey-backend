@@ -185,15 +185,22 @@ const getAdminStats = async (filters = {}) => {
     return rows[0] || { total: 0, pending: 0, in_progress: 0, completed: 0 };
 };
 
-const updateRequestStatus = async (connection, requestId, status) => {
-    const [result] = await connection.execute(
-        `
-        UPDATE maintenance_requests
-        SET status = ?, updated_at = NOW()
-        WHERE id = ?
-        `,
-        [status, requestId]
-    );
+// ============================================================
+// UPDATED: updateRequestStatus now accepts completed_by
+// ============================================================
+const updateRequestStatus = async (connection, requestId, status, completedBy = null) => {
+    let query = `UPDATE maintenance_requests SET status = ?, updated_at = NOW()`;
+    const params = [status];
+
+    if (status === 'completed' && completedBy) {
+        query += `, completed_by = ?`;
+        params.push(completedBy);
+    }
+
+    query += ` WHERE id = ?`;
+    params.push(requestId);
+
+    const [result] = await connection.execute(query, params);
     return result.affectedRows;
 };
 

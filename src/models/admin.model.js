@@ -260,6 +260,7 @@ const findById = async (id) => {
     return rows[0];
 };
 
+
 const updatePermission = async (
     connection,
     adminId,
@@ -269,9 +270,17 @@ const updatePermission = async (
     if (!adminId || !moduleName) return { affectedRows: 0 };
     
     const canView = Boolean(permission.view);
-    const canAdd = moduleName === "feedbacks" ? false : Boolean(permission.add);
-    const canEdit = moduleName === "feedbacks" ? false : Boolean(permission.edit);
-    const canDelete = moduleName === "feedbacks" ? false : Boolean(permission.delete);
+    // For feedbacks, ONLY view and delete are allowed
+    // Add/Edit are never allowed (feedback is read-only for admins)
+    let canAdd = false;
+    let canEdit = false;
+    let canDelete = Boolean(permission.delete);
+    
+    // For non-feedback modules, allow add/edit if permissions specify
+    if (moduleName !== "feedbacks") {
+        canAdd = Boolean(permission.add);
+        canEdit = Boolean(permission.edit);
+    }
 
     const [result] = await connection.execute(
         `

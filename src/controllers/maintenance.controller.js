@@ -208,8 +208,10 @@ const startRequest = async (req, res) => {
 const completeRequest = async (req, res) => {
     try {
         const { id } = req.params;
+        // Get the user who is completing - admin or tenant
+        const completedBy = req.admin ? `admin_${req.admin.id}` : `tenant_${req.tenant.id}`;
 
-        const request = await maintenanceService.updateRequestStatus(id, 'completed');
+        const request = await maintenanceService.updateRequestStatus(id, 'completed', completedBy);
 
         if (!request) {
             return res.status(404).json({
@@ -227,6 +229,61 @@ const completeRequest = async (req, res) => {
     } catch (error) {
         console.error("Complete Request Error:", error);
         return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+// ============================================================
+// NEW: Tenant completes a maintenance request
+// ============================================================
+const completeRequestByTenant = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { id } = req.params;
+
+        const request = await maintenanceService.completeRequestByTenant(id, tenantId);
+
+        if (!request) {
+            return res.status(404).json({
+                success: false,
+                message: "Maintenance request not found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Maintenance request completed successfully",
+            data: request
+        });
+
+    } catch (error) {
+        console.error("Complete Request By Tenant Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+// ============================================================
+// NEW: Check for in_progress requests older than 20 minutes
+// and send push notifications to tenants
+// ============================================================
+const checkPendingCompletionReminders = async (req, res) => {
+    try {
+        const result = await maintenanceService.checkAndSendCompletionReminders();
+        
+        return res.status(200).json({
+            success: true,
+            message: `Sent ${result.sent} completion reminder(s)`,
+            data: result
+        });
+
+    } catch (error) {
+        console.error("Check Completion Reminders Error:", error);
+        return res.status(500).json({
             success: false,
             message: error.message || "Internal server error"
         });
@@ -269,5 +326,7 @@ module.exports = {
     getRequestByIdAdmin,
     startRequest,
     completeRequest,
+    completeRequestByTenant,        // NEW
+    checkPendingCompletionReminders, // NEW
     deleteRequestAdmin
 };

@@ -689,6 +689,148 @@ const sendEFRROExpiryAdminEmail = async (adminEmail, adminName, expiringTenants)
     });
 };
 
+
+// ============================================================
+// NEW: Maintenance Completion Reminder Email
+// ============================================================
+const sendMaintenanceCompletionReminder = async (email, tenantName, requestData) => {
+    const content = `
+    <tr>
+        <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+            Hello ${tenantName}!
+        </td>
+    </tr>
+    <tr>
+        <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+            We noticed your maintenance request for <strong>${requestData.issue_type}</strong> 
+            at <strong>${requestData.pg_name || 'Livinkey'}</strong> (Room ${requestData.room_number || 'N/A'}) 
+            is still in progress.
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 20px 0;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                <tr>
+                    <td style="padding: 30px; text-align: center;">
+                        <div style="background: #ffffff; border-radius: 8px; padding: 20px; border: 2px dashed #92C24A;">
+                            <span style="font-size: 24px; font-weight: 700; color: #000000; font-family: 'Courier New', monospace;">
+                                🔧 Is your maintenance completed?
+                            </span>
+                        </div>
+                        <p style="color: #4a5568; font-size: 14px; margin-top: 16px; margin-bottom: 0;">
+                            Please open the Livinkey app and mark your maintenance request as <strong style="color: #92C24A;">completed</strong> 
+                            if the work has been finished.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 10px 0; text-align: center;">
+            <a href="${process.env.APP_URL}/tenant-maintenance" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+                Open Maintenance
+            </a>
+        </td>
+    </tr>
+    `;
+
+    const html = buildEmailTemplate({
+        title: '🔧 Is Your Maintenance Completed?',
+        content,
+        headerIcon: '🔧',
+        headerLabel: 'Livinkey',
+        headerColor: '#92C24A',
+        alertMessage: 'If the maintenance work is not yet complete, please contact your admin. If it is complete, mark it as done in the app.',
+        alertColor: '#e67e22',
+        footerText: 'This is an automated reminder, please do not reply.'
+    });
+
+    await transporter.sendMail({
+        from: `"Livinkey" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `🔧 Is Your Maintenance Completed? - Livinkey`,
+        html
+    });
+};
+
+/**
+ * Send fine adjusted email to tenant
+ */
+const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFine, reason) => {
+    const totalAmount = parseFloat(billData.total_amount) || 0;
+    const paidAmount = parseFloat(billData.paid_amount) || 0;
+    const newTotalDue = totalAmount + newFine - paidAmount;
+    const reductionAmount = oldFine - newFine;
+
+    const content = `
+    <tr>
+        <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+            Hello ${tenantName}!
+        </td>
+    </tr>
+    <tr>
+        <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+            Your late fee has been adjusted by the admin.
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 20px 0;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                <tr>
+                    <td style="padding: 30px;">
+                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">💰 Fine Adjustment Details</p>
+                        <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
+                            <table width="100%" style="border-collapse: collapse;">
+                                <tr>
+                                    <td style="padding: 6px 0; color: #4a5568;">Previous Late Fee</td>
+                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #e74c3c;">₹${oldFine.toFixed(2)}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 0; color: #2ecc71; font-weight: 600;">Reduction</td>
+                                    <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #2ecc71;">- ₹${reductionAmount.toFixed(2)}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 0; color: #4a5568;">New Late Fee</td>
+                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: ${newFine === 0 ? '#2ecc71' : '#e67e22'};">₹${newFine.toFixed(2)}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #000000;">New Total Due</td>
+                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A; font-size: 18px;">₹${newTotalDue.toFixed(2)}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        ${reason ? `
+                        <div style="background: #f8faf5; border-radius: 8px; padding: 12px 16px; margin-top: 12px;">
+                            <span style="font-size: 13px; color: #666; font-weight: 500;">Reason for adjustment:</span>
+                            <p style="font-size: 13px; color: #555; margin-top: 4px;">${reason}</p>
+                        </div>` : ''}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    `;
+
+    const html = buildEmailTemplate({
+        title: '💰 Late Fee Adjusted - Livinkey',
+        content,
+        headerIcon: '💰',
+        headerLabel: 'Livinkey',
+        headerColor: '#92C24A',
+        alertMessage: 'Please check your updated bill in the Livinkey app. Your QR codes have been regenerated with the new total amount.',
+        alertColor: '#92C24A',
+        footerText: 'This is an automated message, please do not reply.'
+    });
+
+    await transporter.sendMail({
+        from: `"Livinkey" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `💰 Late Fee Adjusted - Livinkey`,
+        html
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -702,5 +844,6 @@ module.exports = {
     sendCashPaymentOTPEmail,
     sendPaymentLinkEmail,
     sendEFRROExpiryTenantEmail,
-    sendEFRROExpiryAdminEmail
+    sendEFRROExpiryAdminEmail,
+    sendMaintenanceCompletionReminder
 };

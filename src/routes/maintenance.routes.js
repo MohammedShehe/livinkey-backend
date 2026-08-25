@@ -26,6 +26,15 @@ router.get("/my-requests", tenantAuthMiddleware, maintenanceController.getMyRequ
 // Get my stats (tenant)
 router.get("/my-stats", tenantAuthMiddleware, maintenanceController.getMyStats);
 
+// ============================================================
+// NEW: Tenant completes a maintenance request
+// ============================================================
+router.put(
+    "/:id/complete-by-tenant",
+    tenantAuthMiddleware,
+    maintenanceController.completeRequestByTenant
+);
+
 // ============ ADMIN ROUTES (Protected) ============
 // Admin routes are mounted on a separate router to avoid tenantAuthMiddleware leak
 const adminRouter = express.Router();
@@ -72,6 +81,16 @@ adminRouter.delete(
     "/:id",
     permissionMiddleware("maintenance", "delete"),
     maintenanceController.deleteRequestAdmin
+);
+
+// ============================================================
+// NEW: Check for pending completion reminders (Admin only)
+// This is primarily for cron jobs but also accessible via API
+// ============================================================
+adminRouter.post(
+    "/check-reminders",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.checkPendingCompletionReminders
 );
 
 // Mount admin routes under /admin

@@ -385,6 +385,13 @@ const generateTenantNotificationMessages = {
         message: 'We appreciate you taking the time to share your experience with us.',
         entity_type: 'feedback'
     }),
+
+    fineAdjusted: (bill, oldFine, newFine) => ({
+        title: '💰 Late Fee Adjusted',
+        message: `Your late fee has been reduced from ₹${oldFine} to ₹${newFine}.`,
+        entity_id: bill.id,
+        entity_type: 'bill'
+    })
 };
 
 module.exports = {

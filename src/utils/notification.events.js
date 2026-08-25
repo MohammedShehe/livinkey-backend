@@ -662,6 +662,22 @@ class NotificationEventManager {
             }
         );
     }
+
+    /**
+     * Send notification to tenant when fine is adjusted
+     */
+    static async onTenantFineAdjusted(bill, oldFineAmount, newFineAmount) {
+        const messageData = tenantNotificationService.generateTenantNotificationMessages.fineAdjusted(bill, oldFineAmount, newFineAmount);
+        
+        await tenantNotificationService.sendTenantNotification(
+            bill.tenant_id,
+            'BILL_FINE_ADJUSTED',
+            {
+                ...messageData,
+                link: `/tenant-payments/bill`
+            }
+        );
+    }
 }
 
 module.exports = NotificationEventManager;

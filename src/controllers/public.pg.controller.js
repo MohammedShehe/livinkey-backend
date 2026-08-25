@@ -1,49 +1,7 @@
 const db = require("../config/db");
 
 // ============================================================
-// FIXED: Get Welcome Message with dynamic stats
-// ============================================================
-exports.getWelcomeMessage = async (req, res) => {
-    try {
-        const connection = await db.getConnection();
-        
-        // Get total active PGs count
-        const [pgCount] = await connection.execute(
-            `SELECT COUNT(*) as total FROM pgs WHERE is_active = 1`
-        );
-        const totalPGs = pgCount[0]?.total || 0;
-        
-        connection.release();
-
-        const hours = new Date().getHours();
-        let greeting = '';
-        if (hours >= 5 && hours < 12) greeting = 'Good Morning';
-        else if (hours >= 12 && hours < 17) greeting = 'Good Afternoon';
-        else if (hours >= 17 && hours < 21) greeting = 'Good Evening';
-        else greeting = 'Good Night';
-
-        return res.json({
-            success: true,
-            data: {
-                greeting: greeting,
-                total_pgs: totalPGs,
-                message: totalPGs > 0 
-                    ? `Find your perfect home among ${totalPGs} PGs` 
-                    : 'Find your perfect home',
-                description: 'Browse through our verified PGs, check reviews, and find the perfect place to stay.'
-            }
-        });
-    } catch (error) {
-        console.error("Get Welcome Message Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error"
-        });
-    }
-};
-
-// ============================================================
-// FIXED: Get all PGs with details (Public - No Auth)
+// FIXED: Get all PGs with combined feedbacks (public + tenant)
 // ============================================================
 exports.getAllPGs = async (req, res) => {
     try {
@@ -60,7 +18,7 @@ exports.getAllPGs = async (req, res) => {
         const connection = await db.getConnection();
 
         // ============================================================
-        // FIX: Use SUBQUERIES instead of JOIN to prevent multiplication
+        // FIXED: Use COALESCE with CASE statement instead of NULLIF
         // ============================================================
         let query = `
             SELECT 
@@ -91,15 +49,37 @@ exports.getAllPGs = async (req, res) => {
                     JOIN room_occupancy ro ON r.id = ro.room_id
                     WHERE f.pg_id = p.id
                 ), 0) as total_occupied,
-                ROUND(COALESCE((
-                    SELECT AVG(tf.overall_rating) 
-                    FROM tenant_feedbacks tf 
-                    WHERE tf.pg_id = p.id
-                ), 0), 1) as overall_rating,
+                -- ============================================================
+                -- FIXED: Combine ratings using CASE to avoid division by zero
+                -- ============================================================
+                ROUND(
+                    CASE 
+                        WHEN 
+                            COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                            COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) > 0
+                        THEN
+                            (
+                                COALESCE((SELECT AVG(tf.overall_rating) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) +
+                                COALESCE((SELECT AVG(pf.overall_rating) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            ) / 
+                            (
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            )
+                        ELSE 0
+                    END,
+                    1
+                ) as overall_rating,
                 COALESCE((
                     SELECT COUNT(*) 
                     FROM tenant_feedbacks tf 
                     WHERE tf.pg_id = p.id
+                ), 0) + COALESCE((
+                    SELECT COUNT(*) 
+                    FROM public_feedbacks pf 
+                    WHERE pf.pg_id = p.id
                 ), 0) as total_reviews,
                 COALESCE((
                     SELECT GROUP_CONCAT(DISTINCT pa.amenity_name) 
@@ -119,7 +99,6 @@ exports.getAllPGs = async (req, res) => {
 
         const params = [];
 
-        // Apply filters
         if (search) {
             query += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
             const searchPattern = `%${search}%`;
@@ -148,12 +127,10 @@ exports.getAllPGs = async (req, res) => {
             params.push(...amenityList, amenityList.length);
         }
 
-        // Group by for having clauses
         query += ` GROUP BY p.id, p.name, p.location, p.rent, p.security_fee, p.number_of_floors, p.is_active, p.created_at`;
 
         const havingClauses = [];
 
-        // Filter by status (using subqueries in HAVING)
         if (status) {
             if (status === 'vacant') {
                 havingClauses.push(` COALESCE((
@@ -206,20 +183,54 @@ exports.getAllPGs = async (req, res) => {
         }
 
         if (min_rating) {
-            havingClauses.push(` ROUND(COALESCE((
-                SELECT AVG(tf.overall_rating) 
-                FROM tenant_feedbacks tf 
-                WHERE tf.pg_id = p.id
-            ), 0), 1) >= ?`);
+            havingClauses.push(` 
+                ROUND(
+                    CASE 
+                        WHEN 
+                            COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                            COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) > 0
+                        THEN
+                            (
+                                COALESCE((SELECT AVG(tf.overall_rating) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) +
+                                COALESCE((SELECT AVG(pf.overall_rating) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            ) / 
+                            (
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            )
+                        ELSE 0
+                    END,
+                    1
+                ) >= ?
+            `);
             params.push(parseFloat(min_rating));
         }
 
         if (max_rating) {
-            havingClauses.push(` ROUND(COALESCE((
-                SELECT AVG(tf.overall_rating) 
-                FROM tenant_feedbacks tf 
-                WHERE tf.pg_id = p.id
-            ), 0), 1) <= ?`);
+            havingClauses.push(` 
+                ROUND(
+                    CASE 
+                        WHEN 
+                            COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                            COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) > 0
+                        THEN
+                            (
+                                COALESCE((SELECT AVG(tf.overall_rating) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) +
+                                COALESCE((SELECT AVG(pf.overall_rating) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            ) / 
+                            (
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            )
+                        ELSE 0
+                    END,
+                    1
+                ) <= ?
+            `);
             params.push(parseFloat(max_rating));
         }
 
@@ -231,10 +242,8 @@ exports.getAllPGs = async (req, res) => {
 
         const [rows] = await connection.execute(query, params);
 
-        // Calculate vacancy count and update status_text
         let vacantCount = 0;
         for (const pg of rows) {
-            // Get images separately (subquery already gives cover_image)
             const [images] = await connection.execute(
                 `
                 SELECT image_url, display_order 
@@ -248,7 +257,6 @@ exports.getAllPGs = async (req, res) => {
             const totalCapacity = parseInt(pg.total_capacity) || 0;
             const totalOccupied = parseInt(pg.total_occupied) || 0;
             
-            // Determine status based on calculated values
             let statusText = 'Vacant';
             if (totalCapacity > 0) {
                 if (totalOccupied === 0) {
@@ -264,7 +272,6 @@ exports.getAllPGs = async (req, res) => {
                 vacantCount++;
             }
             
-            // Parse amenity_names
             pg.amenity_names = pg.amenity_names ? pg.amenity_names.split(',') : [];
             pg.images = images;
             pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
@@ -273,6 +280,8 @@ exports.getAllPGs = async (req, res) => {
             pg.total_occupied = totalOccupied;
             pg.rent = parseFloat(pg.rent) || 0;
             pg.security_fee = parseFloat(pg.security_fee) || 0;
+            pg.overall_rating = parseFloat(pg.overall_rating) || 0;
+            pg.total_reviews = parseInt(pg.total_reviews) || 0;
         }
 
         connection.release();
@@ -294,7 +303,7 @@ exports.getAllPGs = async (req, res) => {
 };
 
 // ============================================================
-// FIXED: Get PG Details by ID
+// FIXED: Get PG Details with combined feedbacks (public + tenant)
 // ============================================================
 exports.getPGDetails = async (req, res) => {
     try {
@@ -302,9 +311,6 @@ exports.getPGDetails = async (req, res) => {
 
         const connection = await db.getConnection();
 
-        // ============================================================
-        // FIX: Use subqueries for accurate counts
-        // ============================================================
         const [pgRows] = await connection.execute(
             `
             SELECT 
@@ -317,15 +323,37 @@ exports.getPGDetails = async (req, res) => {
                 p.is_active,
                 p.created_at,
                 p.updated_at,
-                ROUND(COALESCE((
-                    SELECT AVG(tf.overall_rating) 
-                    FROM tenant_feedbacks tf 
-                    WHERE tf.pg_id = p.id
-                ), 0), 1) as overall_rating,
+                -- ============================================================
+                -- FIXED: Combine ratings using CASE to avoid division by zero
+                -- ============================================================
+                ROUND(
+                    CASE 
+                        WHEN 
+                            COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                            COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) > 0
+                        THEN
+                            (
+                                COALESCE((SELECT AVG(tf.overall_rating) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) +
+                                COALESCE((SELECT AVG(pf.overall_rating) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0) * 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            ) / 
+                            (
+                                COALESCE((SELECT COUNT(*) FROM tenant_feedbacks tf WHERE tf.pg_id = p.id), 0) + 
+                                COALESCE((SELECT COUNT(*) FROM public_feedbacks pf WHERE pf.pg_id = p.id), 0)
+                            )
+                        ELSE 0
+                    END,
+                    1
+                ) as overall_rating,
                 COALESCE((
                     SELECT COUNT(*) 
                     FROM tenant_feedbacks tf 
                     WHERE tf.pg_id = p.id
+                ), 0) + COALESCE((
+                    SELECT COUNT(*) 
+                    FROM public_feedbacks pf 
+                    WHERE pf.pg_id = p.id
                 ), 0) as total_reviews,
                 COALESCE((
                     SELECT COUNT(DISTINCT r.id) 
@@ -366,7 +394,6 @@ exports.getPGDetails = async (req, res) => {
         const totalCapacity = parseInt(pg.total_capacity) || 0;
         const totalOccupied = parseInt(pg.total_occupied) || 0;
 
-        // Determine status
         let statusText = 'Vacant';
         if (totalCapacity > 0) {
             if (totalOccupied === 0) {
@@ -381,7 +408,6 @@ exports.getPGDetails = async (req, res) => {
         pg.status_text = statusText;
         pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
 
-        // Get amenities
         const [amenities] = await connection.execute(
             `
             SELECT id, amenity_name, is_custom 
@@ -393,7 +419,6 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.amenities = amenities;
 
-        // Get images
         const [images] = await connection.execute(
             `
             SELECT image_url 
@@ -405,7 +430,6 @@ exports.getPGDetails = async (req, res) => {
         );
         pg.images = images.map(img => img.image_url);
 
-        // Get floors with rooms and occupancy
         const [floors] = await connection.execute(
             `
             SELECT 
@@ -450,23 +474,43 @@ exports.getPGDetails = async (req, res) => {
 
         pg.floors = floors;
 
-        // Get reviews
-        const [reviews] = await connection.execute(
+        // ============================================================
+        // FIXED: Get reviews from BOTH tenant_feedbacks AND public_feedbacks
+        // ============================================================
+        
+        const [tenantReviews] = await connection.execute(
             `
             SELECT 
                 t.full_name as name,
                 tf.comment,
                 tf.overall_rating as rating,
-                tf.created_at as date
+                tf.created_at as date,
+                'tenant' as source
             FROM tenant_feedbacks tf
             INNER JOIN tenants t ON tf.tenant_id = t.id
             WHERE tf.pg_id = ?
-            ORDER BY tf.created_at DESC
-            LIMIT 20
             `,
             [id]
         );
-        pg.reviews = reviews;
+
+        const [publicReviews] = await connection.execute(
+            `
+            SELECT 
+                full_name as name,
+                comment,
+                overall_rating as rating,
+                created_at as date,
+                'public' as source
+            FROM public_feedbacks
+            WHERE pg_id = ?
+            `,
+            [id]
+        );
+
+        const allReviews = [...tenantReviews, ...publicReviews];
+        allReviews.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        pg.reviews = allReviews.slice(0, 50);
 
         pg.stats = {
             total_rooms: totalRooms,
@@ -475,6 +519,12 @@ exports.getPGDetails = async (req, res) => {
             available_spots: totalCapacity - totalOccupied,
             occupancy_percentage: totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0,
             status: statusText
+        };
+
+        pg.review_stats = {
+            tenant_count: tenantReviews.length,
+            public_count: publicReviews.length,
+            total: allReviews.length
         };
 
         connection.release();
@@ -494,7 +544,7 @@ exports.getPGDetails = async (req, res) => {
 };
 
 // ============================================================
-// Get PG Stats (Public - No Auth)
+// Get PG Stats with combined feedbacks
 // ============================================================
 exports.getPGStats = async (req, res) => {
     try {
@@ -539,6 +589,14 @@ exports.getPGStats = async (req, res) => {
             }
         }
 
+        const [reviewCount] = await connection.execute(
+            `
+            SELECT 
+                (SELECT COUNT(*) FROM tenant_feedbacks) + 
+                (SELECT COUNT(*) FROM public_feedbacks) as total_reviews
+            `
+        );
+
         connection.release();
 
         return res.json({
@@ -549,12 +607,54 @@ exports.getPGStats = async (req, res) => {
                 full_pgs: full,
                 partial_pgs: partial,
                 has_pgs: total > 0,
-                vacancy_percentage: total > 0 ? Math.round((vacant / total) * 100) : 0
+                vacancy_percentage: total > 0 ? Math.round((vacant / total) * 100) : 0,
+                total_reviews: reviewCount[0]?.total_reviews || 0
             }
         });
 
     } catch (error) {
         console.error("Get PG Stats Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+// ============================================================
+// Get Welcome Message with dynamic stats
+// ============================================================
+exports.getWelcomeMessage = async (req, res) => {
+    try {
+        const connection = await db.getConnection();
+        
+        const [pgCount] = await connection.execute(
+            `SELECT COUNT(*) as total FROM pgs WHERE is_active = 1`
+        );
+        const totalPGs = pgCount[0]?.total || 0;
+        
+        connection.release();
+
+        const hours = new Date().getHours();
+        let greeting = '';
+        if (hours >= 5 && hours < 12) greeting = 'Good Morning';
+        else if (hours >= 12 && hours < 17) greeting = 'Good Afternoon';
+        else if (hours >= 17 && hours < 21) greeting = 'Good Evening';
+        else greeting = 'Good Night';
+
+        return res.json({
+            success: true,
+            data: {
+                greeting: greeting,
+                total_pgs: totalPGs,
+                message: totalPGs > 0 
+                    ? `Find your perfect home among ${totalPGs} PGs` 
+                    : 'Find your perfect home',
+                description: 'Browse through our verified PGs, check reviews, and find the perfect place to stay.'
+            }
+        });
+    } catch (error) {
+        console.error("Get Welcome Message Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error"

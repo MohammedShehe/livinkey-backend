@@ -94,7 +94,24 @@ async function startServer() {
             }
         });
         console.log('📅 Payment reminder checker scheduled to run daily at 8:00 AM');
-
+        // ============================================================
+        // NEW: Cron job for maintenance completion reminders
+        // Runs every 10 minutes to check for in_progress requests
+        // older than 20 minutes
+        // ============================================================
+        cron.schedule('*/10 * * * *', async () => {
+            console.log('🔄 Checking maintenance completion reminders...');
+            try {
+                const maintenanceService = require("./services/maintenance.service");
+                const result = await maintenanceService.checkAndSendCompletionReminders();
+                if (result.sent > 0) {
+                    console.log(`✅ Sent ${result.sent} maintenance completion reminder(s)`);
+                }
+            } catch (error) {
+                console.error('❌ Error checking maintenance completion reminders:', error);
+            }
+        });
+        console.log('📅 Maintenance completion reminder scheduler running every 10 minutes');
         // Start server on all interfaces
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
