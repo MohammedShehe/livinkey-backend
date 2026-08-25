@@ -79,6 +79,17 @@ const createNotificationsForTenants = async (tenantIds, notificationData) => {
  * Get notifications for a tenant
  */
 const getTenantNotifications = async (tenantId, limit = 50, offset = 0) => {
+    // Ensure limit and offset are valid integers
+    const parsedLimit = parseInt(limit, 10);
+    const parsedOffset = parseInt(offset, 10);
+    
+    if (isNaN(parsedLimit) || parsedLimit < 1) {
+        throw new Error('Invalid limit parameter');
+    }
+    if (isNaN(parsedOffset) || parsedOffset < 0) {
+        throw new Error('Invalid offset parameter');
+    }
+    
     const [rows] = await db.execute(
         `
         SELECT 
@@ -99,7 +110,7 @@ const getTenantNotifications = async (tenantId, limit = 50, offset = 0) => {
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         `,
-        [tenantId, parseInt(limit), parseInt(offset)]
+        [tenantId, parsedLimit, parsedOffset]
     );
     return rows;
 };
@@ -108,6 +119,12 @@ const getTenantNotifications = async (tenantId, limit = 50, offset = 0) => {
  * Get unread notifications for a tenant
  */
 const getUnreadTenantNotifications = async (tenantId, limit = 20) => {
+    // Ensure limit is a valid integer
+    const parsedLimit = parseInt(limit, 10);
+    if (isNaN(parsedLimit) || parsedLimit < 1) {
+        throw new Error('Invalid limit parameter');
+    }
+    
     const [rows] = await db.execute(
         `
         SELECT 
@@ -126,7 +143,7 @@ const getUnreadTenantNotifications = async (tenantId, limit = 20) => {
         ORDER BY created_at DESC
         LIMIT ?
         `,
-        [tenantId, parseInt(limit)]
+        [tenantId, parsedLimit]
     );
     return rows;
 };

@@ -79,6 +79,17 @@ const createNotificationsForGuests = async (guestIds, notificationData) => {
  * Get notifications for a guest
  */
 const getGuestNotifications = async (guestId, limit = 50, offset = 0) => {
+    // Ensure limit and offset are valid integers
+    const parsedLimit = parseInt(limit, 10);
+    const parsedOffset = parseInt(offset, 10);
+    
+    if (isNaN(parsedLimit) || parsedLimit < 1) {
+        throw new Error('Invalid limit parameter');
+    }
+    if (isNaN(parsedOffset) || parsedOffset < 0) {
+        throw new Error('Invalid offset parameter');
+    }
+    
     const [rows] = await db.execute(
         `
         SELECT 
@@ -99,7 +110,7 @@ const getGuestNotifications = async (guestId, limit = 50, offset = 0) => {
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         `,
-        [guestId, parseInt(limit), parseInt(offset)]
+        [guestId, parsedLimit, parsedOffset]
     );
     return rows;
 };
@@ -108,6 +119,12 @@ const getGuestNotifications = async (guestId, limit = 50, offset = 0) => {
  * Get unread notifications for a guest
  */
 const getUnreadGuestNotifications = async (guestId, limit = 20) => {
+    // Ensure limit is a valid integer
+    const parsedLimit = parseInt(limit, 10);
+    if (isNaN(parsedLimit) || parsedLimit < 1) {
+        throw new Error('Invalid limit parameter');
+    }
+    
     const [rows] = await db.execute(
         `
         SELECT 
@@ -126,7 +143,7 @@ const getUnreadGuestNotifications = async (guestId, limit = 20) => {
         ORDER BY created_at DESC
         LIMIT ?
         `,
-        [guestId, parseInt(limit)]
+        [guestId, parsedLimit]
     );
     return rows;
 };
