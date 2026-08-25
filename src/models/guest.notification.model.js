@@ -90,6 +90,10 @@ const getGuestNotifications = async (guestId, limit = 50, offset = 0) => {
         throw new Error('Invalid offset parameter');
     }
     
+    // NOTE: LIMIT/OFFSET are inlined (not bound as ?) because mysql2's
+    // prepared-statement protocol (execute) can throw ER_WRONG_ARGUMENTS
+    // when binding LIMIT/OFFSET. Safe here since both values are validated
+    // integers above and never derived from raw user input.
     const [rows] = await db.execute(
         `
         SELECT 
@@ -108,9 +112,9 @@ const getGuestNotifications = async (guestId, limit = 50, offset = 0) => {
         FROM guest_notifications
         WHERE guest_id = ?
         ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${parsedLimit} OFFSET ${parsedOffset}
         `,
-        [guestId, parsedLimit, parsedOffset]
+        [guestId]
     );
     return rows;
 };
@@ -125,6 +129,7 @@ const getUnreadGuestNotifications = async (guestId, limit = 20) => {
         throw new Error('Invalid limit parameter');
     }
     
+    // NOTE: LIMIT is inlined (not bound as ?) - see comment in getGuestNotifications above.
     const [rows] = await db.execute(
         `
         SELECT 
@@ -141,9 +146,9 @@ const getUnreadGuestNotifications = async (guestId, limit = 20) => {
         FROM guest_notifications
         WHERE guest_id = ? AND is_read = 0
         ORDER BY created_at DESC
-        LIMIT ?
+        LIMIT ${parsedLimit}
         `,
-        [guestId, parsedLimit]
+        [guestId]
     );
     return rows;
 };

@@ -86,6 +86,10 @@ const getNotifications = async (adminId, limit = 50, offset = 0) => {
         throw new Error('Invalid offset parameter');
     }
     
+    // NOTE: LIMIT/OFFSET are inlined (not bound as ?) because mysql2's
+    // prepared-statement protocol (execute) can throw ER_WRONG_ARGUMENTS
+    // when binding LIMIT/OFFSET. Safe here since both values are validated
+    // integers above and never derived from raw user input.
     const [rows] = await db.execute(
         `
         SELECT 
@@ -104,9 +108,9 @@ const getNotifications = async (adminId, limit = 50, offset = 0) => {
         FROM admin_notifications
         WHERE admin_id = ?
         ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${parsedLimit} OFFSET ${parsedOffset}
         `,
-        [adminId, parsedLimit, parsedOffset]
+        [adminId]
     );
     return rows;
 };
@@ -121,6 +125,7 @@ const getUnreadNotifications = async (adminId, limit = 20) => {
         throw new Error('Invalid limit parameter');
     }
     
+    // NOTE: LIMIT is inlined (not bound as ?) - see comment in getNotifications above.
     const [rows] = await db.execute(
         `
         SELECT 
@@ -137,9 +142,9 @@ const getUnreadNotifications = async (adminId, limit = 20) => {
         FROM admin_notifications
         WHERE admin_id = ? AND is_read = 0
         ORDER BY created_at DESC
-        LIMIT ?
+        LIMIT ${parsedLimit}
         `,
-        [adminId, parsedLimit]
+        [adminId]
     );
     return rows;
 };
