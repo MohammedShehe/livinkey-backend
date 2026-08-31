@@ -93,6 +93,12 @@ const TENANT_NOTIFICATION_TYPES = {
         icon: '⭐',
         color: '#f39c12',
         linkPrefix: '/profile'
+    },
+    ADMIN_MESSAGE: {
+        type: 'admin_message',
+        icon: '📢',
+        color: '#3498db',
+        linkPrefix: '/tenant-notifications'
     }
 };
 
@@ -391,6 +397,12 @@ const generateTenantNotificationMessages = {
         message: `Your late fee has been reduced from ₹${oldFine} to ₹${newFine}.`,
         entity_id: bill.id,
         entity_type: 'bill'
+    }),
+
+    adminMessage: (title, message) => ({
+        title: title || 'Message from Admin',
+        message: message,
+        entity_type: 'admin_message'
     })
 };
 

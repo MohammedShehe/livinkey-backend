@@ -831,6 +831,70 @@ const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFi
     });
 };
 
+/**
+ * Send custom admin notification email to tenant
+ */
+const sendCustomAdminNotificationEmail = async (email, tenantName, title, message, adminName) => {
+    const formattedMessage = message.replace(/\n/g, '<br>');
+    
+    const content = `
+    <tr>
+        <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
+            Hello ${tenantName}!
+        </td>
+    </tr>
+    <tr>
+        <td style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center; padding-bottom: 10px;">
+            You have received a new message from <strong>${adminName}</strong>.
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 20px 0;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
+                <tr>
+                    <td style="padding: 30px;">
+                        <p style="color: #000000; font-size: 16px; font-weight: 600; margin: 0 0 12px 0; text-align: center;">📢 ${title}</p>
+                        <div style="background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #e8ecf1; min-height: 80px;">
+                            <p style="color: #4a5568; font-size: 15px; line-height: 1.8; margin: 0; white-space: pre-wrap;">
+                                ${formattedMessage}
+                            </p>
+                        </div>
+                        <p style="color: #718096; font-size: 13px; margin-top: 12px; margin-bottom: 0; text-align: center;">
+                            Sent on: ${new Date().toLocaleString()}
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 10px 0; text-align: center;">
+            <a href="${process.env.APP_URL || 'https://livinkey.com'}/tenant-notifications" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+                View in App
+            </a>
+        </td>
+    </tr>
+    `;
+
+    const html = buildEmailTemplate({
+        title: `📢 ${title}`,
+        content,
+        headerIcon: '📢',
+        headerLabel: 'Livinkey',
+        headerColor: '#92C24A',
+        alertMessage: 'This is an official message from the Livinkey admin team. Please read carefully.',
+        alertColor: '#3498db',
+        footerText: 'This is an automated message from the Livinkey admin panel.'
+    });
+
+    await transporter.sendMail({
+        from: `"Livinkey Admin" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `📢 ${title}`,
+        html
+    });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -845,5 +909,6 @@ module.exports = {
     sendPaymentLinkEmail,
     sendEFRROExpiryTenantEmail,
     sendEFRROExpiryAdminEmail,
-    sendMaintenanceCompletionReminder
+    sendMaintenanceCompletionReminder,
+    sendCustomAdminNotificationEmail
 };

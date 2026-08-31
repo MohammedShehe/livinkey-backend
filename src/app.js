@@ -23,6 +23,7 @@ const guestRoutes = require("./routes/guest.routes");
 const publicRoutes = require("./routes/public.routes");
 const tenantNotificationRoutes = require("./routes/tenant.notification.routes");
 const guestNotificationRoutes = require("./routes/guest.notification.routes");
+const adminNotificationRoutes = require("./routes/admin.notification.routes");
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use("/api/guests", guestRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/tenant-notifications", tenantNotificationRoutes);
 app.use("/api/guest-notifications", guestNotificationRoutes);
+app.use("/api/admin-notifications", adminNotificationRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {

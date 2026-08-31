@@ -678,6 +678,26 @@ class NotificationEventManager {
             }
         );
     }
+
+    /**
+     * Send admin message notification to tenants
+     */
+    static async onAdminMessageSent(tenantIds, title, message) {
+        const notificationData = {
+            title: title,
+            message: message,
+            entity_type: 'admin_message',
+            link: '/tenant-notifications',
+            icon: '📢',
+            color: '#3498db'
+        };
+
+        await tenantNotificationService.sendNotificationsToTenants(
+            tenantIds,
+            'ADMIN_MESSAGE',
+            notificationData
+        );
+    }
 }
 
 module.exports = NotificationEventManager;
