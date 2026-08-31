@@ -152,7 +152,7 @@ class AdminNotificationService {
         try {
             for (const tenantId of tenantIds) {
                 const [result] = await connection.execute(
-                    `INSERT INTO notifications (
+                    `INSERT INTO tenant_notifications (
                         tenant_id, 
                         type, 
                         title, 
@@ -167,7 +167,7 @@ class AdminNotificationService {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
                     [
                         tenantId,
-                        type || 'ADMIN_MESSAGE',
+                        type || 'admin_message',
                         notificationData.title || 'Notification',
                         notificationData.message || '',
                         notificationData.entity_id || null,
