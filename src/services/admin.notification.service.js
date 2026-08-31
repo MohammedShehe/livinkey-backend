@@ -1,4 +1,5 @@
 const AdminNotificationLog = require('../models/admin.notification.log.model');
+const db = require("../config/db");
 
 class AdminNotificationService {
     /**
@@ -15,9 +16,6 @@ class AdminNotificationService {
                 createdAt: { $gte: thirtyDaysAgo }
             });
 
-            // These would come from your tenant/PG models
-            // For now, we'll return placeholder values
-            // You should replace these with actual database queries
             const totalTenants = await this.getTotalTenants();
             const totalPGs = await this.getTotalPGs();
 
@@ -33,57 +31,45 @@ class AdminNotificationService {
     }
 
     /**
-     * Get total tenants (implement based on your tenant model)
+     * Get total tenants
      */
     async getTotalTenants() {
-        // Replace with actual Tenant model query
-        // Example: return await Tenant.countDocuments({ status: 'active' });
-        return 0; // Placeholder
+        return 0;
     }
 
     /**
-     * Get total PGs (implement based on your PG model)
+     * Get total PGs
      */
     async getTotalPGs() {
-        // Replace with actual PG model query
-        // Example: return await PG.countDocuments({ status: 'active' });
-        return 0; // Placeholder
+        return 0;
     }
 
     /**
      * Get all tenants with their PG info
      */
     async getAllTenants() {
-        // Replace with actual Tenant model query with population
-        // Example: return await Tenant.find().populate('pgId');
-        return []; // Placeholder
+        return [];
     }
 
     /**
      * Get tenants by PG ID
      */
     async getTenantsByPG(pgId) {
-        // Replace with actual query
-        // Example: return await Tenant.find({ pgId, status: 'active' });
-        return []; // Placeholder
+        return [];
     }
 
     /**
      * Get tenant by ID
      */
     async getTenantById(tenantId) {
-        // Replace with actual query
-        // Example: return await Tenant.findById(tenantId);
-        return null; // Placeholder
+        return null;
     }
 
     /**
      * Get all PGs for dropdown
      */
     async getAllPGs() {
-        // Replace with actual PG model query
-        // Example: return await PG.find({ status: 'active' }, 'name _id');
-        return []; // Placeholder
+        return [];
     }
 
     /**
@@ -93,8 +79,8 @@ class AdminNotificationService {
         const {
             title,
             message,
-            recipientType, // 'all', 'pg', 'individual'
-            recipientIds, // Array of tenant IDs or PG IDs
+            recipientType,
+            recipientIds,
             sendPush,
             sendEmail,
             adminId
@@ -103,20 +89,17 @@ class AdminNotificationService {
         try {
             let recipients = [];
             
-            // Get recipients based on type
             switch (recipientType) {
                 case 'all':
                     recipients = await this.getAllTenants();
                     break;
                 case 'pg':
-                    // Get all tenants in selected PGs
                     for (const pgId of recipientIds) {
                         const pgTenants = await this.getTenantsByPG(pgId);
                         recipients = [...recipients, ...pgTenants];
                     }
                     break;
                 case 'individual':
-                    // Get specific tenants
                     for (const tenantId of recipientIds) {
                         const tenant = await this.getTenantById(tenantId);
                         if (tenant) recipients.push(tenant);
@@ -126,14 +109,8 @@ class AdminNotificationService {
                     throw new Error('Invalid recipient type');
             }
 
-            // Remove duplicates (if any)
             const uniqueRecipients = [...new Map(recipients.map(r => [r._id.toString(), r])).values()];
 
-            // Here you would integrate with your push notification service
-            // Example: sendPushNotifications(uniqueRecipients, title, message)
-            // Example: sendEmails(uniqueRecipients, title, message)
-
-            // Log the notification
             const notificationLog = new AdminNotificationLog({
                 title,
                 message,
@@ -162,48 +139,60 @@ class AdminNotificationService {
     }
 
     /**
-     * ============================================================
-     * FIX: Added this method to handle controller requests
-     * This is called by admin.notification.controller.js
-     * ============================================================
+     * Send notifications to multiple tenants
      */
     async sendNotificationsToTenants(tenantIds, type, notificationData, pushData = null) {
+        if (!tenantIds || !Array.isArray(tenantIds) || tenantIds.length === 0) {
+            throw new Error('Tenant IDs array is required');
+        }
+
+        const connection = await db.getConnection();
+        let insertedCount = 0;
+
         try {
-            if (!tenantIds || !Array.isArray(tenantIds) || tenantIds.length === 0) {
-                throw new Error('Tenant IDs array is required');
+            for (const tenantId of tenantIds) {
+                const [result] = await connection.execute(
+                    `INSERT INTO notifications (
+                        tenant_id, 
+                        type, 
+                        title, 
+                        message, 
+                        entity_id, 
+                        entity_type, 
+                        link, 
+                        icon, 
+                        color, 
+                        is_read, 
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                    [
+                        tenantId,
+                        type || 'ADMIN_MESSAGE',
+                        notificationData.title || 'Notification',
+                        notificationData.message || '',
+                        notificationData.entity_id || null,
+                        notificationData.entity_type || 'admin_message',
+                        notificationData.link || '/tenant-notifications',
+                        notificationData.icon || '📢',
+                        notificationData.color || '#3498db',
+                        0
+                    ]
+                );
+                
+                if (result.affectedRows > 0) {
+                    insertedCount++;
+                }
             }
 
-            console.log(`Sending ${type} notifications to ${tenantIds.length} tenants`);
+            connection.release();
 
-            // Create notification log entries for each tenant
-            const notifications = tenantIds.map(tenantId => ({
-                tenantId: tenantId,
-                type: type,
-                title: notificationData.title,
-                message: notificationData.message,
-                entity_id: notificationData.entity_id || null,
-                entity_type: notificationData.entity_type || 'admin_message',
-                link: notificationData.link || '/tenant-notifications',
-                icon: notificationData.icon || '📢',
-                color: notificationData.color || '#3498db',
-                isRead: false,
-                createdAt: new Date()
-            }));
-
-            // Here you would insert these into your notifications table
-            // For now, we'll just log and return the count
-            console.log(`Would create ${notifications.length} notification records`);
-
-            // If push data is provided, handle push notifications
             if (pushData && pushData.title && pushData.body) {
-                console.log(`Would send push notifications to ${tenantIds.length} tenants`);
-                // Your push notification logic here
+                // Push notification logic here
             }
 
-            // Return the count of tenants
-            return tenantIds.length;
+            return insertedCount;
         } catch (error) {
-            console.error('Error in sendNotificationsToTenants:', error);
+            connection.release();
             throw new Error(`Failed to send notifications: ${error.message}`);
         }
     }
