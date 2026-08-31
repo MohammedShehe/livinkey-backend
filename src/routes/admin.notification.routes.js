@@ -24,6 +24,24 @@ router.get(
     adminNotificationController.getNotificationHistory
 );
 
+// ============================================================
+// NEW: Delete a notification log by ID
+// ============================================================
+router.delete(
+    "/:id",
+    permissionMiddleware("tenants", "view"),
+    adminNotificationController.deleteNotificationLog
+);
+
+// ============================================================
+// NEW: Delete multiple notification logs
+// ============================================================
+router.delete(
+    "/",
+    permissionMiddleware("tenants", "view"),
+    adminNotificationController.deleteMultipleNotificationLogs
+);
+
 // Get PG list with tenant counts
 router.get(
     "/pg-list",

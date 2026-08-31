@@ -1,6 +1,7 @@
 const db = require("../config/db");
-const tenantNotificationService = require("../services/tenant.notification.service");
-const firebase = require("../config/firebase");
+const adminNotificationService = require("../services/admin.notification.service");
+const mailService = require("../services/mail.service");
+const NotificationEventManager = require("../utils/notification.events");
 
 /**
  * Send notification to tenants (individual, by PG, or all)
@@ -107,7 +108,7 @@ exports.sendTenantNotification = async (req, res) => {
         };
 
         // Send in-app notifications to all selected tenants
-        const sentCount = await tenantNotificationService.sendNotificationsToTenants(
+        const sentCount = await adminNotificationService.sendNotificationsToTenants(
             tenantIds,
             'ADMIN_MESSAGE',
             notificationData,
@@ -117,7 +118,6 @@ exports.sendTenantNotification = async (req, res) => {
         // Also send emails if requested
         let emailSentCount = 0;
         if (send_email) {
-            const mailService = require("../services/mail.service");
             const connection = await db.getConnection();
             const [tenants] = await connection.execute(
                 `
@@ -240,6 +240,147 @@ exports.getNotificationHistory = async (req, res) => {
 
     } catch (error) {
         console.error("Get Notification History Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+/**
+ * ============================================================
+ * NEW: Delete a notification log by ID
+ * DELETE /api/admin-notifications/:id
+ * ============================================================
+ */
+exports.deleteNotificationLog = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const adminId = req.admin.id;
+        
+        // Validate ID
+        const logId = parseInt(id);
+        if (isNaN(logId) || logId < 1) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid notification ID"
+            });
+        }
+
+        const connection = await db.getConnection();
+        
+        // Check if the log exists and get its admin_id for permission check
+        const [existing] = await connection.execute(
+            `SELECT id, admin_id FROM admin_notification_logs WHERE id = ?`,
+            [logId]
+        );
+        
+        if (existing.length === 0) {
+            connection.release();
+            return res.status(404).json({
+                success: false,
+                message: "Notification log not found"
+            });
+        }
+        
+        // Super admins can delete any log, regular admins can only delete their own
+        const isSuperAdmin = req.admin.role === 'super_admin';
+        if (!isSuperAdmin && existing[0].admin_id !== adminId) {
+            connection.release();
+            return res.status(403).json({
+                success: false,
+                message: "You can only delete notifications that you sent"
+            });
+        }
+        
+        // Delete the log
+        await connection.execute(
+            `DELETE FROM admin_notification_logs WHERE id = ?`,
+            [logId]
+        );
+        connection.release();
+
+        return res.status(200).json({
+            success: true,
+            message: "Notification log deleted successfully"
+        });
+
+    } catch (error) {
+        console.error("Delete Notification Log Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+/**
+ * ============================================================
+ * NEW: Delete multiple notification logs
+ * DELETE /api/admin-notifications
+ * Body: { ids: [1, 2, 3] }
+ * ============================================================
+ */
+exports.deleteMultipleNotificationLogs = async (req, res) => {
+    try {
+        const { ids } = req.body;
+        const adminId = req.admin.id;
+        const isSuperAdmin = req.admin.role === 'super_admin';
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide an array of notification IDs to delete"
+            });
+        }
+
+        // Validate all IDs are numbers
+        const logIds = ids.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
+        if (logIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid notification IDs provided"
+            });
+        }
+
+        const connection = await db.getConnection();
+        
+        // For regular admins, check ownership
+        if (!isSuperAdmin) {
+            const placeholders = logIds.map(() => '?').join(',');
+            const [logs] = await connection.execute(
+                `
+                SELECT id FROM admin_notification_logs 
+                WHERE id IN (${placeholders}) AND admin_id = ?
+                `,
+                [...logIds, adminId]
+            );
+            
+            if (logs.length !== logIds.length) {
+                connection.release();
+                return res.status(403).json({
+                    success: false,
+                    message: "You can only delete notifications that you sent"
+                });
+            }
+        }
+
+        // Delete the logs
+        const placeholders = logIds.map(() => '?').join(',');
+        const [result] = await connection.execute(
+            `DELETE FROM admin_notification_logs WHERE id IN (${placeholders})`,
+            logIds
+        );
+        connection.release();
+
+        return res.status(200).json({
+            success: true,
+            message: `${result.affectedRows} notification log(s) deleted successfully`,
+            deleted_count: result.affectedRows
+        });
+
+    } catch (error) {
+        console.error("Delete Multiple Notification Logs Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server error"
