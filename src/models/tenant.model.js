@@ -1,5 +1,15 @@
 const db = require("../config/db");
 
+// Helper function to convert date values to proper NULL
+const toDateOrNull = (value) => {
+    // If value is null, undefined, empty string, 'null' string, or '0000-00-00', return null
+    if (!value || value === '' || value === 'null' || value === 'NULL' || value === '0000-00-00') {
+        return null;
+    }
+    // If it's a valid date string, return it
+    return value;
+};
+
 const createTenant = async (connection, tenantData) => {
     const [result] = await connection.execute(
         `
@@ -37,12 +47,6 @@ const createTenant = async (connection, tenantData) => {
 };
 
 const createTenantDetails = async (connection, detailsData) => {
-    // Helper to convert empty strings to null for date fields
-    const toDateOrNull = (value) => {
-        if (!value || value === '' || value === '0000-00-00') return null;
-        return value;
-    };
-
     const [result] = await connection.execute(
         `
         INSERT INTO tenant_details (
@@ -74,8 +78,8 @@ const createTenantDetails = async (connection, detailsData) => {
             detailsData.aadhaar_id || null,
             detailsData.father_aadhaar_id || null,
             detailsData.c_form_number || null,
-            detailsData.efrro_from || null,
-            detailsData.efrro_till || null,
+            toDateOrNull(detailsData.efrro_from),
+            toDateOrNull(detailsData.efrro_till),
             detailsData.rent,
             detailsData.security_fee,
             detailsData.payment_date,
@@ -573,14 +577,14 @@ const updateTenantDetails = async (connection, tenantId, detailsData) => {
             detailsData.aadhaar_id || null,
             detailsData.father_aadhaar_id || null,
             detailsData.c_form_number || null,
-            detailsData.efrro_from || null,
-            detailsData.efrro_till || null,
+            toDateOrNull(detailsData.efrro_from),
+            toDateOrNull(detailsData.efrro_till),
             detailsData.rent,
             detailsData.security_fee,
             detailsData.payment_date,
-            detailsData.paid_from,
-            detailsData.paid_till,
-            detailsData.arrival_date,
+            toDateOrNull(detailsData.paid_from),
+            toDateOrNull(detailsData.paid_till),
+            toDateOrNull(detailsData.arrival_date),
             tenantId
         ]
     );
@@ -1013,5 +1017,6 @@ module.exports = {
     getSuperAdmins,
     getTenantForNotification,
     getEFRROStats,
-    getEFRROExpiringList
+    getEFRROExpiringList,
+    toDateOrNull // Export for use in other services if needed
 };

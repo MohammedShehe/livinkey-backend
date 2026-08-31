@@ -32,6 +32,14 @@ const decrementRoomOccupancy = async (connection, roomId, amount) => {
     );
 };
 
+// Helper function to convert date values to proper NULL - imported from model
+const toDateOrNull = (value) => {
+    if (!value || value === '' || value === 'null' || value === 'NULL' || value === '0000-00-00') {
+        return null;
+    }
+    return value;
+};
+
 const createTenant = async (tenantData, files = {}) => {
     const connection = await db.getConnection();
     let createdTenant = null;
@@ -105,6 +113,7 @@ const createTenant = async (tenantData, files = {}) => {
                 }
             }
 
+            // Use toDateOrNull for all date fields
             await TenantModel.createTenantDetails(connection, {
                 tenant_id: tenantId,
                 pg_id: tenantData.pg_id,
@@ -113,14 +122,14 @@ const createTenant = async (tenantData, files = {}) => {
                 aadhaar_id: tenantData.aadhaar_id,
                 father_aadhaar_id: tenantData.father_aadhaar_id,
                 c_form_number: tenantData.c_form_number,
-                efrro_from: tenantData.efrro_from,
-                efrro_till: tenantData.efrro_till,
+                efrro_from: toDateOrNull(tenantData.efrro_from),
+                efrro_till: toDateOrNull(tenantData.efrro_till),
                 rent: tenantData.rent,
                 security_fee: tenantData.security_fee,
                 payment_date: tenantData.payment_date,
-                paid_from: tenantData.paid_from,
-                paid_till: tenantData.paid_till,
-                arrival_date: tenantData.arrival_date,
+                paid_from: toDateOrNull(tenantData.paid_from),
+                paid_till: toDateOrNull(tenantData.paid_till),
+                arrival_date: toDateOrNull(tenantData.arrival_date),
                 document_url: documentUrl,
                 document_public_id: documentPublicId,
                 document_resource_type: documentResourceType
@@ -316,14 +325,14 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 aadhaar_id: tenantData.aadhaar_id,
                 father_aadhaar_id: tenantData.father_aadhaar_id,
                 c_form_number: tenantData.c_form_number,
-                efrro_from: tenantData.efrro_from,
-                efrro_till: tenantData.efrro_till,
+                efrro_from: toDateOrNull(tenantData.efrro_from),
+                efrro_till: toDateOrNull(tenantData.efrro_till),
                 rent: tenantData.rent,
                 security_fee: tenantData.security_fee,
                 payment_date: tenantData.payment_date,
-                paid_from: tenantData.paid_from,
-                paid_till: tenantData.paid_till,
-                arrival_date: tenantData.arrival_date
+                paid_from: toDateOrNull(tenantData.paid_from),
+                paid_till: toDateOrNull(tenantData.paid_till),
+                arrival_date: toDateOrNull(tenantData.arrival_date)
             });
 
             if (roomChanged) {
@@ -538,12 +547,6 @@ const checkAndSendEFRROExpiryNotifications = async () => {
     }
 };
 
-// ============================================================
-// NEW: Check and send document reminder notifications
-// Notifies tenants who are missing required documents based on
-// their residency (national/international), matching the same
-// document catalog used by tenant.document.service.js
-// ============================================================
 const checkAndSendDocumentReminders = async () => {
     try {
 
@@ -578,8 +581,6 @@ const checkAndSendDocumentReminders = async () => {
             const missingDocs = requiredDocs.filter(d => !uploadedTypes.includes(d.key));
 
             if (missingDocs.length > 0) {
-                // Send one notification per tenant listing the first missing doc,
-                // to avoid spamming with one notification per missing document.
                 const docLabel = missingDocs.length === 1
                     ? missingDocs[0].label
                     : `${missingDocs[0].label} and ${missingDocs.length - 1} other document(s)`;
@@ -621,5 +622,6 @@ module.exports = {
     checkAndSendEFRROExpiryNotifications,
     checkAndSendDocumentReminders,
     getEFRROStats,
-    getEFRROExpiringList
+    getEFRROExpiringList,
+    toDateOrNull
 };
