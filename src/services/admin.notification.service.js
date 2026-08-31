@@ -1,6 +1,6 @@
 const AdminNotificationLog = require('../models/admin.notification.log.model');
 const db = require("../config/db");
-const firebaseService = require("./firebase.service");
+const tenantNotificationService = require("./tenant.notification.service");
 
 class AdminNotificationService {
     /**
@@ -140,111 +140,26 @@ class AdminNotificationService {
     }
 
     /**
-     * Send notifications to multiple tenants with push notification support
+     * Send notifications to multiple tenants
+     * Uses the existing tenantNotificationService for consistency
      */
     async sendNotificationsToTenants(tenantIds, type, notificationData, pushData = null) {
         if (!tenantIds || !Array.isArray(tenantIds) || tenantIds.length === 0) {
             throw new Error('Tenant IDs array is required');
         }
 
-        const connection = await db.getConnection();
-        let insertedCount = 0;
-        let pushResult = null;
+        // Use the existing tenantNotificationService which handles:
+        // 1. Saving to database
+        // 2. Sending push notifications
+        // 3. Email notifications (if configured)
+        const result = await tenantNotificationService.sendNotificationsToTenants(
+            tenantIds,
+            type || 'admin_message',
+            notificationData,
+            pushData
+        );
 
-        try {
-            // Insert notifications into database
-            for (const tenantId of tenantIds) {
-                const [result] = await connection.execute(
-                    `INSERT INTO tenant_notifications (
-                        tenant_id, 
-                        type, 
-                        title, 
-                        message, 
-                        entity_id, 
-                        entity_type, 
-                        link, 
-                        icon, 
-                        color, 
-                        is_read, 
-                        created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-                    [
-                        tenantId,
-                        type || 'admin_message',
-                        notificationData.title || 'Notification',
-                        notificationData.message || '',
-                        notificationData.entity_id || null,
-                        notificationData.entity_type || 'admin_message',
-                        notificationData.link || '/tenant-notifications',
-                        notificationData.icon || '📢',
-                        notificationData.color || '#3498db',
-                        0
-                    ]
-                );
-                
-                if (result.affectedRows > 0) {
-                    insertedCount++;
-                }
-            }
-
-            connection.release();
-
-            // Send push notifications if push data is provided
-            if (pushData && pushData.title && pushData.body) {
-                try {
-                    // Get FCM tokens for these tenants
-                    const tokenConn = await db.getConnection();
-                    const placeholders = tenantIds.map(() => '?').join(',');
-                    const [tokens] = await tokenConn.execute(
-                        `SELECT DISTINCT fcm_token 
-                         FROM tenant_devices 
-                         WHERE tenant_id IN (${placeholders}) 
-                         AND fcm_token IS NOT NULL 
-                         AND is_active = 1`,
-                        tenantIds
-                    );
-                    tokenConn.release();
-
-                    if (tokens.length > 0) {
-                        const fcmTokens = tokens.map(t => t.fcm_token);
-                        
-                        // Send push notifications using firebase service
-                        pushResult = await firebaseService.sendPushNotificationToMultiple(
-                            fcmTokens,
-                            {
-                                title: pushData.title,
-                                body: pushData.body
-                            },
-                            {
-                                type: type || 'admin_message',
-                                entity_id: notificationData.entity_id || '',
-                                action: 'open',
-                                screen: 'notifications'
-                            }
-                        );
-                        
-                        console.log('Push notification sent:', {
-                            totalTokens: fcmTokens.length,
-                            successCount: pushResult ? pushResult.successCount : 0,
-                            failureCount: pushResult ? pushResult.failureCount : 0
-                        });
-                    } else {
-                        console.log('No active FCM tokens found for tenants:', tenantIds);
-                    }
-                } catch (pushError) {
-                    console.error('Failed to send push notifications:', pushError);
-                    // Don't throw - we still want to return success for in-app notifications
-                }
-            }
-
-            return {
-                insertedCount,
-                pushResult
-            };
-        } catch (error) {
-            connection.release();
-            throw new Error(`Failed to send notifications: ${error.message}`);
-        }
+        return result;
     }
 
     /**
