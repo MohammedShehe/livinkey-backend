@@ -268,6 +268,39 @@ const getTenantDocumentsAdmin = async (req, res) => {
     }
 };
 
+// Dedicated download for tenant's own document
+const downloadMyDocument = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { documentId } = req.params;
+
+        const document = await require("../models/tenant.document.model").getDocumentById(documentId);
+
+        if (!document) {
+            return res.status(404).json({
+                success: false,
+                message: "Document not found"
+            });
+        }
+
+        // Ensure the document belongs to the authenticated tenant
+        if (parseInt(document.tenant_id) !== parseInt(tenantId)) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can only download your own documents"
+            });
+        }
+
+        return res.redirect(document.document_url);
+    } catch (error) {
+        console.error("Download My Document Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     uploadDocument,
     getMyDocuments,
@@ -277,5 +310,6 @@ module.exports = {
     deleteAllDocumentsAdmin,
     downloadDocuments,
     downloadDocumentsAsFile, // Export both methods
-    getTenantDocumentsAdmin
+    getTenantDocumentsAdmin,
+    downloadMyDocument
 };

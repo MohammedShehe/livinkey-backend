@@ -9,10 +9,11 @@ const permissionMiddleware = require("../middleware/permission.middleware");
 const upload = require("../middleware/upload.middleware");
 
 // ============ TENANT ROUTES (Protected) ============
-// Tenants can only upload and view documents - NO DELETE
+// Tenants can upload, view, and download their own documents - NO DELETE
 router.get("/types", tenantAuthMiddleware, tenantDocumentController.getDocumentTypes);
 router.post("/upload", tenantAuthMiddleware, upload.single('document'), tenantDocumentController.uploadDocument);
 router.get("/my-documents", tenantAuthMiddleware, tenantDocumentController.getMyDocuments);
+router.get("/:documentId/download", tenantAuthMiddleware, tenantDocumentController.downloadMyDocument);
 
 // ============ ADMIN ROUTES (Protected) ============
 // Admins have full CRUD permissions
