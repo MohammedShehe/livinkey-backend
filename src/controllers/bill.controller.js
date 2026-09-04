@@ -7,7 +7,8 @@ const createBill = async (req, res) => {
             rent_amount,
             electricity_amount,
             maintenance_amount,
-            other_charges
+            other_charges,
+            billing_month
         } = req.body;
 
         if (!tenant_id || !rent_amount) {
@@ -23,6 +24,7 @@ const createBill = async (req, res) => {
             electricity_amount: parseFloat(electricity_amount || 0),
             maintenance_amount: parseFloat(maintenance_amount || 0),
             other_charges: parseFloat(other_charges || 0),
+            billing_month: billing_month || null,
             created_by: req.admin.id
         };
 
@@ -421,14 +423,18 @@ const updateBill = async (req, res) => {
             rent_amount,
             electricity_amount,
             maintenance_amount,
-            other_charges
+            other_charges,
+            clear_meter_1,
+            clear_meter_2
         } = req.body;
 
-        const billData = {};
+        const billData = { updated_by: req.admin.id };
         if (rent_amount !== undefined) billData.rent_amount = parseFloat(rent_amount);
         if (electricity_amount !== undefined) billData.electricity_amount = parseFloat(electricity_amount);
         if (maintenance_amount !== undefined) billData.maintenance_amount = parseFloat(maintenance_amount);
         if (other_charges !== undefined) billData.other_charges = parseFloat(other_charges);
+        if (clear_meter_1 !== undefined) billData.clear_meter_1 = clear_meter_1;
+        if (clear_meter_2 !== undefined) billData.clear_meter_2 = clear_meter_2;
 
         const files = {
             meterImage: req.files?.meterImage || [],
@@ -458,7 +464,7 @@ const deleteBill = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid bill ID" });
         }
 
-        await billService.deleteBill(billId);
+        await billService.deleteBill(billId, req.admin.id);
 
         return res.status(200).json({
             success: true,

@@ -218,9 +218,31 @@ const createBill = async (billData, files = {}) => {
 
         // Block only if tenant already has an OPEN bill (not paid).
         // Paid tenants are eligible for a new monthly bill.
-        const hasOpen = await BillModel.hasOpenBillForTenant(billData.tenant_id);
+        // Resolve billing period (YYYY-MM). Default: current month.
+        let billingMonth = (billData.billing_month || "").trim();
+        if (!billingMonth) {
+            const now = new Date();
+            billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        }
+        if (!/^\d{4}-\d{2}$/.test(billingMonth)) {
+            throw new Error("billing_month must be in YYYY-MM format");
+        }
+        const [y, m] = billingMonth.split("-").map(Number);
+        const periodFrom = `${billingMonth}-01`;
+        const periodTillDate = new Date(y, m, 0); // last day of month
+        const periodTill = `${billingMonth}-${String(periodTillDate.getDate()).padStart(2, "0")}`;
+        billData.billing_month = billingMonth;
+        billData.period_from = periodFrom;
+        billData.period_till = periodTill;
+
+        // Lock checks inside this transaction connection (prevents concurrent double-create)
+        const hasOpen = await BillModel.hasOpenBillForTenant(billData.tenant_id, null, connection);
         if (hasOpen) {
             throw new Error("This tenant already has an unpaid/open bill. Settle or delete it before creating a new one.");
+        }
+        const hasPeriod = await BillModel.hasBillForPeriod(billData.tenant_id, billingMonth, null, connection);
+        if (hasPeriod) {
+            throw new Error(`A bill already exists for this tenant for ${billingMonth}. Choose another billing month or edit/delete the existing bill.`);
         }
 
         const totalAmount = parseFloat(billData.rent_amount) + 
@@ -356,6 +378,9 @@ const createBill = async (billData, files = {}) => {
 
         const billId = await BillModel.createBill(connection, {
             tenant_id: billData.tenant_id,
+            billing_month: billData.billing_month,
+            period_from: billData.period_from,
+            period_till: billData.period_till,
             rent_amount: parseFloat(billData.rent_amount),
             electricity_amount: parseFloat(billData.electricity_amount || 0),
             electricity_meter_image: meterImage,
@@ -383,6 +408,20 @@ const createBill = async (billData, files = {}) => {
             last_fine_email_sent: null,
             initial_email_sent: 0,
             qr_expires_at: null
+        });
+
+        await BillModel.insertBillAudit(connection, {
+            bill_id: billId,
+            admin_id: billData.created_by,
+            action: 'create',
+            before_data: null,
+            after_data: {
+                tenant_id: billData.tenant_id,
+                billing_month: billData.billing_month,
+                rent_amount: billData.rent_amount,
+                total_amount: totalAmount
+            },
+            note: `Bill created for ${billData.billing_month}`
         });
 
         await connection.commit();
@@ -1330,7 +1369,10 @@ const updateBill = async (billId, billData, files = {}) => {
         }
 
         if (existing.status === 'paid') {
-            throw new Error("Cannot edit a fully paid bill");
+            throw new Error("Cannot edit a fully paid bill. Paid bills are locked for financial integrity.");
+        }
+        if (parseFloat(existing.paid_amount || 0) > 0 && billData.rent_amount !== undefined) {
+            // Allow electricity/maintenance tweaks but guard total vs paid later
         }
 
         const rent = parseFloat(billData.rent_amount !== undefined ? billData.rent_amount : existing.rent_amount);
@@ -1403,9 +1445,48 @@ const updateBill = async (billId, billData, files = {}) => {
             }
         }
 
+        // Clear meter slots if requested (without requiring a replacement upload)
+        if (billData.clear_meter_1 === true || billData.clear_meter_1 === 'true' || billData.clear_meter_1 === '1') {
+            if (existing.electricity_meter_public_id) {
+                oldPublicIdsToDelete.push({ public_id: existing.electricity_meter_public_id, resource_type: existing.electricity_meter_resource_type || 'image' });
+            }
+            meterUpdate.electricity_meter_image = null;
+            meterUpdate.electricity_meter_public_id = null;
+            meterUpdate.electricity_meter_resource_type = null;
+        }
+        if (billData.clear_meter_2 === true || billData.clear_meter_2 === 'true' || billData.clear_meter_2 === '1') {
+            if (existing.electricity_meter_public_id_2) {
+                oldPublicIdsToDelete.push({ public_id: existing.electricity_meter_public_id_2, resource_type: existing.electricity_meter_resource_type_2 || 'image' });
+            }
+            meterUpdate.electricity_meter_image_2 = null;
+            meterUpdate.electricity_meter_public_id_2 = null;
+            meterUpdate.electricity_meter_resource_type_2 = null;
+        }
+
         if (Object.keys(meterUpdate).length > 0) {
             await BillModel.updateBillMeterImages(connection, billId, meterUpdate);
         }
+
+        await BillModel.insertBillAudit(connection, {
+            bill_id: billId,
+            admin_id: billData.updated_by || null,
+            action: 'update',
+            before_data: {
+                rent_amount: existing.rent_amount,
+                electricity_amount: existing.electricity_amount,
+                maintenance_amount: existing.maintenance_amount,
+                other_charges: existing.other_charges,
+                total_amount: existing.total_amount
+            },
+            after_data: {
+                rent_amount: rent,
+                electricity_amount: electricity,
+                maintenance_amount: maintenance,
+                other_charges: other,
+                total_amount: totalAmount
+            },
+            note: 'Bill amounts updated'
+        });
 
         // Recalculate status based on paid vs new total
         const newDue = totalAmount + fineAmount - paidAmount;
@@ -1474,43 +1555,74 @@ const updateBill = async (billId, billData, files = {}) => {
 };
 
 // ============ DELETE BILL ============
-const deleteBill = async (billId) => {
+const deleteBill = async (billId, adminId = null) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        const existing = await BillModel.getBillById(billId);
+        // Include soft-deleted check via raw query if getBillById filters them
+        const [rows] = await connection.execute(
+            `SELECT * FROM bills WHERE id = ? AND deleted_at IS NULL`,
+            [billId]
+        );
+        const existing = rows[0];
         if (!existing) {
             throw new Error("Bill not found");
         }
 
-        // Collect cloudinary public IDs to delete after DB delete
-        const cloudFiles = [];
-        const pushIf = (pid, rt) => {
-            if (pid) cloudFiles.push({ public_id: pid, resource_type: rt || 'image' });
-        };
-        pushIf(existing.electricity_meter_public_id, existing.electricity_meter_resource_type);
-        pushIf(existing.electricity_meter_public_id_2, existing.electricity_meter_resource_type_2);
-        pushIf(existing.payment_qr_public_id, existing.payment_qr_resource_type);
-        pushIf(existing.partial_payment_qr_public_id, existing.partial_payment_qr_resource_type);
-        pushIf(existing.admin_qr_public_id, existing.admin_qr_resource_type);
-        pushIf(existing.custom_message_qr_public_id, existing.custom_message_qr_resource_type);
-        pushIf(existing.custom_message_admin_qr_public_id, existing.custom_message_admin_qr_resource_type);
-        pushIf(existing.upi_qr_public_id, existing.upi_qr_resource_type);
+        // Production rule: never destroy paid / partially paid financial history via delete
+        if (existing.status === 'paid') {
+            throw new Error("Fully paid bills cannot be deleted. They are locked for financial integrity.");
+        }
+        if (parseFloat(existing.paid_amount || 0) > 0) {
+            throw new Error("This bill has recorded payments and cannot be deleted. Adjust or keep it for records.");
+        }
 
-        const affected = await BillModel.deleteBill(connection, billId);
+        // Soft-delete preserves related payment rows for audit; hide bill from all listings
+        const affected = await BillModel.softDeleteBill(connection, billId, adminId);
         if (!affected) {
             throw new Error("Failed to delete bill");
         }
 
+        await BillModel.insertBillAudit(connection, {
+            bill_id: billId,
+            admin_id: adminId,
+            action: 'soft_delete',
+            before_data: {
+                status: existing.status,
+                total_amount: existing.total_amount,
+                billing_month: existing.billing_month
+            },
+            after_data: { deleted: true },
+            note: 'Bill soft-deleted by admin'
+        });
+
+        // Soft-clean notification references
+        try {
+            await connection.execute(
+                `DELETE FROM admin_notifications WHERE entity_type = 'bill' AND entity_id = ?`,
+                [billId]
+            );
+        } catch (e) {}
+        try {
+            await connection.execute(
+                `DELETE FROM tenant_notifications WHERE entity_type = 'bill' AND entity_id = ?`,
+                [billId]
+            );
+        } catch (e) {}
+
         await connection.commit();
 
-        // Child rows cascade via FK. Clean cloud assets best-effort.
+        // Optionally remove bill-level QR/meter assets from cloud (proofs kept with soft-deleted bill history)
+        const cloudFiles = [];
+        const pushIf = (pid, rt) => { if (pid) cloudFiles.push({ public_id: pid, resource_type: rt || 'image' }); };
+        pushIf(existing.payment_qr_public_id, existing.payment_qr_resource_type);
+        pushIf(existing.partial_payment_qr_public_id, existing.partial_payment_qr_resource_type);
         for (const f of cloudFiles) {
             try { await deleteFile(f.public_id, f.resource_type); } catch (e) {}
         }
 
-        return { id: billId, deleted: true };
+        return { id: billId, deleted: true, soft: true };
     } catch (error) {
         await connection.rollback();
         throw error;

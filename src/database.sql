@@ -182,6 +182,9 @@ DROP TABLE IF EXISTS `bills`;
 CREATE TABLE `bills` (
   `id` int NOT NULL AUTO_INCREMENT,
   `tenant_id` int NOT NULL,
+  `billing_month` varchar(7) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'YYYY-MM',
+  `period_from` date DEFAULT NULL,
+  `period_till` date DEFAULT NULL,
   `rent_amount` decimal(10,2) NOT NULL,
   `electricity_amount` decimal(10,2) DEFAULT '0.00',
   `electricity_meter_image` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
@@ -236,6 +239,8 @@ CREATE TABLE `bills` (
   `upi_qr_code` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `upi_qr_public_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `upi_qr_resource_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_tenant_id` (`tenant_id`),
   KEY `idx_status` (`status`),
@@ -788,3 +793,18 @@ CREATE TABLE `tenants` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-08-31 19:09:41
+
+
+CREATE TABLE IF NOT EXISTS `bill_audit_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `bill_id` int NOT NULL,
+  `admin_id` int DEFAULT NULL,
+  `action` varchar(50) NOT NULL,
+  `before_data` json DEFAULT NULL,
+  `after_data` json DEFAULT NULL,
+  `note` varchar(500) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_bill_audit_bill_id` (`bill_id`),
+  KEY `idx_bill_audit_admin_id` (`admin_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

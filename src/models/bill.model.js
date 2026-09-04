@@ -5,6 +5,9 @@ const createBill = async (connection, billData) => {
         `
         INSERT INTO bills (
             tenant_id,
+            billing_month,
+            period_from,
+            period_till,
             rent_amount,
             electricity_amount,
             electricity_meter_image,
@@ -32,10 +35,13 @@ const createBill = async (connection, billData) => {
             last_fine_email_sent,
             initial_email_sent,
             qr_expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
+            billData.billing_month || null,
+            billData.period_from || null,
+            billData.period_till || null,
             billData.rent_amount,
             billData.electricity_amount || 0,
             billData.electricity_meter_image || null,
@@ -72,10 +78,9 @@ const createBill = async (connection, billData) => {
  * FIXED: Get unpaid tenants using bills table as source of truth
  */
 const getUnpaidTenants = async () => {
-    // Eligible for a NEW bill if:
-    // - active tenant with rent > 0 and paid_from set
-    // - does NOT already have an open bill (unpaid / partially_paid / delayed / overdue)
-    // Paid tenants (latest bill paid) ARE eligible again for the next cycle.
+    // Eligible for a NEW bill if active tenant, rent>0, paid_from set,
+    // no open (non-deleted) bill, and no non-deleted bill for the default/current billing month is required at create time.
+    // This list shows anyone who can receive a bill for *some* future period (no open balance bill).
     const [rows] = await db.execute(
         `
         SELECT 
@@ -92,33 +97,33 @@ const getUnpaidTenants = async () => {
             p.name as pg_name,
             r.room_number,
             (
-                SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1
+                SELECT status FROM bills
+                WHERE tenant_id = t.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1
             ) as bill_status,
+            (
+                SELECT billing_month FROM bills
+                WHERE tenant_id = t.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1
+            ) as last_billing_month,
+            (
+                SELECT sent_at FROM bills
+                WHERE tenant_id = t.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1
+            ) as last_bill_at,
             COALESCE(
-                (SELECT total_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                (SELECT total_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
                 0
             ) as total_amount,
             COALESCE(
-                (SELECT paid_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                (SELECT paid_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
                 0
             ) as paid_amount,
             COALESCE(
-                (SELECT fine_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+                (SELECT fine_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
                 0
             ) as fine_amount,
-            COALESCE(
-                (
-                    SELECT GREATEST(0,
-                        COALESCE(b.total_amount, 0) + COALESCE(b.fine_amount, 0) - COALESCE(b.paid_amount, 0)
-                    )
-                    FROM bills b
-                    WHERE b.tenant_id = t.id
-                      AND b.status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
-                    ORDER BY b.created_at DESC
-                    LIMIT 1
-                ),
-                0
-            ) as amount_owed
+            0 as amount_owed
         FROM tenants t
         INNER JOIN tenant_details td ON t.id = td.tenant_id
         INNER JOIN pgs p ON td.pg_id = p.id
@@ -130,6 +135,7 @@ const getUnpaidTenants = async () => {
         AND NOT EXISTS (
             SELECT 1 FROM bills b
             WHERE b.tenant_id = t.id
+              AND b.deleted_at IS NULL
               AND b.status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
         )
         ORDER BY t.full_name ASC
@@ -173,7 +179,7 @@ const getBills = async (filters = {}) => {
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
         LEFT JOIN pgs p ON td.pg_id = p.id
         LEFT JOIN rooms r ON td.room_id = r.id
-        WHERE 1=1
+        WHERE b.deleted_at IS NULL
     `;
     const params = [];
 
@@ -258,7 +264,7 @@ const getBillById = async (billId) => {
         INNER JOIN tenant_details td ON t.id = td.tenant_id
         INNER JOIN pgs p ON td.pg_id = p.id
         INNER JOIN rooms r ON td.room_id = r.id
-        WHERE b.id = ?
+        WHERE b.id = ? AND b.deleted_at IS NULL
         `,
         [billId]
     );
@@ -287,7 +293,7 @@ const getBillsByTenant = async (tenantId) => {
                 (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
             )) as due_amount
         FROM bills b
-        WHERE b.tenant_id = ?
+        WHERE b.tenant_id = ? AND b.deleted_at IS NULL
         ORDER BY b.created_at DESC
         `,
         [tenantId]
@@ -444,7 +450,7 @@ const getOverdueBills = async () => {
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
-        WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
+        WHERE b.deleted_at IS NULL AND b.status IN ('unpaid', 'partially_paid', 'delayed')
         AND b.valid_until < NOW()
         AND b.sent_at IS NOT NULL
         AND b.initial_email_sent = 1
@@ -455,7 +461,7 @@ const getOverdueBills = async () => {
 };
 
 const getBillStats = async (filters = {}) => {
-    let where = ` WHERE 1=1 `;
+    let where = ` WHERE b.deleted_at IS NULL `;
     const params = [];
 
     // Optional PG filter via tenant_details
@@ -749,10 +755,12 @@ const deleteBill = async (connection, billId) => {
     return result.affectedRows;
 };
 
-const hasOpenBillForTenant = async (tenantId, excludeBillId = null) => {
+const hasOpenBillForTenant = async (tenantId, excludeBillId = null, connection = null) => {
+    const runner = connection || db;
     let query = `
         SELECT id FROM bills
         WHERE tenant_id = ?
+          AND deleted_at IS NULL
           AND status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
     `;
     const params = [tenantId];
@@ -760,9 +768,54 @@ const hasOpenBillForTenant = async (tenantId, excludeBillId = null) => {
         query += ` AND id != ?`;
         params.push(excludeBillId);
     }
-    query += ` LIMIT 1`;
-    const [rows] = await db.execute(query, params);
+    query += ` LIMIT 1 FOR UPDATE`;
+    const [rows] = await runner.execute(query, params);
     return rows.length > 0;
+};
+
+const hasBillForPeriod = async (tenantId, billingMonth, excludeBillId = null, connection = null) => {
+    const runner = connection || db;
+    let query = `
+        SELECT id FROM bills
+        WHERE tenant_id = ?
+          AND billing_month = ?
+          AND deleted_at IS NULL
+    `;
+    const params = [tenantId, billingMonth];
+    if (excludeBillId) {
+        query += ` AND id != ?`;
+        params.push(excludeBillId);
+    }
+    query += ` LIMIT 1 FOR UPDATE`;
+    const [rows] = await runner.execute(query, params);
+    return rows.length > 0;
+};
+
+const softDeleteBill = async (connection, billId, deletedBy) => {
+    const [result] = await connection.execute(
+        `UPDATE bills SET deleted_at = NOW(), deleted_by = ? WHERE id = ? AND deleted_at IS NULL`,
+        [deletedBy || null, billId]
+    );
+    return result.affectedRows;
+};
+
+const insertBillAudit = async (connection, { bill_id, admin_id, action, before_data, after_data, note }) => {
+    try {
+        await connection.execute(
+            `INSERT INTO bill_audit_logs (bill_id, admin_id, action, before_data, after_data, note)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                bill_id,
+                admin_id || null,
+                action,
+                before_data ? JSON.stringify(before_data) : null,
+                after_data ? JSON.stringify(after_data) : null,
+                note || null
+            ]
+        );
+    } catch (e) {
+        console.warn("bill audit log failed:", e.message);
+    }
 };
 
 module.exports = {
@@ -789,5 +842,8 @@ module.exports = {
     updateBillMeterImages,
     clearMeterImageSlot,
     deleteBill,
-    hasOpenBillForTenant
+    hasOpenBillForTenant,
+    hasBillForPeriod,
+    softDeleteBill,
+    insertBillAudit
 };
