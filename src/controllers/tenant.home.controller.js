@@ -65,6 +65,7 @@ const getTenantHomeData = async (req, res) => {
                 DATEDIFF(valid_until, CURDATE()) as days_until_valid
             FROM bills 
             WHERE tenant_id = ? 
+              AND deleted_at IS NULL
             ORDER BY created_at DESC 
             LIMIT 1
             `,

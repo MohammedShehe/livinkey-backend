@@ -38,6 +38,7 @@ const getBillDetails = async (req, res) => {
             LEFT JOIN pgs p ON td.pg_id = p.id
             LEFT JOIN rooms r ON td.room_id = r.id
             WHERE b.tenant_id = ?
+              AND b.deleted_at IS NULL
             ORDER BY b.created_at DESC
             LIMIT 1
             `,
