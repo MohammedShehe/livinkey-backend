@@ -17,7 +17,8 @@ exports.getPaymentProofs = async (req, res) => {
             bill_id,
             search,
             from_date,
-            to_date
+            to_date,
+            pg_id
         } = req.query;
 
         let query = `
@@ -93,6 +94,11 @@ exports.getPaymentProofs = async (req, res) => {
         if (to_date) {
             query += ` AND DATE(pp.created_at) <= ?`;
             params.push(to_date);
+        }
+
+        if (pg_id) {
+            query += ` AND td.pg_id = ?`;
+            params.push(parseInt(pg_id));
         }
 
         query += ` ORDER BY 
@@ -613,21 +619,36 @@ exports.deletePaymentProof = async (req, res) => {
  */
 exports.getPaymentProofStats = async (req, res) => {
     try {
+        const { pg_id } = req.query;
         const connection = await db.getConnection();
-        const [rows] = await connection.execute(
-            `
+
+        let query = `
             SELECT 
                 COUNT(*) as total,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN status = 'verified' THEN 1 ELSE 0 END) as verified,
-                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-                SUM(CASE WHEN status = 'pending' THEN amount_paid ELSE 0 END) as pending_amount
-            FROM payment_proofs
-            `
-        );
+                SUM(CASE WHEN pp.status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN pp.status = 'verified' THEN 1 ELSE 0 END) as verified,
+                SUM(CASE WHEN pp.status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                COALESCE(SUM(CASE WHEN pp.status = 'pending' THEN pp.amount_paid ELSE 0 END), 0) as pending_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'verified' THEN pp.amount_paid ELSE 0 END), 0) as verified_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'rejected' THEN pp.amount_paid ELSE 0 END), 0) as rejected_amount,
+                COALESCE(SUM(pp.amount_paid), 0) as total_amount
+            FROM payment_proofs pp
+        `;
+        const params = [];
+
+        if (pg_id) {
+            query += `
+                INNER JOIN tenants t ON pp.tenant_id = t.id
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                WHERE td.pg_id = ?
+            `;
+            params.push(parseInt(pg_id));
+        }
+
+        const [rows] = await connection.execute(query, params);
         connection.release();
 
-        const stats = rows[0] || { total: 0, pending: 0, verified: 0, rejected: 0, pending_amount: 0 };
+        const stats = rows[0] || {};
         
         return res.status(200).json({
             success: true,
@@ -636,7 +657,10 @@ exports.getPaymentProofStats = async (req, res) => {
                 pending: parseInt(stats.pending) || 0,
                 verified: parseInt(stats.verified) || 0,
                 rejected: parseInt(stats.rejected) || 0,
-                pending_amount: parseFloat(stats.pending_amount) || 0
+                pending_amount: parseFloat(stats.pending_amount) || 0,
+                verified_amount: parseFloat(stats.verified_amount) || 0,
+                rejected_amount: parseFloat(stats.rejected_amount) || 0,
+                total_amount: parseFloat(stats.total_amount) || 0
             }
         });
 

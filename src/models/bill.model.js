@@ -173,6 +173,11 @@ const getBills = async (filters = {}) => {
         params.push(filters.tenant_id);
     }
 
+    if (filters.pg_id) {
+        query += ` AND td.pg_id = ?`;
+        params.push(filters.pg_id);
+    }
+
     if (filters.search) {
         query += ` AND (t.full_name LIKE ? OR t.email LIKE ? OR t.phone LIKE ?)`;
         const searchPattern = `%${filters.search}%`;
@@ -426,44 +431,59 @@ const getOverdueBills = async () => {
     return rows;
 };
 
-const getBillStats = async () => {
-    const [totalResult] = await db.execute(
-        `SELECT COUNT(*) as total FROM bills`
-    );
-    const total = totalResult[0].total;
+const getBillStats = async (filters = {}) => {
+    let where = ` WHERE 1=1 `;
+    const params = [];
 
-    const [unpaidResult] = await db.execute(
-        `SELECT COUNT(*) as unpaid FROM bills WHERE status = 'unpaid'`
-    );
-    const unpaid = unpaidResult[0].unpaid;
+    // Optional PG filter via tenant_details
+    const needsJoin = !!filters.pg_id;
+    if (filters.pg_id) {
+        where += ` AND td.pg_id = ? `;
+        params.push(filters.pg_id);
+    }
 
-    const [partiallyPaidResult] = await db.execute(
-        `SELECT COUNT(*) as partially_paid FROM bills WHERE status = 'partially_paid'`
-    );
-    const partially_paid = partiallyPaidResult[0].partially_paid;
+    const fromClause = needsJoin
+        ? ` FROM bills b
+            INNER JOIN tenants t ON b.tenant_id = t.id
+            LEFT JOIN tenant_details td ON t.id = td.tenant_id `
+        : ` FROM bills b `;
 
-    const [paidResult] = await db.execute(
-        `SELECT COUNT(*) as paid FROM bills WHERE status = 'paid'`
+    const [countRows] = await db.execute(
+        `
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN b.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid,
+            SUM(CASE WHEN b.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid,
+            SUM(CASE WHEN b.status = 'paid' THEN 1 ELSE 0 END) as paid,
+            SUM(CASE WHEN b.status = 'delayed' THEN 1 ELSE 0 END) as delayed_count,
+            SUM(CASE WHEN b.status = 'overdue' THEN 1 ELSE 0 END) as overdue,
+            COALESCE(SUM(b.total_amount), 0) as total_billed,
+            COALESCE(SUM(b.paid_amount), 0) as total_paid_amount,
+            COALESCE(SUM(b.fine_amount), 0) as total_fine_amount,
+            COALESCE(SUM(
+                GREATEST(
+                    (b.total_amount + COALESCE(b.fine_amount, 0) - COALESCE(b.paid_amount, 0)),
+                    0
+                )
+            ), 0) as total_due_amount
+        ${fromClause}
+        ${where}
+        `,
+        params
     );
-    const paid = paidResult[0].paid;
 
-    const [delayedResult] = await db.execute(
-        `SELECT COUNT(*) as 'delayed' FROM bills WHERE status = 'delayed'`
-    );
-    const delayed = delayedResult[0].delayed;
-
-    const [overdueResult] = await db.execute(
-        `SELECT COUNT(*) as 'overdue' FROM bills WHERE status = 'overdue'`
-    );
-    const overdue = overdueResult[0].overdue;
-
+    const row = countRows[0] || {};
     return {
-        total,
-        unpaid,
-        partially_paid,
-        paid,
-        delayed,
-        overdue
+        total: parseInt(row.total) || 0,
+        unpaid: parseInt(row.unpaid) || 0,
+        partially_paid: parseInt(row.partially_paid) || 0,
+        paid: parseInt(row.paid) || 0,
+        delayed: parseInt(row.delayed_count) || 0,
+        overdue: parseInt(row.overdue) || 0,
+        total_billed: parseFloat(row.total_billed) || 0,
+        total_paid_amount: parseFloat(row.total_paid_amount) || 0,
+        total_fine_amount: parseFloat(row.total_fine_amount) || 0,
+        total_due_amount: parseFloat(row.total_due_amount) || 0
     };
 };
 

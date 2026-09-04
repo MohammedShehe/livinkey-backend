@@ -464,8 +464,8 @@ const getBillsByTenant = async (tenantId) => {
 };
 
 // ============ GET BILL STATS ============
-const getBillStats = async () => {
-    return await BillModel.getBillStats();
+const getBillStats = async (filters = {}) => {
+    return await BillModel.getBillStats(filters);
 };
 
 // ============ GET OVERDUE BILLS ============

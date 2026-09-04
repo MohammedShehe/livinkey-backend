@@ -69,12 +69,13 @@ const getUnpaidTenants = async (req, res) => {
 
 const getBills = async (req, res) => {
     try {
-        const { status, tenant_id, search } = req.query;
+        const { status, tenant_id, search, pg_id } = req.query;
 
         const bills = await billService.getBills({
             status,
             tenant_id: tenant_id ? parseInt(tenant_id) : null,
-            search
+            search,
+            pg_id: pg_id ? parseInt(pg_id) : null
         });
 
         return res.status(200).json({
@@ -140,7 +141,10 @@ const getBillsByTenant = async (req, res) => {
 
 const getBillStats = async (req, res) => {
     try {
-        const stats = await billService.getBillStats();
+        const { pg_id } = req.query;
+        const stats = await billService.getBillStats({
+            pg_id: pg_id ? parseInt(pg_id) : null
+        });
 
         return res.status(200).json({
             success: true,
