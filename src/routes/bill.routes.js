@@ -14,7 +14,7 @@ const upload = require("../middleware/upload.middleware");
 const adminPaymentProofController = require("../controllers/admin.payment.proof.controller");
 
 const uploadFields = upload.fields([
-    { name: 'meterImage', maxCount: 1 },
+    { name: 'meterImage', maxCount: 2 },
     { name: 'paymentQr', maxCount: 1 },
     { name: 'adminQr', maxCount: 1 }
 ]);
@@ -202,6 +202,24 @@ router.post(
     roleMiddleware("super_admin", "admin"),
     permissionMiddleware("bills", "edit"),
     billController.verifyCashPayment
+);
+
+
+// UPDATE BILL
+router.put(
+    "/:id",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "edit"),
+    uploadFields,
+    billController.updateBill
+);
+
+// DELETE BILL
+router.delete(
+    "/:id",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("bills", "delete"),
+    billController.deleteBill
 );
 
 module.exports = router;

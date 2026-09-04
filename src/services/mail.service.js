@@ -218,13 +218,13 @@ const sendPasswordResetEmail = async (email, name) => {
 };
 
 // ============ BILL EMAIL ============
-const sendBillEmail = async (email, tenantName, billData, qrCodeUrl, partialQrUrl, meterImageUrl = null, adminQrUrl = null) => {
+const sendBillEmail = async (email, tenantName, billData, qrCodeUrl, partialQrUrl, meterImageUrl = null, adminQrUrl = null, meterImageUrl2 = null) => {
     const totalAmount = parseFloat(billData.total_amount) || 0;
     const fineAmount = parseFloat(billData.fine_amount) || 0;
     const totalDue = totalAmount + fineAmount;
     const partialAmount = totalDue * 0.5;
 
-    const content = buildBillContent(billData, totalDue, partialAmount, qrCodeUrl, partialQrUrl, meterImageUrl, adminQrUrl);
+    const content = buildBillContent(billData, totalDue, partialAmount, qrCodeUrl, partialQrUrl, meterImageUrl, adminQrUrl, meterImageUrl2);
     
     const html = buildEmailTemplate({
         title: '📄 New Bill Generated - Livinkey',

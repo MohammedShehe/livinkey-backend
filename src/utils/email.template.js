@@ -236,19 +236,26 @@ const buildWelcomeContent = (name, email, password, extraFields = {}) => {
  * @param {string} adminQrUrl - Admin QR code URL
  * @returns {string} - Bill HTML content
  */
-const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQrUrl, meterImageUrl, adminQrUrl) => {
+const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQrUrl, meterImageUrl, adminQrUrl, meterImageUrl2 = null) => {
     const fineAmount = parseFloat(billData.fine_amount) || 0;
     
     let meterHtml = '';
-    if (meterImageUrl) {
+    if (meterImageUrl || meterImageUrl2) {
+        const images = [];
+        if (meterImageUrl) {
+            images.push(`<img src="${meterImageUrl}" alt="Electricity Meter 1" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #e8ecf1; margin: 4px;">`);
+        }
+        if (meterImageUrl2) {
+            images.push(`<img src="${meterImageUrl2}" alt="Electricity Meter 2" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #e8ecf1; margin: 4px;">`);
+        }
         meterHtml = `
         <tr>
             <td style="padding: 0 40px 30px;">
                 <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
                     <tr>
                         <td style="padding: 20px; text-align: center;">
-                            <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">⚡ Electricity Meter Image</p>
-                            <img src="${meterImageUrl}" alt="Electricity Meter" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #e8ecf1;">
+                            <p style="color: #000000; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">⚡ Electricity Meter Image${images.length > 1 ? 's' : ''}</p>
+                            ${images.join('')}
                         </td>
                     </tr>
                 </table>

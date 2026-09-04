@@ -409,6 +409,70 @@ const getCashPayments = async (req, res) => {
     }
 };
 
+
+const updateBill = async (req, res) => {
+    try {
+        const billId = parseInt(req.params.id);
+        if (!billId) {
+            return res.status(400).json({ success: false, message: "Invalid bill ID" });
+        }
+
+        const {
+            rent_amount,
+            electricity_amount,
+            maintenance_amount,
+            other_charges
+        } = req.body;
+
+        const billData = {};
+        if (rent_amount !== undefined) billData.rent_amount = parseFloat(rent_amount);
+        if (electricity_amount !== undefined) billData.electricity_amount = parseFloat(electricity_amount);
+        if (maintenance_amount !== undefined) billData.maintenance_amount = parseFloat(maintenance_amount);
+        if (other_charges !== undefined) billData.other_charges = parseFloat(other_charges);
+
+        const files = {
+            meterImage: req.files?.meterImage || [],
+            paymentQr: req.files?.paymentQr || []
+        };
+
+        const bill = await billService.updateBill(billId, billData, files);
+
+        return res.status(200).json({
+            success: true,
+            message: "Bill updated successfully",
+            data: bill
+        });
+    } catch (error) {
+        console.error("Update Bill Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const deleteBill = async (req, res) => {
+    try {
+        const billId = parseInt(req.params.id);
+        if (!billId) {
+            return res.status(400).json({ success: false, message: "Invalid bill ID" });
+        }
+
+        await billService.deleteBill(billId);
+
+        return res.status(200).json({
+            success: true,
+            message: "Bill deleted successfully"
+        });
+    } catch (error) {
+        console.error("Delete Bill Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -421,5 +485,7 @@ module.exports = {
     sendCustomMessage,
     requestCashPaymentOTP,
     verifyCashPayment,
-    getCashPayments
+    getCashPayments,
+    updateBill,
+    deleteBill
 };

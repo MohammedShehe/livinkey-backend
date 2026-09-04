@@ -216,10 +216,11 @@ const createBill = async (billData, files = {}) => {
             throw new Error(`Tenant with ID ${billData.tenant_id} does not exist or is not an active tenant`);
         }
 
-        const unpaidTenants = await BillModel.getUnpaidTenants();
-        const tenantExistsInUnpaid = unpaidTenants.some(t => t.id === billData.tenant_id);
-        if (!tenantExistsInUnpaid) {
-            throw new Error("Selected tenant is not eligible for a bill (either already paid or not a tenant)");
+        // Block only if tenant already has an OPEN bill (not paid).
+        // Paid tenants are eligible for a new monthly bill.
+        const hasOpen = await BillModel.hasOpenBillForTenant(billData.tenant_id);
+        if (hasOpen) {
+            throw new Error("This tenant already has an unpaid/open bill. Settle or delete it before creating a new one.");
         }
 
         const totalAmount = parseFloat(billData.rent_amount) + 
@@ -230,6 +231,9 @@ const createBill = async (billData, files = {}) => {
         let meterImage = null;
         let meterPublicId = null;
         let meterResourceType = null;
+        let meterImage2 = null;
+        let meterPublicId2 = null;
+        let meterResourceType2 = null;
 
         if (files.meterImage && files.meterImage.length > 0) {
             const uploadResult = await uploadFile(
@@ -241,6 +245,18 @@ const createBill = async (billData, files = {}) => {
                 meterPublicId = uploadResult.public_id;
                 meterResourceType = uploadResult.resource_type;
                 uploadedCloudFiles.push({ public_id: meterPublicId, resource_type: meterResourceType });
+            }
+            if (files.meterImage.length > 1) {
+                const uploadResult2 = await uploadFile(
+                    files.meterImage[1],
+                    "livinkey/bills/meters"
+                );
+                if (uploadResult2) {
+                    meterImage2 = uploadResult2.secure_url;
+                    meterPublicId2 = uploadResult2.public_id;
+                    meterResourceType2 = uploadResult2.resource_type;
+                    uploadedCloudFiles.push({ public_id: meterPublicId2, resource_type: meterResourceType2 });
+                }
             }
         }
 
@@ -345,6 +361,9 @@ const createBill = async (billData, files = {}) => {
             electricity_meter_image: meterImage,
             electricity_meter_public_id: meterPublicId,
             electricity_meter_resource_type: meterResourceType,
+            electricity_meter_image_2: meterImage2,
+            electricity_meter_public_id_2: meterPublicId2,
+            electricity_meter_resource_type_2: meterResourceType2,
             maintenance_amount: parseFloat(billData.maintenance_amount || 0),
             other_charges: parseFloat(billData.other_charges || 0),
             total_amount: totalAmount,
@@ -391,7 +410,8 @@ const createBill = async (billData, files = {}) => {
                 paymentQr,
                 partialQr,
                 meterImage,
-                adminQr
+                adminQr,
+                meterImage2
             );
             emailSent = true;
         } catch (emailError) {
@@ -1294,6 +1314,211 @@ const checkAndSendPaymentReminders = async () => {
     }
 };
 
+
+// ============ UPDATE BILL ============
+const updateBill = async (billId, billData, files = {}) => {
+    const connection = await db.getConnection();
+    const uploadedCloudFiles = [];
+    let oldPublicIdsToDelete = [];
+
+    try {
+        await connection.beginTransaction();
+
+        const existing = await BillModel.getBillById(billId);
+        if (!existing) {
+            throw new Error("Bill not found");
+        }
+
+        if (existing.status === 'paid') {
+            throw new Error("Cannot edit a fully paid bill");
+        }
+
+        const rent = parseFloat(billData.rent_amount !== undefined ? billData.rent_amount : existing.rent_amount);
+        const electricity = parseFloat(billData.electricity_amount !== undefined ? billData.electricity_amount : existing.electricity_amount || 0);
+        const maintenance = parseFloat(billData.maintenance_amount !== undefined ? billData.maintenance_amount : existing.maintenance_amount || 0);
+        const other = parseFloat(billData.other_charges !== undefined ? billData.other_charges : existing.other_charges || 0);
+
+        if (isNaN(rent) || rent < 0) throw new Error("Invalid rent amount");
+        if (isNaN(electricity) || electricity < 0) throw new Error("Invalid electricity amount");
+        if (isNaN(maintenance) || maintenance < 0) throw new Error("Invalid maintenance amount");
+        if (isNaN(other) || other < 0) throw new Error("Invalid other charges");
+
+        const totalAmount = rent + electricity + maintenance + other;
+        const paidAmount = parseFloat(existing.paid_amount || 0);
+        const fineAmount = parseFloat(existing.fine_amount || 0);
+
+        if (totalAmount + fineAmount < paidAmount) {
+            throw new Error(`New total (₹${totalAmount.toFixed(2)}) plus fine cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
+        }
+
+        await BillModel.updateBillAmounts(connection, billId, {
+            rent_amount: rent,
+            electricity_amount: electricity,
+            maintenance_amount: maintenance,
+            other_charges: other,
+            total_amount: totalAmount
+        });
+
+        // Optional meter image replacements
+        const meterUpdate = {};
+        if (files.meterImage && files.meterImage.length > 0) {
+            if (existing.electricity_meter_public_id) {
+                oldPublicIdsToDelete.push({ public_id: existing.electricity_meter_public_id, resource_type: existing.electricity_meter_resource_type || 'image' });
+            }
+            const uploadResult = await uploadFile(files.meterImage[0], "livinkey/bills/meters");
+            if (uploadResult) {
+                meterUpdate.electricity_meter_image = uploadResult.secure_url;
+                meterUpdate.electricity_meter_public_id = uploadResult.public_id;
+                meterUpdate.electricity_meter_resource_type = uploadResult.resource_type;
+                uploadedCloudFiles.push({ public_id: uploadResult.public_id, resource_type: uploadResult.resource_type });
+            }
+            if (files.meterImage.length > 1) {
+                if (existing.electricity_meter_public_id_2) {
+                    oldPublicIdsToDelete.push({ public_id: existing.electricity_meter_public_id_2, resource_type: existing.electricity_meter_resource_type_2 || 'image' });
+                }
+                const uploadResult2 = await uploadFile(files.meterImage[1], "livinkey/bills/meters");
+                if (uploadResult2) {
+                    meterUpdate.electricity_meter_image_2 = uploadResult2.secure_url;
+                    meterUpdate.electricity_meter_public_id_2 = uploadResult2.public_id;
+                    meterUpdate.electricity_meter_resource_type_2 = uploadResult2.resource_type;
+                    uploadedCloudFiles.push({ public_id: uploadResult2.public_id, resource_type: uploadResult2.resource_type });
+                }
+            }
+        }
+
+        // Optional admin QR replacement
+        if (files.paymentQr && files.paymentQr.length > 0) {
+            const adminFile = files.paymentQr[0];
+            if (adminFile && adminFile.buffer && adminFile.buffer.length > 0) {
+                if (existing.admin_qr_public_id) {
+                    oldPublicIdsToDelete.push({ public_id: existing.admin_qr_public_id, resource_type: existing.admin_qr_resource_type || 'image' });
+                }
+                const uploadResult = await uploadFile(adminFile, "livinkey/bills/qr/admin");
+                if (uploadResult && uploadResult.secure_url) {
+                    meterUpdate.admin_qr = uploadResult.secure_url;
+                    meterUpdate.admin_qr_public_id = uploadResult.public_id;
+                    meterUpdate.admin_qr_resource_type = uploadResult.resource_type;
+                    uploadedCloudFiles.push({ public_id: uploadResult.public_id, resource_type: uploadResult.resource_type });
+                }
+            }
+        }
+
+        if (Object.keys(meterUpdate).length > 0) {
+            await BillModel.updateBillMeterImages(connection, billId, meterUpdate);
+        }
+
+        // Recalculate status based on paid vs new total
+        const newDue = totalAmount + fineAmount - paidAmount;
+        let newStatus = existing.status;
+        if (paidAmount <= 0) {
+            newStatus = newDue > 0 ? (existing.status === 'overdue' || existing.status === 'delayed' ? existing.status : 'unpaid') : 'paid';
+        } else if (newDue <= 0) {
+            newStatus = 'paid';
+        } else {
+            newStatus = 'partially_paid';
+        }
+        if (newStatus !== existing.status) {
+            await BillModel.updateBillStatus(connection, billId, newStatus, null);
+        }
+
+        await connection.commit();
+
+        // Cleanup old cloud files after successful commit
+        for (const f of oldPublicIdsToDelete) {
+            try { await deleteFile(f.public_id, f.resource_type); } catch (e) {}
+        }
+
+        // Regenerate payment QRs for remaining due
+        const updated = await BillModel.getBillById(billId);
+        const dueNow = parseFloat(updated.total_amount) + parseFloat(updated.fine_amount || 0) - parseFloat(updated.paid_amount || 0);
+
+        // Delete old payment QRs
+        if (updated.payment_qr_public_id) {
+            try { await deleteFile(updated.payment_qr_public_id, updated.payment_qr_resource_type); } catch (e) {}
+        }
+        if (updated.partial_payment_qr_public_id) {
+            try { await deleteFile(updated.partial_payment_qr_public_id, updated.partial_payment_qr_resource_type); } catch (e) {}
+        }
+
+        if (dueNow > 0) {
+            try {
+                const qrResult = await regenerateBillQRCodes(billId, updated, dueNow);
+                if (qrResult.fullQr || qrResult.partialQr) {
+                    const conn2 = await db.getConnection();
+                    try {
+                        await BillModel.updateBillQRCodes(conn2, billId, {
+                            payment_qr: qrResult.fullQr,
+                            payment_qr_public_id: qrResult.fullPublicId,
+                            payment_qr_resource_type: qrResult.fullResourceType,
+                            partial_payment_qr: qrResult.partialQr,
+                            partial_payment_qr_public_id: qrResult.partialPublicId,
+                            partial_payment_qr_resource_type: qrResult.partialResourceType
+                        });
+                    } finally {
+                        conn2.release();
+                    }
+                }
+            } catch (qrErr) {
+                console.error("Failed to regenerate QR after bill update:", qrErr);
+            }
+        }
+
+        return await BillModel.getBillById(billId);
+    } catch (error) {
+        await connection.rollback();
+        await cleanupUploadedFiles(uploadedCloudFiles);
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
+// ============ DELETE BILL ============
+const deleteBill = async (billId) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const existing = await BillModel.getBillById(billId);
+        if (!existing) {
+            throw new Error("Bill not found");
+        }
+
+        // Collect cloudinary public IDs to delete after DB delete
+        const cloudFiles = [];
+        const pushIf = (pid, rt) => {
+            if (pid) cloudFiles.push({ public_id: pid, resource_type: rt || 'image' });
+        };
+        pushIf(existing.electricity_meter_public_id, existing.electricity_meter_resource_type);
+        pushIf(existing.electricity_meter_public_id_2, existing.electricity_meter_resource_type_2);
+        pushIf(existing.payment_qr_public_id, existing.payment_qr_resource_type);
+        pushIf(existing.partial_payment_qr_public_id, existing.partial_payment_qr_resource_type);
+        pushIf(existing.admin_qr_public_id, existing.admin_qr_resource_type);
+        pushIf(existing.custom_message_qr_public_id, existing.custom_message_qr_resource_type);
+        pushIf(existing.custom_message_admin_qr_public_id, existing.custom_message_admin_qr_resource_type);
+        pushIf(existing.upi_qr_public_id, existing.upi_qr_resource_type);
+
+        const affected = await BillModel.deleteBill(connection, billId);
+        if (!affected) {
+            throw new Error("Failed to delete bill");
+        }
+
+        await connection.commit();
+
+        // Child rows cascade via FK. Clean cloud assets best-effort.
+        for (const f of cloudFiles) {
+            try { await deleteFile(f.public_id, f.resource_type); } catch (e) {}
+        }
+
+        return { id: billId, deleted: true };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -1313,5 +1538,7 @@ module.exports = {
     checkAndSendPaymentReminders,
     updateTenantPaidTill,
     updateTenantPaymentDates,
-    getTenantPaymentStatus
+    getTenantPaymentStatus,
+    updateBill,
+    deleteBill
 };

@@ -10,6 +10,9 @@ const createBill = async (connection, billData) => {
             electricity_meter_image,
             electricity_meter_public_id,
             electricity_meter_resource_type,
+            electricity_meter_image_2,
+            electricity_meter_public_id_2,
+            electricity_meter_resource_type_2,
             maintenance_amount,
             other_charges,
             total_amount,
@@ -29,7 +32,7 @@ const createBill = async (connection, billData) => {
             last_fine_email_sent,
             initial_email_sent,
             qr_expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
@@ -38,6 +41,9 @@ const createBill = async (connection, billData) => {
             billData.electricity_meter_image || null,
             billData.electricity_meter_public_id || null,
             billData.electricity_meter_resource_type || null,
+            billData.electricity_meter_image_2 || null,
+            billData.electricity_meter_public_id_2 || null,
+            billData.electricity_meter_resource_type_2 || null,
             billData.maintenance_amount || 0,
             billData.other_charges || 0,
             billData.total_amount,
@@ -66,6 +72,10 @@ const createBill = async (connection, billData) => {
  * FIXED: Get unpaid tenants using bills table as source of truth
  */
 const getUnpaidTenants = async () => {
+    // Eligible for a NEW bill if:
+    // - active tenant with rent > 0 and paid_from set
+    // - does NOT already have an open bill (unpaid / partially_paid / delayed / overdue)
+    // Paid tenants (latest bill paid) ARE eligible again for the next cycle.
     const [rows] = await db.execute(
         `
         SELECT 
@@ -81,9 +91,8 @@ const getUnpaidTenants = async () => {
             td.pg_id,
             p.name as pg_name,
             r.room_number,
-            COALESCE(
-                (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
-                'unpaid'
+            (
+                SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1
             ) as bill_status,
             COALESCE(
                 (SELECT total_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
@@ -96,7 +105,20 @@ const getUnpaidTenants = async () => {
             COALESCE(
                 (SELECT fine_amount FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
                 0
-            ) as fine_amount
+            ) as fine_amount,
+            COALESCE(
+                (
+                    SELECT GREATEST(0,
+                        COALESCE(b.total_amount, 0) + COALESCE(b.fine_amount, 0) - COALESCE(b.paid_amount, 0)
+                    )
+                    FROM bills b
+                    WHERE b.tenant_id = t.id
+                      AND b.status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
+                    ORDER BY b.created_at DESC
+                    LIMIT 1
+                ),
+                0
+            ) as amount_owed
         FROM tenants t
         INNER JOIN tenant_details td ON t.id = td.tenant_id
         INNER JOIN pgs p ON td.pg_id = p.id
@@ -105,10 +127,11 @@ const getUnpaidTenants = async () => {
         AND t.is_active = 1
         AND td.paid_from IS NOT NULL
         AND td.rent > 0
-        AND COALESCE(
-            (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
-            'unpaid'
-        ) != 'paid'
+        AND NOT EXISTS (
+            SELECT 1 FROM bills b
+            WHERE b.tenant_id = t.id
+              AND b.status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
+        )
         ORDER BY t.full_name ASC
         `
     );
@@ -640,6 +663,108 @@ const updateBillQRCodes = async (connection, billId, qrData) => {
     return result.affectedRows;
 };
 
+
+const updateBillAmounts = async (connection, billId, data) => {
+    const [result] = await connection.execute(
+        `
+        UPDATE bills SET
+            rent_amount = ?,
+            electricity_amount = ?,
+            maintenance_amount = ?,
+            other_charges = ?,
+            total_amount = ?,
+            updated_at = NOW()
+        WHERE id = ?
+        `,
+        [
+            data.rent_amount,
+            data.electricity_amount,
+            data.maintenance_amount,
+            data.other_charges,
+            data.total_amount,
+            billId
+        ]
+    );
+    return result.affectedRows;
+};
+
+const updateBillMeterImages = async (connection, billId, meterData) => {
+    const fields = [];
+    const values = [];
+    if (meterData.electricity_meter_image !== undefined) {
+        fields.push('electricity_meter_image = ?');
+        fields.push('electricity_meter_public_id = ?');
+        fields.push('electricity_meter_resource_type = ?');
+        values.push(meterData.electricity_meter_image, meterData.electricity_meter_public_id, meterData.electricity_meter_resource_type);
+    }
+    if (meterData.electricity_meter_image_2 !== undefined) {
+        fields.push('electricity_meter_image_2 = ?');
+        fields.push('electricity_meter_public_id_2 = ?');
+        fields.push('electricity_meter_resource_type_2 = ?');
+        values.push(meterData.electricity_meter_image_2, meterData.electricity_meter_public_id_2, meterData.electricity_meter_resource_type_2);
+    }
+    if (meterData.admin_qr !== undefined) {
+        fields.push('admin_qr = ?');
+        fields.push('admin_qr_public_id = ?');
+        fields.push('admin_qr_resource_type = ?');
+        values.push(meterData.admin_qr, meterData.admin_qr_public_id, meterData.admin_qr_resource_type);
+    }
+    if (!fields.length) return 0;
+    values.push(billId);
+    const [result] = await connection.execute(
+        `UPDATE bills SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ?`,
+        values
+    );
+    return result.affectedRows;
+};
+
+const clearMeterImageSlot = async (connection, billId, slot) => {
+    if (slot === 2) {
+        const [result] = await connection.execute(
+            `UPDATE bills SET
+                electricity_meter_image_2 = NULL,
+                electricity_meter_public_id_2 = NULL,
+                electricity_meter_resource_type_2 = NULL
+             WHERE id = ?`,
+            [billId]
+        );
+        return result.affectedRows;
+    }
+    const [result] = await connection.execute(
+        `UPDATE bills SET
+            electricity_meter_image = NULL,
+            electricity_meter_public_id = NULL,
+            electricity_meter_resource_type = NULL
+         WHERE id = ?`,
+        [billId]
+    );
+    return result.affectedRows;
+};
+
+const deleteBill = async (connection, billId) => {
+    const [result] = await connection.execute(
+        `DELETE FROM bills WHERE id = ?`,
+        [billId]
+    );
+    return result.affectedRows;
+};
+
+const hasOpenBillForTenant = async (tenantId, excludeBillId = null) => {
+    let query = `
+        SELECT id FROM bills
+        WHERE tenant_id = ?
+          AND status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
+    `;
+    const params = [tenantId];
+    if (excludeBillId) {
+        query += ` AND id != ?`;
+        params.push(excludeBillId);
+    }
+    query += ` LIMIT 1`;
+    const [rows] = await db.execute(query, params);
+    return rows.length > 0;
+};
+
 module.exports = {
     createBill,
     getUnpaidTenants,
@@ -659,5 +784,10 @@ module.exports = {
     setCashPaymentOTP,
     verifyCashPaymentOTP,
     clearCashPaymentOTP,
-    updateBillQRCodes
+    updateBillQRCodes,
+    updateBillAmounts,
+    updateBillMeterImages,
+    clearMeterImageSlot,
+    deleteBill,
+    hasOpenBillForTenant
 };
