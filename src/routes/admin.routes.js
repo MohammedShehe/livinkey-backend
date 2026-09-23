@@ -1,4 +1,5 @@
 const express = require("express");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const adminController = require("../controllers/admin.controller");
@@ -10,6 +11,7 @@ const upload = require("../middleware/upload.middleware");
 router.get(
     "/dashboard",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin", "admin"),
     adminController.getAdminDashboard
 );
@@ -17,6 +19,7 @@ router.get(
 router.post(
     "/",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     upload.single("id_document"),
     adminController.createAdmin
@@ -25,6 +28,7 @@ router.post(
 router.get(
     "/",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     adminController.getAllAdmins
 );
@@ -32,6 +36,7 @@ router.get(
 router.put(
     "/:id/permissions",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     adminController.updatePermissions
 );
@@ -39,6 +44,7 @@ router.put(
 router.get(
     "/:id",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     adminController.getAdmin
 );
@@ -46,6 +52,7 @@ router.get(
 router.put(
     "/:id",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     upload.single("id_document"),
     adminController.updateAdmin
@@ -54,6 +61,7 @@ router.put(
 router.delete(
     "/:id",
     authMiddleware,
+    activityAudit,
     roleMiddleware("super_admin"),
     adminController.deleteAdmin
 );

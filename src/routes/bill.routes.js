@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const billController = require("../controllers/bill.controller");
@@ -20,6 +22,7 @@ const uploadFields = upload.fields([
 ]);
 
 router.use(authMiddleware);
+router.use(activityAudit);
 
 // ============================================
 // FINE ADJUSTMENT ROUTES - ADDED

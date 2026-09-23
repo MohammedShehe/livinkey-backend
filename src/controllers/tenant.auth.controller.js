@@ -1,3 +1,4 @@
+const ActivityService = require("../services/activity.log.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const db = require("../config/db");
@@ -70,11 +71,22 @@ exports.login = async (req, res) => {
         const matched = await bcrypt.compare(password, tenant.password);
 
         if (!matched) {
+            await ActivityService.log(req, {
+                actorType: "tenant", actorName: email, actorPosition: "Tenant",
+                action: "login_failed", module: "auth",
+                metadata: { result: "wrong_password", attempted_identifier: email }
+            });
             return res.status(401).json({
                 success: false,
                 message: "Invalid email or password."
             });
         }
+
+        await ActivityService.log(req, {
+            actorType: "tenant", actorName: tenant.full_name, actorPosition: "Tenant",
+            tenantId: tenant.id, pgId: tenant.pg_id || null, action: "login", module: "auth",
+            metadata: { result: "success" }
+        });
 
         // Check if tenant must change password
         if (tenant.must_change_password === 1) {

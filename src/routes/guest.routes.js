@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const guestAuthController = require("../controllers/guest.auth.controller");
@@ -9,6 +11,26 @@ const guestOrTenantAuthMiddleware = require("../middleware/guest.or.tenant.auth.
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
+
+
+// Guest device registration uses the shared tenant_devices table because guests
+// are represented in the tenants table with role='guest'.
+const firebase = require("../config/firebase");
+router.post("/device/fcm-token", guestAuthMiddleware, userActivity, async (req,res) => {
+    try {
+        const { fcm_token, device_type } = req.body;
+        if (!fcm_token) return res.status(400).json({success:false,message:"FCM token is required"});
+        await firebase.saveFCMToken(req.guest.id, fcm_token, device_type || "android");
+        res.json({success:true,message:"FCM token saved successfully"});
+    } catch(e) { console.error("Guest FCM save error:",e); res.status(500).json({success:false,message:"Internal server error"}); }
+});
+router.delete("/device/fcm-token", guestAuthMiddleware, userActivity, async (req,res) => {
+    try {
+        if (req.body?.fcm_token) await firebase.removeFCMToken(req.guest.id, req.body.fcm_token);
+        else await firebase.removeAllFCMTokens(req.guest.id);
+        res.json({success:true,message:"FCM token removed successfully"});
+    } catch(e) { console.error("Guest FCM remove error:",e); res.status(500).json({success:false,message:"Internal server error"}); }
+});
 
 // ============ PUBLIC GUEST ROUTES ============
 router.post("/register", guestAuthController.register);

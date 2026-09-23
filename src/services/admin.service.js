@@ -54,7 +54,8 @@ const updatePermissions = async (adminId, permissions) => {
             "pgs",
             "maintenance",
             "documents",
-            "feedbacks"
+            "feedbacks",
+            "activity_logs"
         ];
 
         for (const moduleName of Object.keys(permissions)) {

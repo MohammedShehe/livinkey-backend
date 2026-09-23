@@ -1,4 +1,5 @@
 const express = require("express");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const pgController = require("../controllers/pg.controller");
@@ -15,6 +16,7 @@ const uploadFields = upload.fields([
 
 // All routes require authentication
 router.use(authMiddleware);
+router.use(activityAudit);
 
 // CREATE PG - Requires pgs.add permission
 router.post(

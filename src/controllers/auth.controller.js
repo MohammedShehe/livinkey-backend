@@ -1,3 +1,4 @@
+const ActivityService = require("../services/activity.log.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const db = require("../config/db");
@@ -115,6 +116,13 @@ exports.verifyOTP = async (req, res) => {
         }
 
         await Admin.clearOTP(admin.id);
+
+        await ActivityService.log(req, {
+            actorType: "admin", actorName: admin.name,
+            actorPosition: admin.role === "super_admin" ? "Super Admin" : "Admin",
+            action: "login", module: "auth", performedByAdminId: admin.id,
+            metadata: { result: "success" }
+        });
 
         const token = generateToken(admin);
 
@@ -254,6 +262,12 @@ exports.verifyForgotPasswordOTP = async (req, res) => {
         const valid = await compareOTP(otp.toString(), admin.otp);
 
         if (!valid) {
+            await ActivityService.log(req, {
+                actorType: "admin", actorName: admin.name,
+                actorPosition: admin.role === "super_admin" ? "Super Admin" : "Admin",
+                action: "login_failed", module: "auth", performedByAdminId: admin.id,
+                metadata: { result: "invalid_otp" }
+            });
             return res.status(400).json({
                 success: false,
                 message: "Invalid OTP."

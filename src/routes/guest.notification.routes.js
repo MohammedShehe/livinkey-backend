@@ -1,4 +1,5 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
 const router = express.Router();
 
 const guestNotificationController = require("../controllers/guest.notification.controller");
@@ -6,6 +7,7 @@ const guestAuthMiddleware = require("../middleware/guest.auth.middleware");
 
 // All routes require guest authentication
 router.use(guestAuthMiddleware);
+router.use(userActivity);
 
 // Get unread count (for bell icon)
 router.get("/unread/count", guestNotificationController.getUnreadCount);

@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const tenantPaymentController = require("../controllers/tenant.payment.controller");
@@ -7,6 +9,7 @@ const upload = require("../middleware/upload.middleware");
 
 // All routes require tenant authentication
 router.use(tenantAuthMiddleware);
+router.use(userActivity);
 
 // Get current bill details
 router.get("/bill", tenantPaymentController.getBillDetails);

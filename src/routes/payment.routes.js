@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const paymentController = require("../controllers/payment.controller");
@@ -25,6 +27,7 @@ router.post(
 
 // All routes below require authenticated admin access
 router.use(authMiddleware);
+router.use(activityAudit);
 
 // ============================================================
 // FIX: None of the routes below previously checked the "bills"

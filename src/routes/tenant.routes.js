@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const tenantController = require("../controllers/tenant.controller");
@@ -40,6 +42,7 @@ router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile)
 router.post(
     '/device/fcm-token',
     tenantAuthMiddleware,
+    userActivity,
     async (req, res) => {
         try {
             const tenantId = req.tenant.id;
@@ -76,6 +79,7 @@ router.post(
 router.delete(
     '/device/fcm-token',
     tenantAuthMiddleware,
+    userActivity,
     async (req, res) => {
         try {
             const tenantId = req.tenant.id;
@@ -109,6 +113,7 @@ const uploadFields = upload.fields([
 
 // All admin routes require authentication and admin role
 router.use(authMiddleware);
+router.use(activityAudit);
 
 // CREATE TENANT - Requires tenants.add permission
 router.post(

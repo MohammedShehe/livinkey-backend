@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const feedbackController = require("../controllers/feedback.controller");
@@ -9,14 +11,14 @@ const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
 
 // ============ TENANT FEEDBACK ROUTES (Protected) ============
-router.post("/submit", tenantAuthMiddleware, feedbackController.submitFeedback);
-router.get("/my-feedback", tenantAuthMiddleware, feedbackController.getMyFeedback);
-router.get("/status", tenantAuthMiddleware, feedbackController.checkFeedbackStatus);
+router.post("/submit", tenantAuthMiddleware, userActivity, feedbackController.submitFeedback);
+router.get("/my-feedback", tenantAuthMiddleware, userActivity, feedbackController.getMyFeedback);
+router.get("/status", tenantAuthMiddleware, userActivity, feedbackController.checkFeedbackStatus);
 
 // ============ GUEST FEEDBACK ROUTES (NEW - Mobile App) ============
-router.post("/guest/submit", guestAuthMiddleware, feedbackController.submitGuestFeedback);
-router.get("/guest/my-feedback", guestAuthMiddleware, feedbackController.getMyGuestFeedback);
-router.get("/guest/status", guestAuthMiddleware, feedbackController.checkGuestFeedbackStatus);
+router.post("/guest/submit", guestAuthMiddleware, userActivity, feedbackController.submitGuestFeedback);
+router.get("/guest/my-feedback", guestAuthMiddleware, userActivity, feedbackController.getMyGuestFeedback);
+router.get("/guest/status", guestAuthMiddleware, userActivity, feedbackController.checkGuestFeedbackStatus);
 
 // ============ PUBLIC FEEDBACK ROUTES (NEW - Website No Auth) ============
 router.post("/public/submit", feedbackController.submitPublicFeedback);

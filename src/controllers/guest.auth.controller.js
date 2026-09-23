@@ -1,3 +1,4 @@
+const ActivityService = require("../services/activity.log.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const db = require("../config/db");
@@ -188,11 +189,22 @@ exports.login = async (req, res) => {
         const matched = await bcrypt.compare(password, guest.password);
 
         if (!matched) {
+            await ActivityService.log(req, {
+                actorType: "guest", actorName: email, actorPosition: "Guest",
+                action: "login_failed", module: "auth",
+                metadata: { result: "wrong_password", attempted_identifier: email }
+            });
             return res.status(401).json({
                 success: false,
                 message: "Invalid email or password."
             });
         }
+
+        await ActivityService.log(req, {
+            actorType: "guest", actorName: guest.full_name, actorPosition: "Guest",
+            guestId: guest.id, action: "login", module: "auth",
+            metadata: { result: "success" }
+        });
 
         // Generate token
         const token = generateToken({

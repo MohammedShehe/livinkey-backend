@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const tenantDocumentController = require("../controllers/tenant.document.controller");
@@ -10,10 +12,10 @@ const upload = require("../middleware/upload.middleware");
 
 // ============ TENANT ROUTES (Protected) ============
 // Tenants can upload, view, and download their own documents - NO DELETE
-router.get("/types", tenantAuthMiddleware, tenantDocumentController.getDocumentTypes);
-router.post("/upload", tenantAuthMiddleware, upload.single('document'), tenantDocumentController.uploadDocument);
-router.get("/my-documents", tenantAuthMiddleware, tenantDocumentController.getMyDocuments);
-router.get("/:documentId/download", tenantAuthMiddleware, tenantDocumentController.downloadMyDocument);
+router.get("/types", tenantAuthMiddleware, userActivity, tenantDocumentController.getDocumentTypes);
+router.post("/upload", tenantAuthMiddleware, userActivity, upload.single('document'), tenantDocumentController.uploadDocument);
+router.get("/my-documents", tenantAuthMiddleware, userActivity, tenantDocumentController.getMyDocuments);
+router.get("/:documentId/download", tenantAuthMiddleware, userActivity, tenantDocumentController.downloadMyDocument);
 
 // ============ ADMIN ROUTES (Protected) ============
 // Admins have full CRUD permissions

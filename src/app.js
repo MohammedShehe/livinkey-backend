@@ -24,6 +24,8 @@ const publicRoutes = require("./routes/public.routes");
 const tenantNotificationRoutes = require("./routes/tenant.notification.routes");
 const guestNotificationRoutes = require("./routes/guest.notification.routes");
 const adminNotificationRoutes = require("./routes/admin.notification.routes");
+const activityLogRoutes = require("./routes/activity.log.routes");
+const ensureActivitySchema = require("./config/activity.schema");
 
 const app = express();
 
@@ -88,6 +90,7 @@ app.use("/api/public", publicRoutes);
 app.use("/api/tenant-notifications", tenantNotificationRoutes);
 app.use("/api/guest-notifications", guestNotificationRoutes);
 app.use("/api/admin-notifications", adminNotificationRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {
@@ -105,5 +108,7 @@ app.use((err, req, res, next) => {
         message: err.message || 'Internal server error'
     });
 });
+
+ensureActivitySchema().catch(err => console.error("Activity schema init error:", err));
 
 module.exports = app;

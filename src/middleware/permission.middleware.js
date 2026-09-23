@@ -23,7 +23,9 @@ const permissionMiddleware = (moduleName, action) => {
                     can_view, 
                     can_add, 
                     can_edit, 
-                    can_delete 
+                    can_delete, 
+                    can_message,
+                    can_export 
                 FROM admin_permissions 
                 WHERE admin_id = ? AND module_name = ?`,
                 [adminId, moduleName]
@@ -53,6 +55,12 @@ const permissionMiddleware = (moduleName, action) => {
                     break;
                 case 'delete':
                     hasPermission = perm.can_delete === 1;
+                    break;
+                case 'message':
+                    hasPermission = perm.can_message === 1;
+                    break;
+                case 'export':
+                    hasPermission = perm.can_export === 1;
                     break;
                 default:
                     hasPermission = false;

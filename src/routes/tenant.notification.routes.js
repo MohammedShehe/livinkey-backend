@@ -1,4 +1,5 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
 const router = express.Router();
 
 const tenantNotificationController = require("../controllers/tenant.notification.controller");
@@ -6,6 +7,7 @@ const tenantAuthMiddleware = require("../middleware/tenant.auth.middleware");
 
 // All routes require tenant authentication
 router.use(tenantAuthMiddleware);
+router.use(userActivity);
 
 // Get unread count (for bell icon)
 router.get("/unread/count", tenantNotificationController.getUnreadCount);

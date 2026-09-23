@@ -1,4 +1,5 @@
 const express = require("express");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const adminNotificationController = require("../controllers/admin.notification.controller");
@@ -8,6 +9,7 @@ const permissionMiddleware = require("../middleware/permission.middleware");
 
 // All routes require admin authentication
 router.use(authMiddleware);
+router.use(activityAudit);
 router.use(roleMiddleware("super_admin", "admin"));
 
 // Send notification to tenants

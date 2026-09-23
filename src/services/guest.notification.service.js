@@ -23,6 +23,12 @@ const GUEST_NOTIFICATION_TYPES = {
         color: '#1abc9c',
         linkPrefix: '/pgs/'
     },
+    ADMIN_MESSAGE: {
+        type: 'admin_message',
+        icon: '📢',
+        color: '#3498db',
+        linkPrefix: '/guest-notifications'
+    },
     ROOM_AVAILABLE: {
         type: 'room_available',
         icon: '🛏️',

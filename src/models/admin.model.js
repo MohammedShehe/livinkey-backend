@@ -143,7 +143,8 @@ const createDefaultPermissions = async (connection, adminId) => {
         "pgs",
         "maintenance",
         "documents",
-        "feedbacks"
+        "feedbacks",
+        "activity_logs"
     ];
 
     const values = modules.map(module => [
@@ -188,7 +189,9 @@ const getAllAdmins = async (search = null) => {
             ap.can_view,
             ap.can_add,
             ap.can_edit,
-            ap.can_delete
+            ap.can_delete,
+            ap.can_message,
+            ap.can_export
         FROM admins a
         LEFT JOIN admin_permissions ap
         ON a.id = ap.admin_id
@@ -235,7 +238,9 @@ const getAllAdmins = async (search = null) => {
                 view: Boolean(row.can_view),
                 add: Boolean(row.can_add),
                 edit: Boolean(row.can_edit),
-                delete: Boolean(row.can_delete)
+                delete: Boolean(row.can_delete),
+                message: Boolean(row.can_message),
+                export: Boolean(row.can_export)
             };
         }
     });
@@ -275,6 +280,8 @@ const updatePermission = async (
     let canAdd = false;
     let canEdit = false;
     let canDelete = Boolean(permission.delete);
+    let canMessage = Boolean(permission.message);
+    let canExport = Boolean(permission.export);
     
     // For non-feedback modules, allow add/edit if permissions specify
     if (moduleName !== "feedbacks") {
@@ -289,7 +296,9 @@ const updatePermission = async (
             can_view=?,
             can_add=?,
             can_edit=?,
-            can_delete=?
+            can_delete=?,
+            can_message=?,
+            can_export=?
         WHERE
             admin_id=?
         AND
@@ -300,6 +309,8 @@ const updatePermission = async (
             canAdd,
             canEdit,
             canDelete,
+            canMessage,
+            canExport,
             adminId,
             moduleName
         ]
@@ -332,7 +343,9 @@ const getAdminById = async (adminId) => {
             ap.can_view,
             ap.can_add,
             ap.can_edit,
-            ap.can_delete
+            ap.can_delete,
+            ap.can_message,
+            ap.can_export
         FROM admins a
         LEFT JOIN admin_permissions ap
         ON a.id = ap.admin_id
@@ -366,7 +379,9 @@ const getAdminById = async (adminId) => {
                 view: Boolean(row.can_view),
                 add: Boolean(row.can_add),
                 edit: Boolean(row.can_edit),
-                delete: Boolean(row.can_delete)
+                delete: Boolean(row.can_delete),
+                message: Boolean(row.can_message),
+                export: Boolean(row.can_export)
             };
         }
     });

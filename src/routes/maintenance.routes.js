@@ -1,4 +1,6 @@
 const express = require("express");
+const userActivity = require("../middleware/user.activity.middleware");
+const activityAudit = require("../middleware/activity.audit.middleware");
 const router = express.Router();
 
 const maintenanceController = require("../controllers/maintenance.controller");
@@ -15,23 +17,23 @@ const upload = require("../middleware/upload.middleware");
 // Create maintenance request (tenant)
 router.post(
     "/request",
-    tenantAuthMiddleware,
+    tenantAuthMiddleware, userActivity,  userActivity,
     upload.single('image'),
     maintenanceController.createRequest
 );
 
 // Get my requests (tenant)
-router.get("/my-requests", tenantAuthMiddleware, maintenanceController.getMyRequests);
+router.get("/my-requests", tenantAuthMiddleware, userActivity, maintenanceController.getMyRequests);
 
 // Get my stats (tenant)
-router.get("/my-stats", tenantAuthMiddleware, maintenanceController.getMyStats);
+router.get("/my-stats", tenantAuthMiddleware, userActivity, maintenanceController.getMyStats);
 
 // ============================================================
 // NEW: Tenant completes a maintenance request
 // ============================================================
 router.put(
     "/:id/complete-by-tenant",
-    tenantAuthMiddleware,
+    tenantAuthMiddleware, userActivity,  userActivity,
     maintenanceController.completeRequestByTenant
 );
 
