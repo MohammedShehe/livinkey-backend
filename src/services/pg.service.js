@@ -46,6 +46,11 @@ const createPG = async (pgData, files = {}) => {
             payment_qr: paymentQr,
             payment_qr_public_id: paymentQrPublicId,
             payment_qr_resource_type: paymentQrResourceType,
+            payment_bank_name: pgData.payment_bank_name,
+            payment_account_holder_name: pgData.payment_account_holder_name,
+            payment_account_number: pgData.payment_account_number,
+            payment_ifsc_code: pgData.payment_ifsc_code,
+            payment_upi_id: pgData.payment_upi_id,
             created_by: pgData.created_by
         });
 
@@ -249,7 +254,12 @@ const updatePG = async (pgId, pgData, files = {}) => {
             security_fee: pgData.security_fee || 0,
             payment_qr: paymentQr,
             payment_qr_public_id: paymentQrPublicId,
-            payment_qr_resource_type: paymentQrResourceType
+            payment_qr_resource_type: paymentQrResourceType,
+            payment_bank_name: pgData.payment_bank_name,
+            payment_account_holder_name: pgData.payment_account_holder_name,
+            payment_account_number: pgData.payment_account_number,
+            payment_ifsc_code: pgData.payment_ifsc_code,
+            payment_upi_id: pgData.payment_upi_id
         });
 
         // 8. Update Amenities

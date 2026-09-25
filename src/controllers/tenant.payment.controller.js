@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const { uploadFile } = require("../services/upload.service");
 const { generatePaymentReceipt } = require("../services/receipt.service");
+const paymentService = require("../services/payment.service");
 // FIXED: needed to notify admins when a tenant submits a payment proof
 const NotificationEventManager = require("../utils/notification.events");
 
@@ -31,18 +32,28 @@ const getBillDetails = async (req, res) => {
                 COALESCE(
                     (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
                     0
-                ) as total_cash_paid
+                ) as total_cash_paid,
+                COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))='cash'),0) AS ledger_cash_paid,
+                COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))<>'cash'),0) AS ledger_online_paid,
+                b.payment_bank_name,
+                b.payment_account_holder_name,
+                b.payment_account_number,
+                b.payment_ifsc_code,
+                b.payment_upi_id,
+                b.payment_details_source,
+                EXISTS(SELECT 1 FROM bill_payments bp WHERE bp.bill_id=b.id AND bp.is_partial=1) AS has_verified_partial,
+                EXISTS(SELECT 1 FROM payment_proofs pp WHERE pp.bill_id=b.id AND pp.status='pending') AS has_pending_payment_proof
             FROM bills b
             INNER JOIN tenants t ON b.tenant_id = t.id
             LEFT JOIN tenant_details td ON t.id = td.tenant_id
             LEFT JOIN pgs p ON td.pg_id = p.id
             LEFT JOIN rooms r ON td.room_id = r.id
-            WHERE b.tenant_id = ?
+            WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
               AND b.deleted_at IS NULL
             ORDER BY b.created_at DESC
             LIMIT 1
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
 
         connection.release();
@@ -57,8 +68,11 @@ const getBillDetails = async (req, res) => {
         const bill = bills[0];
 
         // Calculate total due
-        const totalDue = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - 
-                         parseFloat(bill.paid_amount || 0) - parseFloat(bill.total_cash_paid || 0);
+        const totalDue = Math.max(
+            parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) -
+            parseFloat(bill.paid_amount || 0),
+            0
+        );
 
         const response = {
             bill: {
@@ -78,6 +92,17 @@ const getBillDetails = async (req, res) => {
                 payment_qr: bill.payment_qr,
                 partial_payment_qr: bill.partial_payment_qr,
                 admin_qr: bill.admin_qr,
+                payment_bank_name: bill.payment_bank_name,
+                payment_account_holder_name: bill.payment_account_holder_name,
+                payment_account_number: bill.payment_account_number,
+                payment_ifsc_code: bill.payment_ifsc_code,
+                payment_upi_id: bill.payment_upi_id,
+                payment_details_source: bill.payment_details_source,
+                payment_details_qr: bill.payment_details_qr,
+                has_verified_partial: Boolean(bill.has_verified_partial),
+                has_pending_payment_proof: Boolean(bill.has_pending_payment_proof),
+                total_paid_online: parseFloat(bill.ledger_online_paid || 0),
+                total_paid_cash: parseFloat(bill.ledger_cash_paid || 0),
                 total_due: totalDue,
                 is_overdue: bill.status === 'unpaid' && new Date(bill.valid_until) < new Date()
             },
@@ -101,6 +126,57 @@ const getBillDetails = async (req, res) => {
             success: false,
             message: "Internal server error"
         });
+    }
+};
+
+const generatePartialPaymentQR = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { bill_id, amount } = req.body;
+        const requested = Number(amount);
+        if (!bill_id || !Number.isFinite(requested) || requested <= 0) {
+            return res.status(400).json({ success: false, message: "Bill and a valid payment amount are required" });
+        }
+
+        const connection = await db.getConnection();
+        try {
+            const [rows] = await connection.execute(
+                `SELECT id, tenant_id, status, total_amount, paid_amount, fine_amount,
+                        payment_upi_id, payment_account_holder_name
+                 FROM bills WHERE id=? AND deleted_at IS NULL AND (tenant_id=? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=bills.id AND bgm.tenant_id=?)) FOR UPDATE`,
+                [bill_id, tenantId, tenantId]
+            );
+            if (!rows.length) return res.status(404).json({ success:false, message:"Bill not found" });
+            const bill = rows[0];
+            const due = Math.max(Number(bill.total_amount)+Number(bill.fine_amount||0)-Number(bill.paid_amount||0),0);
+            if (bill.status === 'paid' || due <= 0) return res.status(400).json({success:false,message:"Bill is already fully paid"});
+            if (requested > due + 0.005) return res.status(400).json({success:false,message:`Amount exceeds current due of ₹${due.toFixed(2)}`});
+
+            const [pendingProofs] = await connection.execute(
+                `SELECT id, amount_paid FROM payment_proofs WHERE bill_id=? AND status='pending' LIMIT 1`,
+                [bill_id]
+            );
+            if (pendingProofs.length) {
+                return res.status(409).json({success:false,message:"A payment proof for this bill is awaiting admin verification. Please wait for verification before making another payment."});
+            }
+            const [partials] = await connection.execute(
+                `SELECT id FROM bill_payments WHERE bill_id=? AND is_partial=1 LIMIT 1`,
+                [bill_id]
+            );
+            if (partials.length && requested < due - 0.005) {
+                return res.status(400).json({success:false,message:`A partial payment has already been verified for this bill. You must now pay the full remaining balance of ₹${due.toFixed(2)}.`});
+            }
+            if (requested < due - 0.005 && requested + 0.005 < due * 0.5) {
+                return res.status(400).json({success:false,message:`Your partial payment is ₹${requested.toFixed(2)}, but the minimum allowed partial payment is 50% of the current due: ₹${(due * 0.5).toFixed(2)}.`});
+            }
+            const options = await paymentService.generatePaymentOptions(bill, { amount: requested });
+            return res.json({ success:true, data: options });
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error("Generate Partial Payment QR Error:", error);
+        return res.status(400).json({ success:false, message:error.message || "Unable to generate payment QR" });
     }
 };
 
@@ -144,8 +220,9 @@ const submitPaymentProof = async (req, res) => {
         const [billCheck] = await connection.execute(
             `
             SELECT id, status, total_amount, paid_amount, fine_amount
-            FROM bills 
-            WHERE id = ? AND tenant_id = ?
+            FROM bills
+            WHERE id = ? AND deleted_at IS NULL AND (tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=bills.id AND bgm.tenant_id = ?))
+            FOR UPDATE
             `,
             [bill_id, tenantId]
         );
@@ -165,6 +242,62 @@ const submitPaymentProof = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Bill is already fully paid"
+            });
+        }
+
+        const due = Math.max(
+            Number(bill.total_amount) + Number(bill.fine_amount || 0) - Number(bill.paid_amount || 0),
+            0
+        );
+        const amount = Number(amount_paid);
+        if (amount > due + 0.005) {
+            connection.release();
+            return res.status(400).json({
+                success: false,
+                message: `Amount exceeds the current due amount of ₹${due.toFixed(2)}`
+            });
+        }
+
+        const [pendingProofs] = await connection.execute(
+            `SELECT id FROM payment_proofs WHERE bill_id=? AND status='pending' LIMIT 1`,
+            [bill_id]
+        );
+        if (pendingProofs.length) {
+            connection.release();
+            return res.status(409).json({
+                success: false,
+                message: "A payment proof for this bill is already awaiting admin verification. Please wait for verification before submitting another payment."
+            });
+        }
+        const isPartial = amount < due - 0.005;
+        if (isPartial && amount + 0.005 < due * 0.5) {
+            connection.release();
+            return res.status(400).json({
+                success: false,
+                message: `Your partial payment is ₹${amount.toFixed(2)}, but the minimum allowed partial payment is 50% of the current due: ₹${(due * 0.5).toFixed(2)}.`
+            });
+        }
+        const [partialRows] = await connection.execute(
+            `SELECT id FROM bill_payments WHERE bill_id = ? AND is_partial = 1 LIMIT 1`,
+            [bill_id]
+        );
+        if (isPartial && partialRows.length) {
+            connection.release();
+            return res.status(400).json({
+                success: false,
+                message: `A partial payment has already been verified for this bill. You must now pay the full remaining balance of ₹${due.toFixed(2)}.`
+            });
+        }
+
+        const [duplicateTx] = await connection.execute(
+            `SELECT id FROM payment_proofs WHERE tenant_id = ? AND transaction_id = ? LIMIT 1`,
+            [tenantId, transaction_id]
+        );
+        if (duplicateTx.length) {
+            connection.release();
+            return res.status(409).json({
+                success: false,
+                message: "This transaction ID has already been submitted."
             });
         }
 
@@ -204,8 +337,10 @@ const submitPaymentProof = async (req, res) => {
                 proof_url,
                 proof_public_id,
                 proof_resource_type,
-                status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                status,
+                is_partial,
+                due_before_payment
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 bill_id,
@@ -215,7 +350,9 @@ const submitPaymentProof = async (req, res) => {
                 uploadResult.secure_url,
                 uploadResult.public_id,
                 uploadResult.resource_type || 'image',
-                'pending'
+                'pending',
+                isPartial ? 1 : 0,
+                due
             ]
         );
 
@@ -262,7 +399,11 @@ const getPaymentHistory = async (req, res) => {
             `
             SELECT 
                 bp.*,
+                'online' AS _type,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -273,10 +414,16 @@ const getPaymentHistory = async (req, res) => {
                 b.valid_until as bill_due_date
             FROM bill_payments bp
             INNER JOIN bills b ON bp.bill_id = b.id
-            WHERE b.tenant_id = ?
+            WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
+              AND LOWER(COALESCE(bp.payment_method,'')) <> 'cash'
+              AND NOT EXISTS (
+                  SELECT 1 FROM payment_proofs pp
+                  WHERE pp.bill_id = bp.bill_id
+                    AND pp.transaction_id = bp.transaction_id
+              )
             ORDER BY bp.created_at DESC
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
 
         // Get cash payments (join with bills to filter by tenant)
@@ -284,7 +431,12 @@ const getPaymentHistory = async (req, res) => {
             `
             SELECT 
                 cp.*,
+                'cash' AS _type,
+                'cash' AS payment_method,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -295,10 +447,11 @@ const getPaymentHistory = async (req, res) => {
                 b.valid_until as bill_due_date
             FROM cash_payments cp
             INNER JOIN bills b ON cp.bill_id = b.id
-            WHERE b.tenant_id = ?
+            WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
+              AND cp.status = 'verified'
             ORDER BY cp.created_at DESC
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
 
         // Get payment proofs
@@ -307,6 +460,9 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 pp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -365,6 +521,32 @@ const getPaymentHistory = async (req, res) => {
     }
 };
 
+const attachReceiptLedgerContext = async (connection, paymentData, type) => {
+    if (!paymentData || (type === 'proof' && paymentData.status !== 'verified')) return paymentData;
+    let ledgerId = null;
+    if (type === 'online') ledgerId = paymentData.id;
+    if (type === 'cash') {
+        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [`CASH-${paymentData.id}`, paymentData.bill_id]);
+        ledgerId = rows[0]?.id || null;
+    }
+    if (type === 'proof') {
+        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [paymentData.transaction_id, paymentData.bill_id]);
+        ledgerId = rows[0]?.id || null;
+    }
+    if (!ledgerId) return paymentData;
+    const [ledgerRows] = await connection.execute(`SELECT id, payment_date, amount FROM bill_payments WHERE id = ? LIMIT 1`, [ledgerId]);
+    if (!ledgerRows.length) return paymentData;
+    const ledger = ledgerRows[0];
+    const [priorRows] = await connection.execute(
+        `SELECT COALESCE(SUM(amount),0) AS paid_before_payment FROM bill_payments WHERE bill_id = ? AND (payment_date < ? OR (payment_date = ? AND id < ?))`,
+        [paymentData.bill_id, ledger.payment_date, ledger.payment_date, ledger.id]
+    );
+    paymentData.paid_before_payment = Number(priorRows[0]?.paid_before_payment || 0);
+    paymentData.payment_date = ledger.payment_date;
+    paymentData.paid_amount = paymentData.paid_before_payment + Number(paymentData.amount_paid ?? paymentData.amount ?? 0);
+    return paymentData;
+};
+
 const getPaymentReceipt = async (req, res) => {
     try {
         const tenantId = req.tenant.id;
@@ -398,6 +580,9 @@ const getPaymentReceipt = async (req, res) => {
                 SELECT 
                     bp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -423,9 +608,9 @@ const getPaymentReceipt = async (req, res) => {
                 LEFT JOIN tenant_details td ON t.id = td.tenant_id
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
-                WHERE bp.id = ? AND b.tenant_id = ?
+                WHERE bp.id = ? AND (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         } else if (type === 'cash') {
@@ -434,6 +619,9 @@ const getPaymentReceipt = async (req, res) => {
                 SELECT 
                     cp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -461,9 +649,9 @@ const getPaymentReceipt = async (req, res) => {
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
                 LEFT JOIN admins a ON cp.verified_by = a.id
-                WHERE cp.id = ? AND b.tenant_id = ?
+                WHERE cp.id = ? AND (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         } else if (type === 'proof') {
@@ -472,6 +660,9 @@ const getPaymentReceipt = async (req, res) => {
                 SELECT 
                     pp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -499,7 +690,7 @@ const getPaymentReceipt = async (req, res) => {
                 LEFT JOIN rooms r ON td.room_id = r.id
                 WHERE pp.id = ? AND pp.tenant_id = ?
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         }
@@ -512,6 +703,10 @@ const getPaymentReceipt = async (req, res) => {
                 message: "Payment not found"
             });
         }
+        if (type === 'proof' && paymentData.status !== 'verified') {
+            return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
+        }
+        await attachReceiptLedgerContext(connection, paymentData, type);
 
         // Generate receipt HTML
         const receiptHTML = generatePaymentReceipt(paymentData, type);
@@ -560,6 +755,9 @@ const downloadPaymentReceipt = async (req, res) => {
                 SELECT 
                     bp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -585,9 +783,9 @@ const downloadPaymentReceipt = async (req, res) => {
                 LEFT JOIN tenant_details td ON t.id = td.tenant_id
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
-                WHERE bp.id = ? AND b.tenant_id = ?
+                WHERE bp.id = ? AND (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         } else if (type === 'cash') {
@@ -596,6 +794,9 @@ const downloadPaymentReceipt = async (req, res) => {
                 SELECT 
                     cp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -623,9 +824,9 @@ const downloadPaymentReceipt = async (req, res) => {
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
                 LEFT JOIN admins a ON cp.verified_by = a.id
-                WHERE cp.id = ? AND b.tenant_id = ?
+                WHERE cp.id = ? AND (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         } else if (type === 'proof') {
@@ -634,6 +835,9 @@ const downloadPaymentReceipt = async (req, res) => {
                 SELECT 
                     pp.*,
                     b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                     b.status as bill_status,
                     b.rent_amount,
                     b.electricity_amount,
@@ -661,7 +865,7 @@ const downloadPaymentReceipt = async (req, res) => {
                 LEFT JOIN rooms r ON td.room_id = r.id
                 WHERE pp.id = ? AND pp.tenant_id = ?
                 `,
-                [paymentId, tenantId]
+                [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         }
@@ -674,6 +878,10 @@ const downloadPaymentReceipt = async (req, res) => {
                 message: "Payment not found"
             });
         }
+        if (type === 'proof' && paymentData.status !== 'verified') {
+            return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
+        }
+        await attachReceiptLedgerContext(connection, paymentData, type);
 
         // Generate receipt HTML
         const receiptHTML = generatePaymentReceipt(paymentData, type);
@@ -695,6 +903,7 @@ const downloadPaymentReceipt = async (req, res) => {
 
 module.exports = {
     getBillDetails,
+    generatePartialPaymentQR,
     submitPaymentProof,
     getPaymentHistory,
     getPaymentReceipt,

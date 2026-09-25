@@ -16,11 +16,16 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
     try {
         await connection.beginTransaction();
 
-        // Get current bill
-        const bill = await BillModel.getBillById(billId);
-        if (!bill) {
-            throw new Error("Bill not found");
-        }
+        // Lock the bill inside this transaction so two fine adjustments cannot
+        // overwrite one another.
+        const [billRows] = await connection.execute(
+            `SELECT b.*, t.full_name AS tenant_name, t.email AS tenant_email
+             FROM bills b INNER JOIN tenants t ON t.id=b.tenant_id
+             WHERE b.id=? AND b.deleted_at IS NULL FOR UPDATE`,
+            [billId]
+        );
+        const bill = billRows[0];
+        if (!bill) throw new Error("Bill not found");
 
         if (bill.status === 'paid') {
             throw new Error("Cannot adjust fine on a paid bill");
@@ -67,16 +72,15 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
         let newStatus = bill.status;
         const paidAmount = parseFloat(bill.paid_amount) || 0;
 
-        // If fine was reduced to 0 and bill was in 'delayed' status,
-        // revert to previous status
-        if (newFine === 0 && bill.status === 'delayed') {
-            // Check if bill has any payments
-            if (paidAmount > 0) {
-                const remainingAmount = totalAmount - paidAmount;
-                newStatus = remainingAmount > 0 ? 'partially_paid' : 'paid';
-            } else {
-                newStatus = 'unpaid';
-            }
+        const remainingAmount = totalAmount + newFine - paidAmount;
+        if (remainingAmount <= 0) {
+            newStatus = 'paid';
+        } else if (paidAmount > 0) {
+            newStatus = 'partially_paid';
+        } else if (bill.status === 'delayed' || bill.status === 'overdue') {
+            newStatus = bill.status;
+        } else {
+            newStatus = 'unpaid';
         }
 
         await connection.execute(

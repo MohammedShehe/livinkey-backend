@@ -337,7 +337,7 @@ class NotificationEventManager {
     /**
      * Send notification to tenant when bill is created
      */
-    static async onTenantBillCreated(bill, tenant) {
+    static async onTenantBillCreated(bill, tenant, actorName = null) {
         const messageData = tenantNotificationService.generateTenantNotificationMessages.billCreated(bill);
         
         await tenantNotificationService.sendTenantNotification(
@@ -345,6 +345,7 @@ class NotificationEventManager {
             'BILL_CREATED',
             {
                 ...messageData,
+                actor_name: actorName,
                 link: `/tenant-payments/bill`
             }
         );
@@ -353,7 +354,7 @@ class NotificationEventManager {
     /**
      * Send notification to tenant when bill is paid
      */
-    static async onTenantBillPaid(bill, tenant) {
+    static async onTenantBillPaid(bill, tenant, actorName = null) {
         const messageData = tenantNotificationService.generateTenantNotificationMessages.billPaid(bill);
         
         await tenantNotificationService.sendTenantNotification(
@@ -361,6 +362,7 @@ class NotificationEventManager {
             'BILL_PAID',
             {
                 ...messageData,
+                actor_name: actorName,
                 link: `/tenant-payments/history`
             }
         );
@@ -369,7 +371,7 @@ class NotificationEventManager {
     /**
      * Send notification to tenant when partial payment is made
      */
-    static async onTenantBillPartiallyPaid(bill, tenant) {
+    static async onTenantBillPartiallyPaid(bill, tenant, actorName = null) {
         const messageData = tenantNotificationService.generateTenantNotificationMessages.billPartiallyPaid(bill);
         
         await tenantNotificationService.sendTenantNotification(
@@ -377,6 +379,7 @@ class NotificationEventManager {
             'BILL_PARTIALLY_PAID',
             {
                 ...messageData,
+                actor_name: actorName,
                 link: `/tenant-payments/history`
             }
         );
@@ -634,7 +637,7 @@ class NotificationEventManager {
     // ============================================================
     // FIXED: Notify tenant when their payment proof is verified
     // ============================================================
-    static async onTenantPaymentProofVerified(bill, tenant) {
+    static async onTenantPaymentProofVerified(bill, tenant, actorName = null) {
         const messageData = tenantNotificationService.generateTenantNotificationMessages.paymentProofVerified(bill);
 
         await tenantNotificationService.sendTenantNotification(
@@ -642,6 +645,7 @@ class NotificationEventManager {
             'PAYMENT_PROOF_VERIFIED',
             {
                 ...messageData,
+                actor_name: actorName,
                 link: `/tenant-payments/history`
             }
         );
@@ -650,7 +654,7 @@ class NotificationEventManager {
     // ============================================================
     // FIXED: Notify tenant when their payment proof is rejected
     // ============================================================
-    static async onTenantPaymentProofRejected(tenantId, reason) {
+    static async onTenantPaymentProofRejected(tenantId, reason, actorName = null) {
         const messageData = tenantNotificationService.generateTenantNotificationMessages.paymentProofRejected(reason);
 
         await tenantNotificationService.sendTenantNotification(
@@ -658,6 +662,7 @@ class NotificationEventManager {
             'PAYMENT_PROOF_REJECTED',
             {
                 ...messageData,
+                actor_name: actorName,
                 link: `/tenant-payments/history`
             }
         );

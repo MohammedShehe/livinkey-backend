@@ -14,6 +14,9 @@ router.use(userActivity);
 // Get current bill details
 router.get("/bill", tenantPaymentController.getBillDetails);
 
+// Generate an amount-specific UPI QR/deep link for a partial payment
+router.post("/partial-qr", tenantPaymentController.generatePartialPaymentQR);
+
 // Submit payment proof
 router.post(
     "/proof",

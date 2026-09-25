@@ -48,10 +48,18 @@ const updateTenantPaymentDates = async (connection, tenantId, paidFrom, paidTill
     }
 
     await connection.execute(
-        `UPDATE tenant_details 
-         SET paid_from = ?, paid_till = ? 
+        `UPDATE tenant_details
+         SET
+           paid_from = CASE
+             WHEN paid_from IS NULL OR ? < paid_from THEN ?
+             ELSE paid_from
+           END,
+           paid_till = CASE
+             WHEN paid_till IS NULL OR ? > paid_till THEN ?
+             ELSE paid_till
+           END
          WHERE tenant_id = ?`,
-        [paidFrom, paidTill, tenantId]
+        [paidFrom, paidFrom, paidTill, paidTill, tenantId]
     );
     
     return { paid_from: paidFrom, paid_till: paidTill };
@@ -157,33 +165,8 @@ const regenerateBillQRCodes = async (billId, billData, totalDue) => {
             console.error("Failed to generate full payment QR:", qrError);
         }
 
-        try {
-            const partialAmount = totalDue * 0.5;
-            const partialPaymentData = {
-                billId: billId,
-                tenantId: billData.tenant_id,
-                amount: partialAmount,
-                type: 'partial_payment'
-            };
-            
-            const partialQrPath = await generateQRCode(JSON.stringify(partialPaymentData), 'partial');
-            tempFiles.push(partialQrPath);
-            
-            const partialQrUpload = await uploadFile(
-                { buffer: fs.readFileSync(partialQrPath), originalname: 'qr_partial.png' },
-                "livinkey/bills/qr"
-            );
-
-            if (partialQrUpload && partialQrUpload.secure_url) {
-                result.partialQr = partialQrUpload.secure_url;
-                result.partialPublicId = partialQrUpload.public_id;
-                result.partialResourceType = partialQrUpload.resource_type;
-                uploadedCloudFiles.push({ public_id: partialQrUpload.public_id, resource_type: partialQrUpload.resource_type });
-            }
-        } catch (qrError) {
-            console.error("Failed to generate partial payment QR:", qrError);
-        }
-
+        // Partial QR codes are generated on-demand for the exact amount chosen
+        // by the tenant. A fixed 50% QR is intentionally not persisted.
         await cleanupTempFiles(tempFiles);
         return result;
 
@@ -214,6 +197,22 @@ const createBill = async (billData, files = {}) => {
 
         if (tenantExists.length === 0) {
             throw new Error(`Tenant with ID ${billData.tenant_id} does not exist or is not an active tenant`);
+        }
+
+        const [assignmentRows] = await connection.execute(
+            `SELECT td.room_id, td.pg_id, td.rent, r.is_active AS room_active, r.deleted_at AS room_deleted
+             FROM tenant_details td
+             INNER JOIN rooms r ON r.id=td.room_id
+             WHERE td.tenant_id=? FOR UPDATE`,
+            [billData.tenant_id]
+        );
+        if (!assignmentRows.length || !assignmentRows[0].room_active || assignmentRows[0].room_deleted) {
+            throw new Error("Tenant does not have a valid active room assignment.");
+        }
+
+        const rentInput = Number(billData.rent_amount);
+        if (!Number.isFinite(rentInput) || rentInput <= 0) {
+            throw new Error("Rent amount must be greater than 0.");
         }
 
         // Block only if tenant already has an OPEN bill (not paid).
@@ -249,6 +248,29 @@ const createBill = async (billData, files = {}) => {
                           parseFloat(billData.electricity_amount || 0) + 
                           parseFloat(billData.maintenance_amount || 0) + 
                           parseFloat(billData.other_charges || 0);
+
+        // Payment details are snapshotted onto each bill so later PG edits
+        // never change an already-issued bill.
+        const [paymentDetailRows] = await connection.execute(
+            `SELECT name, payment_bank_name, payment_account_holder_name,
+                    payment_account_number, payment_ifsc_code, payment_upi_id,
+                    payment_qr, payment_qr_public_id, payment_qr_resource_type
+             FROM pgs
+             WHERE id = ? LIMIT 1`,
+            [assignmentRows[0].pg_id]
+        );
+        const pgPayment = paymentDetailRows[0] || {};
+        const paymentSource = (String(billData.payment_details_source || 'pg').toLowerCase() === 'manual') ? 'manual' : 'pg';
+        const paymentBankName = paymentSource === 'manual' ? (billData.payment_bank_name || null) : (pgPayment.payment_bank_name || null);
+        const paymentHolderName = paymentSource === 'manual' ? (billData.payment_account_holder_name || null) : (pgPayment.payment_account_holder_name || null);
+        const paymentAccountNumber = paymentSource === 'manual' ? (billData.payment_account_number || null) : (pgPayment.payment_account_number || null);
+        const paymentIfscCode = paymentSource === 'manual' ? (billData.payment_ifsc_code || null) : (pgPayment.payment_ifsc_code || null);
+        const paymentUpiId = paymentSource === 'manual' ? (billData.payment_upi_id || null) : (pgPayment.payment_upi_id || null);
+        if (!paymentBankName || !paymentHolderName || !paymentAccountNumber || !paymentIfscCode) {
+            throw new Error(paymentSource === 'manual'
+                ? 'Complete bank payment details are required: bank name, account holder name, account number and IFSC code.'
+                : "The selected tenant's PG does not have complete payment bank details. Add them in PG Management or choose Manual Payment Details.");
+        }
 
         let meterImage = null;
         let meterPublicId = null;
@@ -315,39 +337,10 @@ const createBill = async (billData, files = {}) => {
             throw qrError;
         }
 
+        // Partial payments use an amount-specific QR generated on demand.
         let partialQr = null;
         let partialQrPublicId = null;
         let partialQrResourceType = null;
-
-        try {
-            const partialAmount = totalAmount * 0.5;
-            const partialPaymentData = {
-                billId: null,
-                tenantId: billData.tenant_id,
-                amount: partialAmount,
-                type: 'partial_payment'
-            };
-            
-            const partialQrPath = await generateQRCode(JSON.stringify(partialPaymentData), 'partial');
-            tempFiles.push(partialQrPath);
-            
-            const partialQrUpload = await uploadFile(
-                { buffer: fs.readFileSync(partialQrPath), originalname: 'qr_partial.png' },
-                "livinkey/bills/qr"
-            );
-
-            if (!partialQrUpload || !partialQrUpload.secure_url) {
-                throw new Error("Failed to generate/upload partial payment QR code");
-            }
-            
-            partialQr = partialQrUpload.secure_url;
-            partialQrPublicId = partialQrUpload.public_id;
-            partialQrResourceType = partialQrUpload.resource_type;
-            uploadedCloudFiles.push({ public_id: partialQrPublicId, resource_type: partialQrResourceType });
-        } catch (qrError) {
-            await cleanupUploadedFiles(uploadedCloudFiles);
-            throw qrError;
-        }
 
         let adminQr = null;
         let adminQrPublicId = null;
@@ -373,8 +366,22 @@ const createBill = async (billData, files = {}) => {
             }
         }
 
+        let paymentDetailsQr = null;
+        let paymentDetailsQrPublicId = null;
+        let paymentDetailsQrResourceType = null;
+        if (paymentSource === 'pg' && pgPayment.payment_qr) {
+            paymentDetailsQr = pgPayment.payment_qr;
+            paymentDetailsQrPublicId = pgPayment.payment_qr_public_id || null;
+            paymentDetailsQrResourceType = pgPayment.payment_qr_resource_type || 'image';
+        } else if (adminQr) {
+            paymentDetailsQr = adminQr;
+            paymentDetailsQrPublicId = adminQrPublicId;
+            paymentDetailsQrResourceType = adminQrResourceType;
+        }
+
         const sentAt = new Date();
         const validUntil = new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const fineStartDate = new Date(validUntil);
 
         const billId = await BillModel.createBill(connection, {
             tenant_id: billData.tenant_id,
@@ -401,13 +408,25 @@ const createBill = async (billData, files = {}) => {
             admin_qr: adminQr,
             admin_qr_public_id: adminQrPublicId,
             admin_qr_resource_type: adminQrResourceType,
+            payment_bank_name: paymentBankName,
+            payment_account_holder_name: paymentHolderName,
+            payment_account_number: paymentAccountNumber,
+            payment_ifsc_code: paymentIfscCode,
+            payment_upi_id: paymentUpiId,
+            payment_details_source: paymentSource,
+            payment_details_qr: paymentDetailsQr,
+            payment_details_qr_public_id: paymentDetailsQrPublicId,
+            payment_details_qr_resource_type: paymentDetailsQrResourceType,
             sent_at: sentAt,
             valid_until: validUntil,
             created_by: billData.created_by,
             fine_applied_days: 0,
             last_fine_email_sent: null,
             initial_email_sent: 0,
-            qr_expires_at: null
+            qr_expires_at: null,
+            fine_start_date: fineStartDate.toISOString().slice(0, 10),
+            daily_fine_rate: Number(billData.daily_fine_rate || 100),
+            max_fine: Number(billData.max_fine || 0)
         });
 
         await BillModel.insertBillAudit(connection, {
@@ -442,6 +461,7 @@ const createBill = async (billData, files = {}) => {
         let billForEmail = null;
         try {
             billForEmail = await BillModel.getBillById(billId);
+            if (billData.skipEmail) throw new Error("SKIP_GROUP_ANCHOR_EMAIL");
             await sendBillEmail(
                 billForEmail.tenant_email,
                 billForEmail.tenant_name,
@@ -465,7 +485,7 @@ const createBill = async (billData, files = {}) => {
                 full_name: createdBill.tenant_name
             };
             await NotificationEventManager.onBillCreated(createdBill, tenantForNotif);
-            await NotificationEventManager.onTenantBillCreated(createdBill, tenantForNotif);
+            await NotificationEventManager.onTenantBillCreated(createdBill, tenantForNotif, billData.admin_name || 'Admin');
         } catch (notifError) {
             console.error("Failed to send bill notification:", notifError);
         }
@@ -512,6 +532,13 @@ const getBillById = async (billId) => {
         
         const totalPaid = parseFloat(bill.paid_amount || 0);
         bill.due_amount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - totalPaid;
+        if (bill.bill_group_id) {
+            bill.group_members = await BillModel.getBillGroupMembers(billId);
+            bill.is_group_bill = true;
+        } else {
+            bill.group_members = [];
+            bill.is_group_bill = false;
+        }
         if (bill.due_amount < 0) bill.due_amount = 0;
     }
     return bill;
@@ -730,10 +757,13 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
     try {
         await connection.beginTransaction();
 
-        const bill = await BillModel.getBillById(billId);
-        if (!bill) {
-            throw new Error("Bill not found");
-        }
+        const [lockedBillRows] = await connection.execute(
+            `SELECT * FROM bills WHERE id=? AND deleted_at IS NULL FOR UPDATE`,
+            [billId]
+        );
+        const bill = lockedBillRows[0];
+        if (!bill) throw new Error("Bill not found");
+        if (bill.status === 'paid') throw new Error("Bill is already fully paid");
 
         const verification = await BillModel.verifyCashPaymentOTP(connection, billId, otp);
         if (!verification.valid) {
@@ -743,15 +773,27 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
         const fixedBill = await getBillById(billId);
         const totalDue = fixedBill.due_amount || 0;
         
-        if (paymentData.amount > totalDue) {
-            throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
+        const amount = Number(paymentData.amount);
+        if (!Number.isFinite(amount) || amount <= 0 || amount > totalDue + 0.005) {
+            throw new Error(`Payment amount must be greater than 0 and no more than the current due of ₹${Number(totalDue).toFixed(2)}`);
+        }
+        const cashIsPartial = amount < totalDue - 0.005;
+        const [partialRows] = await connection.execute(
+            `SELECT id FROM bill_payments WHERE bill_id=? AND is_partial=1 LIMIT 1`,
+            [billId]
+        );
+        if (cashIsPartial && partialRows.length) {
+            throw new Error("This bill has already received a partial payment. The cash payment must settle the remaining due.");
+        }
+        if (cashIsPartial && amount + 0.005 < totalDue * 0.5) {
+            throw new Error("A partial payment must be at least 50% of the current amount due.");
         }
 
-        // ✅ FIXED: Store paid_from and paid_till from admin input
-        await BillModel.createCashPayment(connection, {
+        // Store paid_from and paid_till from admin input
+        const cashPaymentId = await BillModel.createCashPayment(connection, {
             bill_id: billId,
             tenant_id: bill.tenant_id,
-            amount: paymentData.amount,
+            amount,
             paid_from: paymentData.paid_from,
             paid_till: paymentData.paid_till,
             verified_by: paymentData.verified_by,
@@ -759,7 +801,19 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             notes: paymentData.notes || null
         });
 
-        const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
+        // Cash is part of the same immutable payment ledger. The cash table is
+        // the audit record; bill_payments is the financial source of truth.
+        await BillModel.createBillPayment(connection, {
+            bill_id: billId,
+            amount,
+            payment_method: 'cash',
+            transaction_id: `CASH-${cashPaymentId}`,
+            is_partial: cashIsPartial ? 1 : 0,
+            paid_from: paymentData.paid_from,
+            paid_till: paymentData.paid_till
+        });
+
+        const newPaidAmount = parseFloat(bill.paid_amount || 0) + amount;
         const totalAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0);
         const remainingAmount = totalAmount - newPaidAmount;
 
@@ -768,7 +822,7 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
             newStatus = 'partially_paid';
         }
 
-        await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
+        await BillModel.updateBillStatus(connection, billId, newStatus, amount);
         await BillModel.clearCashPaymentOTP(connection, billId);
 
         // ✅ FIXED: Update tenant_details with admin-provided paid_till
@@ -887,29 +941,18 @@ const processDelayedPayments = async () => {
         );
 
         for (const bill of overdueBills[0]) {
-            const daysSinceSent = Math.floor((Date.now() - new Date(bill.sent_at).getTime()) / (1000 * 60 * 60 * 24));
-            
-            let fineStartDate = new Date(bill.sent_at);
-            fineStartDate.setDate(fineStartDate.getDate() + 7);
-            
-            const tenantPaymentDay = bill.tenant_payment_date || 1;
-            let tenantPaymentDate = new Date(bill.sent_at);
-            let paymentDay = parseInt(tenantPaymentDay);
-            const lastDayOfMonth = new Date(tenantPaymentDate.getFullYear(), tenantPaymentDate.getMonth() + 1, 0).getDate();
-            paymentDay = Math.min(paymentDay, lastDayOfMonth);
-            tenantPaymentDate.setDate(paymentDay);
-            
-            if (tenantPaymentDate < new Date(bill.sent_at)) {
-                tenantPaymentDate.setMonth(tenantPaymentDate.getMonth() + 1);
-                const newLastDay = new Date(tenantPaymentDate.getFullYear(), tenantPaymentDate.getMonth() + 1, 0).getDate();
-                paymentDay = Math.min(paymentDay, newLastDay);
-                tenantPaymentDate.setDate(paymentDay);
+            if (bill.status === 'paid' || Number(bill.paid_amount || 0) >= Number(bill.total_amount || 0) + Number(bill.fine_amount || 0)) {
+                continue;
             }
-            
-            const actualFineStartDate = new Date(Math.max(fineStartDate.getTime(), tenantPaymentDate.getTime()));
+
+            const fineStartDate = bill.fine_start_date
+                ? new Date(bill.fine_start_date + 'T00:00:00')
+                : new Date(new Date(bill.sent_at).getTime() + 7 * 24 * 60 * 60 * 1000);
             const today = new Date();
-            let daysOverdue = Math.floor((today.getTime() - actualFineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-            
+            const daysOverdue = Math.max(
+                0,
+                Math.floor((today.getTime() - fineStartDate.getTime()) / (1000 * 60 * 60 * 24))
+            );
             if (daysOverdue <= 0) continue;
 
             if (bill.status !== 'delayed' && bill.status !== 'overdue') {
@@ -920,25 +963,13 @@ const processDelayedPayments = async () => {
                     console.error("Failed to send bill overdue notification:", notifError);
                 }
             }
-            
-            let shouldApplyFine = false;
-            let fineAmount = bill.fine_amount || 0;
-            
-            const hasPartialPayment = bill.total_partial_paid > 0 || bill.total_cash_paid > 0;
-            
-            if (hasPartialPayment) {
-                if (daysOverdue > 7) {
-                    shouldApplyFine = true;
-                    const extraDays = daysOverdue - 7;
-                    fineAmount = extraDays * 100;
-                }
-            } else {
-                if (daysOverdue > 0) {
-                    shouldApplyFine = true;
-                    fineAmount = daysOverdue * 100;
-                }
-            }
-            
+
+            const rate = Number(bill.daily_fine_rate || 100);
+            const cap = Number(bill.max_fine || 0);
+            const calculatedFine = cap > 0 ? Math.min(daysOverdue * rate, cap) : daysOverdue * rate;
+            const fineAmount = Math.max(Number(bill.fine_amount || 0), calculatedFine);
+            const shouldApplyFine = fineAmount > Number(bill.fine_amount || 0);
+
             if (shouldApplyFine) {
                 const newValidUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
                 const fineAppliedDays = daysOverdue;
@@ -1007,7 +1038,11 @@ const processDelayedPayments = async () => {
                         partial_payment_qr = ?,
                         fine_amount = ?,
                         valid_until = ?,
-                        status = 'delayed',
+                        status = CASE
+                            WHEN paid_amount >= total_amount + ? THEN 'paid'
+                            WHEN paid_amount > 0 THEN 'partially_paid'
+                            ELSE 'delayed'
+                        END,
                         fine_applied_days = ?,
                         last_fine_email_sent = ?
                     WHERE id = ?
@@ -1017,6 +1052,7 @@ const processDelayedPayments = async () => {
                         partialQrUrl,
                         fineAmount,
                         newValidUntil,
+                        fineAmount,
                         fineAppliedDays,
                         shouldSendEmail ? new Date() : lastEmailSent,
                         bill.id
@@ -1074,34 +1110,57 @@ const addPayment = async (billId, paymentData) => {
     try {
         await connection.beginTransaction();
 
-        const bill = await BillModel.getBillById(billId);
-        if (!bill) {
-            throw new Error("Bill not found");
+        const [lockedRows] = await connection.execute(
+            `SELECT * FROM bills WHERE id = ? AND deleted_at IS NULL FOR UPDATE`,
+            [billId]
+        );
+        const bill = lockedRows[0];
+        if (!bill) throw new Error("Bill not found");
+        if (bill.status === 'paid') throw new Error("Bill is already fully paid");
+
+        const totalDue = Math.max(
+            Number(bill.total_amount) + Number(bill.fine_amount || 0) - Number(bill.paid_amount || 0),
+            0
+        );
+        const amount = Number(paymentData.amount);
+        if (!Number.isFinite(amount) || amount <= 0) throw new Error("Invalid payment amount");
+        if (amount > totalDue + 0.005) {
+            throw new Error(`Payment amount (₹${amount.toFixed(2)}) exceeds total due (₹${totalDue.toFixed(2)})`);
         }
 
-        if (bill.status === 'paid') {
-            throw new Error("Bill is already fully paid");
+        const [partialRows] = await connection.execute(
+            `SELECT COUNT(*) AS count FROM bill_payments WHERE bill_id = ? AND is_partial = 1`,
+            [billId]
+        );
+        const wouldBePartial = amount < totalDue - 0.005;
+        if (wouldBePartial && Number(partialRows[0].count) > 0) {
+            throw new Error("This bill has already received a partial payment. The next payment must settle the remaining due.");
+        }
+        if (wouldBePartial && amount + 0.005 < totalDue * 0.5) {
+            throw new Error("A partial payment must be at least 50% of the current amount due.");
         }
 
-        const fixedBill = await getBillById(billId);
-        const totalDue = fixedBill.due_amount || 0;
-        
-        if (paymentData.amount > totalDue) {
-            throw new Error(`Payment amount (${paymentData.amount}) exceeds total due (${totalDue})`);
+        if (paymentData.transaction_id) {
+            const [duplicateTx] = await connection.execute(
+                `SELECT id FROM bill_payments WHERE transaction_id = ? LIMIT 1`,
+                [paymentData.transaction_id]
+            );
+            if (duplicateTx.length) throw new Error("This transaction has already been recorded.");
         }
 
-        // ✅ FIXED: Store paid_from and paid_till
+        // Store paid_from and paid_till
+
         await BillModel.createBillPayment(connection, {
             bill_id: billId,
-            amount: paymentData.amount,
+            amount,
             payment_method: paymentData.payment_method || 'qr_code',
             transaction_id: paymentData.transaction_id || null,
-            is_partial: paymentData.is_partial || 0,
+            is_partial: wouldBePartial ? 1 : 0,
             paid_from: paymentData.paid_from || null,
             paid_till: paymentData.paid_till || null
         });
 
-        const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paymentData.amount);
+        const newPaidAmount = parseFloat(bill.paid_amount || 0) + amount;
         const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
 
         let newStatus = 'paid';
@@ -1113,7 +1172,7 @@ const addPayment = async (billId, paymentData) => {
             }
         }
 
-        await BillModel.updateBillStatus(connection, billId, newStatus, paymentData.amount);
+        await BillModel.updateBillStatus(connection, billId, newStatus, amount);
 
         // ✅ FIXED: Update tenant_details with admin-provided dates
         if (paymentData.paid_from && paymentData.paid_till) {
@@ -1631,8 +1690,104 @@ const deleteBill = async (billId, adminId = null) => {
     }
 };
 
+// ============ BATCH BILL CREATION ============
+// One admin action can create the same bill for every selected tenant
+// (including every active tenant in a room). Each tenant still receives an
+// independent bill record so payments remain isolated and auditable.
+const createBillsForTenants = async (tenantIds, billData, files = {}) => {
+    const ids = [...new Set((tenantIds || []).map(Number).filter(Number.isInteger))];
+    if (!ids.length) throw new Error("At least one tenant must be selected");
+
+    const mode = String(billData.bill_mode || 'individual').toLowerCase() === 'group' ? 'group' : 'individual';
+
+    if (mode === 'individual' || ids.length === 1) {
+        const results = [];
+        for (const tenantId of ids) {
+            try {
+                const bill = await createBill({ ...billData, tenant_id: tenantId, bill_mode: 'individual' }, files);
+                results.push({ tenant_id: tenantId, success: true, bill });
+            } catch (error) {
+                results.push({ tenant_id: tenantId, success: false, message: error.message });
+            }
+        }
+        const created = results.filter(r => r.success);
+        if (!created.length) throw new Error(results.find(r => !r.success)?.message || "No bills could be created");
+        return { mode: 'individual', created_count: created.length, failed_count: results.length - created.length, results };
+    }
+
+    // GROUP BILL: validate that all selected tenants belong to the same active room/PG
+    // and that none already has an open bill or a bill for the requested month.
+    const validationConnection = await db.getConnection();
+    try {
+        const [members] = await validationConnection.execute(`
+            SELECT td.tenant_id, td.pg_id, td.room_id, r.room_number
+            FROM tenant_details td
+            INNER JOIN rooms r ON r.id=td.room_id
+            INNER JOIN tenants t ON t.id=td.tenant_id
+            WHERE td.tenant_id IN (${ids.map(() => '?').join(',')})
+              AND t.role='tenant' AND t.is_active=1 AND r.is_active=1 AND r.deleted_at IS NULL`, ids);
+        if (members.length !== ids.length) throw new Error('All selected tenants must be active tenants with valid room assignments.');
+        const pgSet = new Set(members.map(x => String(x.pg_id)));
+        const roomSet = new Set(members.map(x => String(x.room_id)));
+        if (pgSet.size !== 1 || roomSet.size !== 1) throw new Error('Group billing is only allowed when all selected tenants belong to the same PG and same room.');
+        const [conflicts] = await validationConnection.execute(`
+            SELECT t.id,
+                   EXISTS(SELECT 1 FROM bills b WHERE b.tenant_id=t.id AND b.deleted_at IS NULL AND b.status <> 'paid') AS has_open,
+                   EXISTS(SELECT 1 FROM bills b WHERE b.tenant_id=t.id AND b.billing_month=? AND b.deleted_at IS NULL) AS has_period
+            FROM tenants t WHERE t.id IN (${ids.map(() => '?').join(',')})`, [billData.billing_month || null, ...ids]);
+        const conflict = conflicts.find(c => Number(c.has_open) || Number(c.has_period));
+        if (conflict) {
+            if (Number(conflict.has_open)) throw new Error(`Tenant ${conflict.id} already has an unpaid/open bill. Settle or delete it before creating a group bill.`);
+            throw new Error(`Tenant ${conflict.id} already has a bill for ${billData.billing_month}. Choose another billing month.`);
+        }
+    } finally { validationConnection.release(); }
+
+    const bill = await createBill({ ...billData, tenant_id: ids[0], bill_mode: 'group', skipEmail: true }, files);
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const [groupResult] = await connection.execute(
+            `INSERT INTO bill_groups (bill_id, billing_month, created_by) VALUES (?, ?, ?)`,
+            [bill.id, bill.billing_month, billData.created_by]
+        );
+        const groupId = groupResult.insertId;
+        await connection.execute(`UPDATE bills SET bill_group_id=? WHERE id=?`, [groupId, bill.id]);
+        for (const tenantId of ids) {
+            await connection.execute(
+                `INSERT INTO bill_group_members (bill_group_id, tenant_id) VALUES (?, ?)`,
+                [groupId, tenantId]
+            );
+        }
+        await connection.commit();
+
+        const fullBill = await BillModel.getBillById(bill.id);
+        let emailCount = 0;
+        for (const tenantId of ids) {
+            try {
+                const [tenantRows] = await connection.execute(
+                    `SELECT id, full_name, email FROM tenants WHERE id=? LIMIT 1`, [tenantId]
+                );
+                const tenant = tenantRows[0];
+                if (!tenant?.email) continue;
+                await sendBillEmail(tenant.email, tenant.full_name, { ...fullBill, tenant_name: tenant.full_name, tenant_email: tenant.email }, fullBill.payment_qr, fullBill.partial_payment_qr, fullBill.electricity_meter_image, fullBill.admin_qr, fullBill.electricity_meter_image_2);
+                emailCount++;
+            } catch (e) { console.error(`Failed to send group bill email to tenant ${tenantId}:`, e.message); }
+        }
+        return {
+            mode: 'group', group_id: groupId, bill_id: bill.id,
+            created_count: 1, failed_count: 0, billed_tenant_count: ids.length,
+            email_sent_count: emailCount, results: ids.map(tenant_id => ({ tenant_id, success: true, bill: fullBill }))
+        };
+    } catch (error) {
+        await connection.rollback();
+        try { await db.execute(`UPDATE bills SET deleted_at=NOW() WHERE id=?`, [bill.id]); } catch (_) {}
+        throw error;
+    } finally { connection.release(); }
+};
+
 module.exports = {
     createBill,
+    createBillsForTenants,
     getUnpaidTenants,
     getBills,
     getBillById,

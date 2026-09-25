@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const db = require("../config/db");
 const billService = require("../services/bill.service");
+const { deleteFile } = require("../services/upload.service");
 // FIXED: needed to notify the tenant when their proof is verified/rejected
 const NotificationEventManager = require("../utils/notification.events");
 
@@ -46,6 +47,9 @@ exports.getPaymentProofs = async (req, res) => {
                 p.name as pg_name,
                 r.room_number,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.rent_amount,
                 b.electricity_amount,
                 b.maintenance_amount,
@@ -157,6 +161,9 @@ exports.getPaymentProofById = async (req, res) => {
                 p.name as pg_name,
                 r.room_number,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.rent_amount,
                 b.electricity_amount,
                 b.maintenance_amount,
@@ -210,177 +217,134 @@ exports.getPaymentProofById = async (req, res) => {
  */
 exports.verifyPaymentProof = async (req, res) => {
     const connection = await db.getConnection();
-
     try {
         await connection.beginTransaction();
 
         const { id } = req.params;
-        const { admin_notes, paid_from, paid_till } = req.body; // ← NEW FIELDS
         const adminId = req.admin.id;
+        const adminName = req.admin.name || req.admin.full_name || 'Admin';
+        const { paid_from, paid_till } = req.body;
 
-        // ✅ Validate required fields
-        if (!paid_from || !paid_till) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: "Both paid_from and paid_till are required to verify payment"
-            });
-        }
-
-        // Get the proof
+        // Lock both rows so two admins cannot verify the same proof or
+        // calculate the same remaining balance concurrently.
         const [proofRows] = await connection.execute(
-            `
-            SELECT 
-                pp.*,
-                b.tenant_id,
-                b.total_amount,
-                b.paid_amount,
-                b.fine_amount,
-                b.status as bill_status
-            FROM payment_proofs pp
-            LEFT JOIN bills b ON pp.bill_id = b.id
-            WHERE pp.id = ?
-            `,
+            `SELECT pp.*, b.total_amount, b.paid_amount, b.fine_amount, b.status AS bill_status
+             FROM payment_proofs pp
+             INNER JOIN bills b ON b.id = pp.bill_id
+             WHERE pp.id = ? AND b.deleted_at IS NULL
+             FOR UPDATE`,
             [id]
         );
-
-        if (proofRows.length === 0) {
+        if (!proofRows.length) {
             await connection.rollback();
-            return res.status(404).json({
-                success: false,
-                message: "Payment proof not found"
-            });
+            return res.status(404).json({ success: false, message: "Payment proof or associated bill not found" });
         }
 
         const proof = proofRows[0];
-
-        // Check if bill still exists
-        if (!proof.bill_id || !proof.bill_status) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: "Associated bill no longer exists. Cannot verify this payment proof."
-            });
-        }
-
         if (proof.status !== 'pending') {
             await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: `This proof has already been ${proof.status}`
-            });
+            return res.status(409).json({ success: false, message: `This proof has already been ${proof.status}` });
+        }
+        if (proof.bill_status === 'paid') {
+            await connection.rollback();
+            return res.status(400).json({ success: false, message: "The associated bill is already fully paid" });
         }
 
-        // ✅ FIXED: Update proof with paid_from and paid_till
-        await connection.execute(
-            `
-            UPDATE payment_proofs 
-            SET 
-                status = 'verified',
-                verified_by = ?,
-                verified_at = NOW(),
-                admin_notes = ?,
-                paid_from = ?,
-                paid_till = ?
-            WHERE id = ?
-            `,
-            [adminId, admin_notes || null, paid_from, paid_till, id]
+        const amount = Number(proof.amount_paid);
+        const due = Math.max(
+            Number(proof.total_amount) + Number(proof.fine_amount || 0) - Number(proof.paid_amount || 0),
+            0
         );
+        if (!Number.isFinite(amount) || amount <= 0) {
+            throw new Error("Invalid payment proof amount");
+        }
+        if (amount > due + 0.005) {
+            throw new Error(`Proof amount ₹${amount.toFixed(2)} exceeds the current bill due ₹${due.toFixed(2)}`);
+        }
 
-        // Update bill payment
-        const newPaidAmount = parseFloat(proof.paid_amount || 0) + parseFloat(proof.amount_paid);
-        const totalAmount = parseFloat(proof.total_amount) + parseFloat(proof.fine_amount || 0);
-        const remainingAmount = totalAmount - newPaidAmount;
+        // A bill may have only one verified partial payment.
+        const [partialRows] = await connection.execute(
+            `SELECT COUNT(*) AS count FROM bill_payments WHERE bill_id = ? AND is_partial = 1`,
+            [proof.bill_id]
+        );
+        const isPartial = Number(proof.is_partial) === 1 || amount < due - 0.005;
+        if (isPartial && Number(partialRows[0].count) > 0) {
+            throw new Error("This bill has already received a partial payment. The proof must settle the remaining due.");
+        }
+        if (isPartial && amount + 0.005 < due * 0.5) {
+            throw new Error("A partial payment must be at least 50% of the current amount due.");
+        }
 
-        let newBillStatus = 'paid';
-        if (remainingAmount > 0) {
-            newBillStatus = 'partially_paid';
+        // Transaction IDs are idempotent and cannot be reused.
+        const [duplicateProof] = await connection.execute(
+            `SELECT id FROM payment_proofs
+             WHERE tenant_id = ? AND transaction_id = ? AND id <> ?
+             LIMIT 1`,
+            [proof.tenant_id, proof.transaction_id, proof.id]
+        );
+        const [duplicatePayment] = await connection.execute(
+            `SELECT id FROM bill_payments WHERE transaction_id = ? LIMIT 1`,
+            [proof.transaction_id]
+        );
+        if (duplicateProof.length || duplicatePayment.length) {
+            throw new Error("This transaction ID has already been recorded.");
         }
 
         await connection.execute(
-            `
-            UPDATE bills 
-            SET 
-                paid_amount = ?,
-                status = ?
-            WHERE id = ?
-            `,
-            [newPaidAmount, newBillStatus, proof.bill_id]
+            `UPDATE payment_proofs
+             SET status='verified', verified_by=?, verified_at=NOW(),
+                 paid_from=?, paid_till=?
+             WHERE id=? AND status='pending'`,
+            [adminId, paid_from || null, paid_till || null, id]
         );
 
-        // Record in bill_payments table with dates
         await connection.execute(
-            `
-            INSERT INTO bill_payments (
-                bill_id,
-                amount,
-                payment_method,
-                transaction_id,
-                is_partial,
-                paid_from,
-                paid_till
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `,
-            [
-                proof.bill_id,
-                proof.amount_paid,
-                'payment_proof',
-                proof.transaction_id,
-                remainingAmount > 0 ? 1 : 0,
-                paid_from,
-                paid_till
-            ]
+            `INSERT INTO bill_payments
+             (bill_id, amount, payment_method, transaction_id, paid_from, paid_till, is_partial)
+             VALUES (?, ?, 'payment_proof', ?, ?, ?, ?)`,
+            [proof.bill_id, amount, proof.transaction_id, paid_from || proof.paid_from || null,
+             paid_till || proof.paid_till || null, isPartial ? 1 : 0]
         );
 
-        // ✅ FIXED: Update tenant_details with admin-provided dates
-        await billService.updateTenantPaymentDates(
-            connection,
-            proof.tenant_id,
-            paid_from,
-            paid_till
+        const newPaid = Number(proof.paid_amount || 0) + amount;
+        const newDue = Math.max(Number(proof.total_amount) + Number(proof.fine_amount || 0) - newPaid, 0);
+        const newStatus = newDue <= 0.005 ? 'paid' : 'partially_paid';
+
+        await connection.execute(
+            `UPDATE bills
+             SET paid_amount=?,
+                 status=?,
+                 partial_payment_made_at=CASE WHEN ?=1 AND partial_payment_made_at IS NULL THEN NOW() ELSE partial_payment_made_at END
+             WHERE id=?`,
+            [newPaid, newStatus, isPartial ? 1 : 0, proof.bill_id]
         );
 
-        // Delete QR codes if fully paid
-        if (newBillStatus === 'paid') {
-            const [billData] = await connection.execute(
-                `
-                SELECT payment_qr_public_id, payment_qr_resource_type,
-                       partial_payment_qr_public_id, partial_payment_qr_resource_type
-                FROM bills 
-                WHERE id = ?
-                `,
+        if (paid_from && paid_till) {
+            await billService.updateTenantPaymentDates(connection, proof.tenant_id, paid_from, paid_till);
+        }
+
+        // Payment QR assets are no longer valid after a successful settlement.
+        if (newStatus === 'paid') {
+            const [billAssets] = await connection.execute(
+                `SELECT payment_qr_public_id, payment_qr_resource_type,
+                        partial_payment_qr_public_id, partial_payment_qr_resource_type
+                 FROM bills WHERE id=? FOR UPDATE`,
                 [proof.bill_id]
             );
-
-            if (billData.length > 0) {
-                if (billData[0].payment_qr_public_id) {
-                    try {
-                        await deleteFile(
-                            billData[0].payment_qr_public_id,
-                            billData[0].payment_qr_resource_type
-                        );
-                    } catch (e) { /* ignore */ }
-                }
-                if (billData[0].partial_payment_qr_public_id) {
-                    try {
-                        await deleteFile(
-                            billData[0].partial_payment_qr_public_id,
-                            billData[0].partial_payment_qr_resource_type
-                        );
-                    } catch (e) { /* ignore */ }
+            if (billAssets.length) {
+                for (const f of [
+                    [billAssets[0].payment_qr_public_id, billAssets[0].payment_qr_resource_type],
+                    [billAssets[0].partial_payment_qr_public_id, billAssets[0].partial_payment_qr_resource_type]
+                ]) {
+                    if (f[0]) {
+                        try { await deleteFile(f[0], f[1] || 'image'); } catch (e) {}
+                    }
                 }
                 await connection.execute(
-                    `
-                    UPDATE bills 
-                    SET 
-                        payment_qr = NULL,
-                        payment_qr_public_id = NULL,
-                        payment_qr_resource_type = NULL,
-                        partial_payment_qr = NULL,
-                        partial_payment_qr_public_id = NULL,
-                        partial_payment_qr_resource_type = NULL
-                    WHERE id = ?
-                    `,
+                    `UPDATE bills SET payment_qr=NULL, payment_qr_public_id=NULL,
+                     payment_qr_resource_type=NULL, partial_payment_qr=NULL,
+                     partial_payment_qr_public_id=NULL, partial_payment_qr_resource_type=NULL
+                     WHERE id=?`,
                     [proof.bill_id]
                 );
             }
@@ -388,46 +352,30 @@ exports.verifyPaymentProof = async (req, res) => {
 
         await connection.commit();
 
-        // Get updated proof
         const [updatedProof] = await connection.execute(
-            `
-            SELECT 
-                pp.*,
-                t.full_name as tenant_name,
-                t.email as tenant_email,
-                a.name as verified_by_name
-            FROM payment_proofs pp
-            INNER JOIN tenants t ON pp.tenant_id = t.id
-            LEFT JOIN admins a ON pp.verified_by = a.id
-            WHERE pp.id = ?
-            `,
+            `SELECT pp.*, t.full_name AS tenant_name, t.email AS tenant_email,
+                    b.total_amount AS bill_total, b.fine_amount, b.paid_amount, b.status AS bill_status
+             FROM payment_proofs pp
+             INNER JOIN tenants t ON pp.tenant_id=t.id
+             INNER JOIN bills b ON pp.bill_id=b.id
+             WHERE pp.id=?`,
             [id]
         );
 
-        // ============================================================
-        // FIXED: this previously never notified the tenant. Now the
-        // tenant gets both a "payment proof verified" notification and
-        // the matching "bill paid"/"bill partially paid" notification
-        // (which never fired before either, since this route updates
-        // the bill directly instead of going through billService.addPayment).
-        // ============================================================
         try {
-            const tenantForNotif = {
-                id: updatedProof[0].tenant_id,
-                full_name: updatedProof[0].tenant_name
-            };
-            const billForNotif = {
+            const tenant = { id: proof.tenant_id, full_name: proof.tenant_name || 'Tenant' };
+            const notificationBill = {
                 id: proof.bill_id,
-                paid_amount: proof.amount_paid,
-                total_amount: newPaidAmount
+                tenant_id: proof.tenant_id,
+                paid_amount: amount,
+                total_amount: proof.total_amount,
+                admin_name: adminName
             };
-
-            await NotificationEventManager.onTenantPaymentProofVerified(billForNotif, tenantForNotif);
-
-            if (newBillStatus === 'paid') {
-                await NotificationEventManager.onTenantBillPaid(billForNotif, tenantForNotif);
-            } else if (newBillStatus === 'partially_paid') {
-                await NotificationEventManager.onTenantBillPartiallyPaid(billForNotif, tenantForNotif);
+            await NotificationEventManager.onTenantPaymentProofVerified(notificationBill, tenant, adminName);
+            if (newStatus === 'paid') {
+                await NotificationEventManager.onTenantBillPaid(notificationBill, tenant, adminName);
+            } else {
+                await NotificationEventManager.onTenantBillPartiallyPaid(notificationBill, tenant, adminName);
             }
         } catch (notifError) {
             console.error("Failed to send payment proof verified notification:", notifError);
@@ -438,14 +386,10 @@ exports.verifyPaymentProof = async (req, res) => {
             message: "Payment proof verified successfully",
             data: updatedProof[0]
         });
-
     } catch (error) {
         await connection.rollback();
         console.error("Verify Payment Proof Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error"
-        });
+        return res.status(400).json({ success: false, message: error.message || "Internal server error" });
     } finally {
         connection.release();
     }
@@ -524,7 +468,8 @@ exports.rejectPaymentProof = async (req, res) => {
         try {
             await NotificationEventManager.onTenantPaymentProofRejected(
                 proof.tenant_id,
-                rejectionNote
+                rejectionNote,
+                req.admin.name || req.admin.full_name || 'Admin'
             );
         } catch (notifError) {
             console.error("Failed to send payment proof rejected notification:", notifError);

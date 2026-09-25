@@ -22,4 +22,6 @@ router.post("/reset-password", authController.resetPassword);
 // NEW: Change password route (for must_change_password flow)
 router.post("/change-password", authMiddleware, authController.changePassword);
 
+router.get("/validate", authMiddleware, authController.validate);
+
 module.exports = router;

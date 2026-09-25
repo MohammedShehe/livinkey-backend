@@ -28,14 +28,26 @@ const createBill = async (connection, billData) => {
             admin_qr,
             admin_qr_public_id,
             admin_qr_resource_type,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
+            payment_details_source,
+            payment_details_qr,
+            payment_details_qr_public_id,
+            payment_details_qr_resource_type,
             sent_at,
             valid_until,
             created_by,
             fine_applied_days,
             last_fine_email_sent,
             initial_email_sent,
-            qr_expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            qr_expires_at,
+            fine_start_date,
+            daily_fine_rate,
+            max_fine
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
@@ -62,13 +74,25 @@ const createBill = async (connection, billData) => {
             billData.admin_qr || null,
             billData.admin_qr_public_id || null,
             billData.admin_qr_resource_type || null,
+            billData.payment_bank_name || null,
+            billData.payment_account_holder_name || null,
+            billData.payment_account_number || null,
+            billData.payment_ifsc_code || null,
+            billData.payment_upi_id || null,
+            billData.payment_details_source || 'pg',
+            billData.payment_details_qr || null,
+            billData.payment_details_qr_public_id || null,
+            billData.payment_details_qr_resource_type || null,
             billData.sent_at,
             billData.valid_until,
             billData.created_by,
             billData.fine_applied_days || 0,
             billData.last_fine_email_sent || null,
             billData.initial_email_sent || 0,
-            billData.qr_expires_at || null
+            billData.qr_expires_at || null,
+            billData.fine_start_date || null,
+            billData.daily_fine_rate || 100,
+            billData.max_fine || 0
         ]
     );
     return result.insertId;
@@ -94,7 +118,14 @@ const getUnpaidTenants = async () => {
             td.paid_from,
             td.payment_date,
             td.pg_id,
+            td.room_id,
             p.name as pg_name,
+            p.payment_bank_name,
+            p.payment_account_holder_name,
+            p.payment_account_number,
+            p.payment_ifsc_code,
+            p.payment_upi_id,
+            p.payment_qr,
             r.room_number,
             (
                 SELECT status FROM bills
@@ -171,9 +202,9 @@ const getBills = async (filters = {}) => {
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
             END as qr_status,
-            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
-            )) as due_amount
+            GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) as due_amount,
+        CASE WHEN b.bill_group_id IS NULL THEN 0 ELSE 1 END AS is_group_bill,
+        (SELECT COUNT(*) FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id) AS group_member_count
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         LEFT JOIN tenant_details td ON t.id = td.tenant_id
@@ -198,8 +229,8 @@ const getBills = async (filters = {}) => {
     }
 
     if (filters.tenant_id) {
-        query += ` AND b.tenant_id = ?`;
-        params.push(filters.tenant_id);
+        query += ` AND (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))`;
+        params.push(filters.tenant_id, filters.tenant_id);
     }
 
     if (filters.pg_id) {
@@ -252,13 +283,24 @@ const getBillById = async (billId) => {
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
             END as qr_status,
-            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
-            )) as due_amount,
+            GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) as due_amount,
             b.cash_payment_otp,
             b.cash_payment_otp_expiry,
             b.cash_payment_verified,
-            b.cash_payment_requested_at
+            b.cash_payment_requested_at,
+            b.payment_bank_name,
+            b.payment_account_holder_name,
+            b.payment_account_number,
+            b.payment_ifsc_code,
+            b.payment_upi_id,
+            b.payment_details_source,
+            b.payment_details_qr,
+            b.payment_details_qr_public_id,
+            b.payment_details_qr_resource_type,
+            COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))='cash'),0) AS ledger_cash_paid,
+            COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))<>'cash'),0) AS ledger_online_paid,
+            (SELECT bal.note FROM bill_audit_logs bal WHERE bal.bill_id=b.id ORDER BY bal.created_at DESC, bal.id DESC LIMIT 1) AS admin_note,
+            (SELECT a.name FROM bill_audit_logs bal LEFT JOIN admins a ON a.id=bal.admin_id WHERE bal.bill_id=b.id ORDER BY bal.created_at DESC, bal.id DESC LIMIT 1) AS admin_note_by
         FROM bills b
         INNER JOIN tenants t ON b.tenant_id = t.id
         INNER JOIN tenant_details td ON t.id = td.tenant_id
@@ -289,14 +331,12 @@ const getBillsByTenant = async (tenantId) => {
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at <= NOW() THEN 'expired'
                 ELSE 'none'
             END as qr_status,
-            (b.total_amount + b.fine_amount - b.paid_amount - COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 0
-            )) as due_amount
+            GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) as due_amount
         FROM bills b
-        WHERE b.tenant_id = ? AND b.deleted_at IS NULL
+        WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?)) AND b.deleted_at IS NULL
         ORDER BY b.created_at DESC
         `,
-        [tenantId]
+        [tenantId, tenantId]
     );
     return rows;
 };
@@ -818,8 +858,19 @@ const insertBillAudit = async (connection, { bill_id, admin_id, action, before_d
     }
 };
 
+const getBillGroupMembers = async (billId) => {
+    const [rows] = await db.execute(`
+        SELECT bgm.tenant_id, t.full_name, t.email, t.phone
+        FROM bill_group_members bgm
+        INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+        INNER JOIN tenants t ON t.id=bgm.tenant_id
+        WHERE bg.bill_id=? ORDER BY t.full_name`, [billId]);
+    return rows;
+};
+
 module.exports = {
     createBill,
+    getBillGroupMembers,
     getUnpaidTenants,
     getBills,
     getBillById,

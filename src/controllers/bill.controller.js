@@ -4,28 +4,53 @@ const createBill = async (req, res) => {
     try {
         const {
             tenant_id,
+            tenant_ids,
             rent_amount,
             electricity_amount,
             maintenance_amount,
             other_charges,
-            billing_month
+            billing_month,
+            payment_details_source,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
+            bill_mode
         } = req.body;
 
-        if (!tenant_id || !rent_amount) {
+        let selectedTenantIds = [];
+        if (tenant_ids) {
+            if (Array.isArray(tenant_ids)) selectedTenantIds = tenant_ids;
+            else {
+                try { selectedTenantIds = JSON.parse(tenant_ids); }
+                catch (_) { selectedTenantIds = String(tenant_ids).split(','); }
+            }
+        }
+        if (!selectedTenantIds.length && tenant_id) selectedTenantIds = [tenant_id];
+
+        if (!selectedTenantIds.length || !rent_amount) {
             return res.status(400).json({
                 success: false,
-                message: "Tenant ID and rent amount are required"
+                message: "At least one tenant and rent amount are required"
             });
         }
 
         const billData = {
-            tenant_id: parseInt(tenant_id),
             rent_amount: parseFloat(rent_amount),
             electricity_amount: parseFloat(electricity_amount || 0),
             maintenance_amount: parseFloat(maintenance_amount || 0),
             other_charges: parseFloat(other_charges || 0),
             billing_month: billing_month || null,
-            created_by: req.admin.id
+            payment_details_source: payment_details_source || 'pg',
+            payment_bank_name: payment_bank_name?.trim() || null,
+            payment_account_holder_name: payment_account_holder_name?.trim() || null,
+            payment_account_number: payment_account_number?.trim() || null,
+            payment_ifsc_code: payment_ifsc_code?.trim() || null,
+            payment_upi_id: payment_upi_id?.trim() || null,
+            created_by: req.admin.id,
+            admin_name: req.admin.name || req.admin.full_name || 'Admin',
+            bill_mode: String(bill_mode || 'individual').toLowerCase() === 'group' ? 'group' : 'individual'
         };
 
         const files = {
@@ -33,12 +58,14 @@ const createBill = async (req, res) => {
             paymentQr: req.files?.paymentQr || []
         };
 
-        const bill = await billService.createBill(billData, files);
+        const result = await billService.createBillsForTenants(selectedTenantIds, billData, files);
 
         return res.status(201).json({
             success: true,
-            message: "Bill created and sent successfully",
-            data: bill
+            message: result.failed_count
+                ? `Bills created for ${result.created_count} tenant(s); ${result.failed_count} tenant(s) were skipped`
+                : `Bills created and sent successfully to ${result.created_count} tenant(s)`,
+            data: result
         });
 
     } catch (error) {

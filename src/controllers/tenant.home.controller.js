@@ -63,13 +63,13 @@ const getTenantHomeData = async (req, res) => {
                 valid_until,
                 DATEDIFF(CURDATE(), sent_at) as days_since_sent,
                 DATEDIFF(valid_until, CURDATE()) as days_until_valid
-            FROM bills 
-            WHERE tenant_id = ? 
-              AND deleted_at IS NULL
+            FROM bills b
+            WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
+              AND b.deleted_at IS NULL
             ORDER BY created_at DESC 
             LIMIT 1
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
 
         const currentBill = billData[0] || null;

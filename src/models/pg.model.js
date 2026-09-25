@@ -16,8 +16,13 @@ const createPG = async (connection, pgData) => {
             payment_qr,
             payment_qr_public_id,
             payment_qr_resource_type,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
             created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             pgData.name,
@@ -28,6 +33,11 @@ const createPG = async (connection, pgData) => {
             pgData.payment_qr || null,
             pgData.payment_qr_public_id || null,
             pgData.payment_qr_resource_type || null,
+            pgData.payment_bank_name || null,
+            pgData.payment_account_holder_name || null,
+            pgData.payment_account_number || null,
+            pgData.payment_ifsc_code || null,
+            pgData.payment_upi_id || null,
             pgData.created_by
         ]
     );
@@ -103,6 +113,11 @@ const findById = async (pgId) => {
             payment_qr,
             payment_qr_public_id,
             payment_qr_resource_type,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
             is_active,
             created_by,
             created_at,
@@ -324,6 +339,11 @@ const getAllPGs = async (search = null, isActive = null) => {
             p.rent,
             p.security_fee,
             p.payment_qr,
+            p.payment_bank_name,
+            p.payment_account_holder_name,
+            p.payment_account_number,
+            p.payment_ifsc_code,
+            p.payment_upi_id,
             p.is_active,
             p.created_by,
             p.created_at,
@@ -463,7 +483,12 @@ const updatePG = async (connection, pgId, pgData) => {
             security_fee = ?,
             payment_qr = ?,
             payment_qr_public_id = ?,
-            payment_qr_resource_type = ?
+            payment_qr_resource_type = ?,
+            payment_bank_name = ?,
+            payment_account_holder_name = ?,
+            payment_account_number = ?,
+            payment_ifsc_code = ?,
+            payment_upi_id = ?
         WHERE id = ?
         `,
         [
@@ -475,6 +500,11 @@ const updatePG = async (connection, pgId, pgData) => {
             pgData.payment_qr || null,
             pgData.payment_qr_public_id || null,
             pgData.payment_qr_resource_type || null,
+            pgData.payment_bank_name || null,
+            pgData.payment_account_holder_name || null,
+            pgData.payment_account_number || null,
+            pgData.payment_ifsc_code || null,
+            pgData.payment_upi_id || null,
             pgId
         ]
     );

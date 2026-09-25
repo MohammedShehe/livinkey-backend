@@ -440,8 +440,11 @@ const sendCashPaymentOTPEmail = async (email, tenantName, otp, amount, pgName, r
 
 // ============ PAYMENT LINK EMAIL ============
 const sendPaymentLinkEmail = async (email, tenantName, billData, paymentOptions, orderData) => {
-    const totalDue = parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) - 
-                     parseFloat(billData.paid_amount || 0) - parseFloat(billData.total_cash_paid || 0);
+    const totalDue = Math.max(
+        parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) -
+        parseFloat(billData.paid_amount || 0),
+        0
+    );
 
     const content = `
     <tr>

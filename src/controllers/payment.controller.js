@@ -128,6 +128,9 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 bp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -155,6 +158,9 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 cp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -184,6 +190,9 @@ const getPaymentHistory = async (req, res) => {
             SELECT 
                 pp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -293,6 +302,32 @@ const getPaymentHistory = async (req, res) => {
  * ============================================================
  */
 
+const attachReceiptLedgerContext = async (connection, paymentData, type) => {
+    if (!paymentData || (type === 'proof' && paymentData.status !== 'verified')) return paymentData;
+    let ledgerId = null;
+    if (type === 'online') ledgerId = paymentData.id;
+    if (type === 'cash') {
+        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [`CASH-${paymentData.id}`, paymentData.bill_id]);
+        ledgerId = rows[0]?.id || null;
+    }
+    if (type === 'proof') {
+        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [paymentData.transaction_id, paymentData.bill_id]);
+        ledgerId = rows[0]?.id || null;
+    }
+    if (!ledgerId) return paymentData;
+    const [ledgerRows] = await connection.execute(`SELECT id, payment_date, amount FROM bill_payments WHERE id = ? LIMIT 1`, [ledgerId]);
+    if (!ledgerRows.length) return paymentData;
+    const ledger = ledgerRows[0];
+    const [priorRows] = await connection.execute(
+        `SELECT COALESCE(SUM(amount),0) AS paid_before_payment FROM bill_payments WHERE bill_id = ? AND (payment_date < ? OR (payment_date = ? AND id < ?))`,
+        [paymentData.bill_id, ledger.payment_date, ledger.payment_date, ledger.id]
+    );
+    paymentData.paid_before_payment = Number(priorRows[0]?.paid_before_payment || 0);
+    paymentData.payment_date = ledger.payment_date;
+    paymentData.paid_amount = paymentData.paid_before_payment + Number(paymentData.amount_paid ?? paymentData.amount ?? 0);
+    return paymentData;
+};
+
 const _fetchReceiptData = async (type, paymentId) => {
     const connection = await db.getConnection();
     let paymentData = null;
@@ -303,6 +338,9 @@ const _fetchReceiptData = async (type, paymentId) => {
             SELECT 
                 bp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -338,6 +376,9 @@ const _fetchReceiptData = async (type, paymentId) => {
             SELECT 
                 cp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -375,6 +416,9 @@ const _fetchReceiptData = async (type, paymentId) => {
             SELECT 
                 pp.*,
                 b.total_amount as bill_total,
+                    b.billing_month,
+                    b.period_from,
+                    b.period_till,
                 b.status as bill_status,
                 b.rent_amount,
                 b.electricity_amount,
@@ -406,6 +450,7 @@ const _fetchReceiptData = async (type, paymentId) => {
         paymentData = rows[0];
     }
 
+    if (paymentData) await attachReceiptLedgerContext(connection, paymentData, type);
     connection.release();
     return paymentData;
 };
@@ -430,6 +475,12 @@ const getReceiptAdmin = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Payment not found"
+            });
+        }
+        if (type === 'proof' && paymentData.status !== 'verified') {
+            return res.status(400).json({
+                success: false,
+                message: "A receipt is available only after the payment proof is verified."
             });
         }
 
@@ -467,6 +518,12 @@ const downloadReceiptAdmin = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Payment not found"
+            });
+        }
+        if (type === 'proof' && paymentData.status !== 'verified') {
+            return res.status(400).json({
+                success: false,
+                message: "A receipt is available only after the payment proof is verified."
             });
         }
 

@@ -181,16 +181,32 @@ const createCashfreeOrder = async (orderData) => {
 
 const generatePaymentOptions = async (billData, options = {}) => {
     const {
-        upiId = process.env.MERCHANT_UPI_ID || "merchant@upi",
+        upiId = billData.payment_upi_id || process.env.MERCHANT_UPI_ID || "merchant@upi",
         transactionNote = "Payment for PG Rent",
         includeQR = true,
+        amount = null,
     } = options;
 
-    const totalDue = parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) - 
-                     parseFloat(billData.paid_amount || 0) - parseFloat(billData.total_cash_paid || 0);
+    const configuredUpiId = billData.payment_upi_id || null;
+    if (billData.payment_details_source && !configuredUpiId) {
+        throw new Error("UPI ID is not configured for this bill. Please use the bank details or payment QR code shown on the bill.");
+    }
+
+    const totalDue = Math.max(
+        parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) -
+        parseFloat(billData.paid_amount || 0),
+        0
+    );
 
     if (totalDue <= 0) {
         throw new Error("No amount due for this bill");
+    }
+
+    const requestedAmount = amount === null || amount === undefined || amount === ''
+        ? totalDue
+        : Number(amount);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0 || requestedAmount > totalDue + 0.005) {
+        throw new Error(`Payment amount must be greater than 0 and no more than the current due amount of ₹${totalDue.toFixed(2)}`);
     }
 
     const transactionId = generateTransactionId('LIV');
@@ -200,9 +216,9 @@ const generatePaymentOptions = async (billData, options = {}) => {
 
     if (includeQR) {
         const qrResult = await generateUPIQRCode({
-            payeeName: process.env.MERCHANT_NAME || "Livinkey",
+            payeeName: billData.payment_account_holder_name || process.env.MERCHANT_NAME || "Livinkey",
             payeeUPI: upiId,
-            amount: totalDue,
+            amount: requestedAmount,
             transactionId: transactionId,
             transactionNote: transactionNote,
         });
@@ -225,6 +241,7 @@ const generatePaymentOptions = async (billData, options = {}) => {
     return {
         transaction_id: transactionId,
         total_due: totalDue,
+        payment_amount: requestedAmount,
         upi_link: upiLink,
         app_links: appLinks,
         qr_code: qrUploadResult ? qrUploadResult.secure_url : null,
@@ -258,8 +275,11 @@ const generatePaymentOptions = async (billData, options = {}) => {
 };
 
 const createPaymentOrder = async (billData, tenantData) => {
-    const totalDue = parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) - 
-                     parseFloat(billData.paid_amount || 0) - parseFloat(billData.total_cash_paid || 0);
+    const totalDue = Math.max(
+        parseFloat(billData.total_amount) + parseFloat(billData.fine_amount || 0) -
+        parseFloat(billData.paid_amount || 0),
+        0
+    );
 
     if (totalDue <= 0) {
         throw new Error("No amount due for this bill");
@@ -402,41 +422,69 @@ const processWebhook = async (gateway, payload) => {
                 throw new Error(`Unsupported gateway: ${gateway}`);
         }
         
+        const [txRows] = await connection.execute(
+            `SELECT * FROM payment_transactions WHERE gateway_order_id = ? FOR UPDATE`,
+            [orderId]
+        );
+        if (!txRows.length) throw new Error("Payment transaction not found for webhook");
+        const transaction = txRows[0];
+
+        // Idempotency: a replayed successful webhook must never add money twice.
+        if (transaction.status === 'success') {
+            await connection.commit();
+            return { success: true, order_id: orderId, status: 'success', duplicate: true };
+        }
+
         await updateTransactionStatus(connection, orderId, status, payload);
-        
+
         if (status === 'success') {
-            const [transactions] = await connection.execute(
-                `SELECT bill_id, amount FROM payment_transactions WHERE gateway_order_id = ?`,
-                [orderId]
+            const billId = transaction.bill_id;
+            const paidAmount = Number(transaction.amount);
+            const [bills] = await connection.execute(
+                `SELECT * FROM bills WHERE id = ? AND deleted_at IS NULL FOR UPDATE`,
+                [billId]
             );
-            
-            if (transactions.length > 0) {
-                const transaction = transactions[0];
-                const billId = transaction.bill_id;
-                const paidAmount = transaction.amount;
-                
-                const [bills] = await connection.execute(
-                    `SELECT * FROM bills WHERE id = ?`,
+            if (!bills.length) throw new Error("Bill not found");
+
+            const bill = bills[0];
+            const due = Math.max(Number(bill.total_amount) + Number(bill.fine_amount || 0) - Number(bill.paid_amount || 0), 0);
+            if (paidAmount > due + 0.005) throw new Error("Gateway payment exceeds current bill due");
+
+            const isPartial = paidAmount < due - 0.005;
+            if (isPartial && paidAmount + 0.005 < due * 0.5) {
+                throw new Error("Online partial payment must be at least 50% of the current due");
+            }
+            if (isPartial) {
+                const [partialRows] = await connection.execute(
+                    `SELECT id FROM bill_payments WHERE bill_id=? AND is_partial=1 LIMIT 1`,
                     [billId]
                 );
-                
-                if (bills.length > 0) {
-                    const bill = bills[0];
-                    const newPaidAmount = parseFloat(bill.paid_amount || 0) + parseFloat(paidAmount);
-                    const remainingAmount = parseFloat(bill.total_amount) + parseFloat(bill.fine_amount || 0) - newPaidAmount;
-                    
-                    let newStatus = 'paid';
-                    if (remainingAmount > 0) {
-                        newStatus = 'partially_paid';
-                    }
-                    
-                    await connection.execute(
-                        `UPDATE bills SET paid_amount = ?, status = ? WHERE id = ?`,
-                        [newPaidAmount, newStatus, billId]
-                    );
+                if (partialRows.length) throw new Error("A partial payment has already been recorded for this bill");
+            }
 
-                    // Update tenant_details paid_till based on actual amount
-                    await updateTenantPaidTill(connection, bill.tenant_id, null);
+            const [dup] = await connection.execute(
+                `SELECT id FROM bill_payments WHERE transaction_id = ? LIMIT 1`,
+                [paymentId || orderId]
+            );
+            if (!dup.length) {
+                await connection.execute(
+                    `INSERT INTO bill_payments (bill_id, amount, payment_method, transaction_id, is_partial)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [billId, paidAmount, transaction.payment_type || 'upi', paymentId || orderId, isPartial ? 1 : 0]
+                );
+            }
+
+            const newPaidAmount = Number(bill.paid_amount || 0) + paidAmount;
+            const remainingAmount = Math.max(Number(bill.total_amount) + Number(bill.fine_amount || 0) - newPaidAmount, 0);
+            const newStatus = remainingAmount <= 0.005 ? 'paid' : 'partially_paid';
+
+            await connection.execute(
+                `UPDATE bills SET paid_amount = ?,
+                    status = ?,
+                    partial_payment_made_at=CASE WHEN ?=1 AND partial_payment_made_at IS NULL THEN NOW() ELSE partial_payment_made_at END
+                 WHERE id = ?`,
+                [newPaidAmount, newStatus, isPartial ? 1 : 0, billId]
+            );
 
                     // Delete QR codes if fully paid
                     if (newStatus === 'paid') {
@@ -466,8 +514,6 @@ const processWebhook = async (gateway, payload) => {
                         }
                     }
                 }
-            }
-        }
         
         await connection.commit();
         return { success: true, order_id: orderId, status: status };

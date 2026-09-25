@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const generatePaymentReceipt = (paymentData, type) => {
     const paymentDate = paymentData.payment_date || paymentData.created_at || new Date();
     const formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
@@ -12,9 +14,25 @@ const generatePaymentReceipt = (paymentData, type) => {
 
     const amount = type === 'proof' ? paymentData.amount_paid : paymentData.amount;
     const transactionId = type === 'proof' ? paymentData.transaction_id : paymentData.transaction_id || 'N/A';
-    const paymentMethod = type === 'online' ? 'Online Payment' : 
-                         type === 'cash' ? 'Cash Payment' : 
+    const paymentMethod = type === 'online' ? 'Online Payment' :
+                         type === 'cash' ? 'Cash Payment' :
                          'Payment Proof';
+    const receiptNumber = paymentData.receipt_number ||
+        `LK-${new Date(paymentDate).toISOString().slice(0, 7).replace('-', '')}-${paymentData.id || 'NA'}`;
+    const billTotal = parseFloat(paymentData.bill_total || paymentData.total_amount || 0);
+    const billGrandTotal = billTotal + parseFloat(paymentData.fine_amount || 0);
+    const paidBeforeLedger = paymentData.paid_before_payment != null
+        ? parseFloat(paymentData.paid_before_payment) || 0
+        : Math.max((parseFloat(paymentData.paid_amount || 0) || 0) - (parseFloat(amount || 0) || 0), 0);
+    const paidBefore = Math.max(billGrandTotal - paidBeforeLedger, 0);
+    const dueAfter = Math.max(paidBefore - (parseFloat(amount || 0) || 0), 0);
+    let logoDataUri = '';
+    try {
+        const logoPath = path.join(__dirname, '../../../frontend/assets/img/black_logo.png');
+        if (fs.existsSync(logoPath)) {
+            logoDataUri = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
+        }
+    } catch (_) {}
 
     // Get status with proper formatting
     let status = paymentData.status || 'completed';
@@ -50,6 +68,22 @@ const generatePaymentReceipt = (paymentData, type) => {
         <tr>
             <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #333;">Total Bill</td>
             <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A;">₹${parseFloat(paymentData.bill_total || 0).toFixed(2)}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #555;">Bill Month</td>
+            <td style="padding: 8px 0; text-align: right; color: #333;">${paymentData.billing_month || 'N/A'}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #555;">Bill Period</td>
+            <td style="padding: 8px 0; text-align: right; color: #333;">${paymentData.period_from || 'N/A'}${paymentData.period_till ? ` to ${paymentData.period_till}` : ''}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #555;">Due Before Payment</td>
+            <td style="padding: 8px 0; text-align: right; color: #333;">₹${paidBefore.toFixed(2)}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #555;">Due After Payment</td>
+            <td style="padding: 8px 0; text-align: right; color: #333;">₹${dueAfter.toFixed(2)}</td>
         </tr>
         <tr>
             <td style="padding: 8px 0; font-weight: 600; color: #333;">Amount Paid</td>
@@ -268,7 +302,7 @@ const generatePaymentReceipt = (paymentData, type) => {
             <div class="receipt-header">
                 <h1>🧾 Payment Receipt</h1>
                 <div class="receipt-number">
-                    #${paymentData.id || 'N/A'}
+                    ${receiptNumber}
                 </div>
             </div>
 
@@ -277,6 +311,7 @@ const generatePaymentReceipt = (paymentData, type) => {
                 <!-- Company Info -->
                 <div class="company-info">
                     <div>
+                        ${logoDataUri ? `<img src="${logoDataUri}" alt="Livinkey" style="max-width:180px;max-height:54px;object-fit:contain;margin-bottom:10px;">` : ''}
                         <div class="name">Livinkey</div>
                         <div class="details">
                             PG Management System<br>

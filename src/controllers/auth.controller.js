@@ -417,3 +417,30 @@ exports.changePassword = async (req, res) => {
         });
     }
 };
+
+/**
+ * Validate the current admin token and return the current admin profile.
+ * GET /api/auth/validate
+ */
+exports.validate = async (req, res) => {
+    try {
+        const adminId = req.admin?.id;
+        if (!adminId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const admin = await Admin.getAdminById(adminId);
+        if (!admin || admin.is_active === 0) {
+            return res.status(401).json({ success: false, message: "Session is invalid or account is disabled." });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Token is valid.",
+            user: admin
+        });
+    } catch (error) {
+        console.error("Auth validate error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error." });
+    }
+};

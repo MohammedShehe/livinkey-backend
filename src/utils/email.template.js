@@ -263,6 +263,36 @@ const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQ
         </tr>`;
     }
 
+    const paymentDetailsHtml = `
+        <tr>
+            <td style="padding: 0 40px 30px;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#f8faf5;border-radius:12px;border:1px solid #e8ecf1;">
+                    <tr><td style="padding:24px;">
+                        <p style="color:#000;font-size:16px;font-weight:600;margin:0 0 14px;">🏦 Payment Details</p>
+                        <table width="100%" style="border-collapse:collapse;">
+                            <tr><td style="padding:5px 0;color:#4a5568;">Bank Name</td><td style="padding:5px 0;text-align:right;font-weight:600;">${billData.payment_bank_name || '—'}</td></tr>
+                            <tr><td style="padding:5px 0;color:#4a5568;">Account Holder</td><td style="padding:5px 0;text-align:right;font-weight:600;">${billData.payment_account_holder_name || '—'}</td></tr>
+                            <tr><td style="padding:5px 0;color:#4a5568;">Account Number</td><td style="padding:5px 0;text-align:right;font-weight:600;">${billData.payment_account_number || '—'}</td></tr>
+                            <tr><td style="padding:5px 0;color:#4a5568;">IFSC</td><td style="padding:5px 0;text-align:right;font-weight:600;">${billData.payment_ifsc_code || '—'}</td></tr>
+                            ${billData.payment_upi_id ? `<tr><td style="padding:5px 0;color:#4a5568;">UPI ID</td><td style="padding:5px 0;text-align:right;font-weight:600;">${billData.payment_upi_id}</td></tr>` : ''}
+                        </table>
+                    </td></tr>
+                </table>
+            </td>
+        </tr>`;
+
+    const paymentDetailsQrHtml = billData.payment_details_qr ? `
+        <tr>
+            <td style="padding: 0 40px 30px;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#f8faf5;border-radius:12px;border:1px solid #e8ecf1;">
+                    <tr><td style="padding:24px;text-align:center;">
+                        <p style="color:#000;font-size:14px;font-weight:600;margin:0 0 12px;">📱 Payment QR Code</p>
+                        <div style="display:inline-block;background:#fff;border-radius:8px;padding:12px;border:1px solid #e8ecf1;"><img src="${billData.payment_details_qr}" alt="Payment QR" style="width:180px;height:180px;display:block;"></div>
+                    </td></tr>
+                </table>
+            </td>
+        </tr>` : '';
+
     let adminQrHtml = '';
     if (adminQrUrl) {
         adminQrHtml = `
@@ -394,6 +424,8 @@ const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQ
             </table>
         </td>
     </tr>
+    ${paymentDetailsHtml}
+    ${paymentDetailsQrHtml}
     ${meterHtml}
     ${adminQrHtml}
     ${fullQrHtml}

@@ -83,23 +83,13 @@ const generateUPIQRCode = async (params) => {
  * @returns {Object} Payment links for different apps
  */
 const getAppPaymentLinks = (upiLink) => {
+    const query = String(upiLink || '').split('?')[1] || '';
     return {
-        // Deep link (works with any UPI app)
         deep_link: upiLink,
-        
-        // PhonePe
-        phonepe: upiLink,
-        
-        // Paytm
-        paytm: upiLink,
-        
-        // Google Pay (Tez)
-        googlepay: upiLink,
-        
-        // Generic UPI
+        phonepe: query ? `phonepe://pay?${query}` : upiLink,
+        paytm: query ? `paytmmp://pay?${query}` : upiLink,
+        googlepay: query ? `tez://upi/pay?${query}` : upiLink,
         upi: upiLink,
-        
-        // Web fallback (some apps require different format)
         web: upiLink.replace("upi://pay", "https://pay.upi.in/upi"),
     };
 };

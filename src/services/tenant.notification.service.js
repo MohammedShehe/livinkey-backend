@@ -121,7 +121,7 @@ const sendTenantNotification = async (tenantId, type, data, pushData = null) => 
         const notificationId = await TenantNotificationModel.createTenantNotification(tenantId, {
             type: config.type,
             title: data.title,
-            message: data.message,
+            message: data.actor_name ? `(${data.actor_name}) ${data.message}` : data.message,
             entity_id: data.entity_id || null,
             entity_type: data.entity_type || null,
             link: data.link || (config.linkPrefix + (data.entity_id || '')),

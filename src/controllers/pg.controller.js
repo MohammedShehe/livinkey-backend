@@ -12,6 +12,11 @@ const createPG = async (req, res) => {
             number_of_floors,
             rent,
             security_fee,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
             amenities,
             floors
         } = req.body;
@@ -28,6 +33,13 @@ const createPG = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Rent is required and must be greater than 0."
+            });
+        }
+
+        if (!payment_bank_name?.trim() || !payment_account_holder_name?.trim() || !payment_account_number?.trim() || !payment_ifsc_code?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Bank Name, Account Holder Name, Account Number and IFSC are required for PG payment details."
             });
         }
 
@@ -109,6 +121,11 @@ const createPG = async (req, res) => {
             number_of_floors: parseInt(number_of_floors),
             rent: parseFloat(rent),
             security_fee: parseFloat(security_fee) || 0,
+            payment_bank_name: payment_bank_name.trim(),
+            payment_account_holder_name: payment_account_holder_name.trim(),
+            payment_account_number: payment_account_number.trim(),
+            payment_ifsc_code: payment_ifsc_code.trim().toUpperCase(),
+            payment_upi_id: payment_upi_id?.trim() || null,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             created_by: req.admin.id
@@ -222,6 +239,11 @@ const updatePG = async (req, res) => {
             number_of_floors,
             rent,
             security_fee,
+            payment_bank_name,
+            payment_account_holder_name,
+            payment_account_number,
+            payment_ifsc_code,
+            payment_upi_id,
             amenities,
             floors,
             remove_qr
@@ -238,6 +260,13 @@ const updatePG = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Rent is required and must be greater than 0."
+            });
+        }
+
+        if (!payment_bank_name?.trim() || !payment_account_holder_name?.trim() || !payment_account_number?.trim() || !payment_ifsc_code?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Bank Name, Account Holder Name, Account Number and IFSC are required for PG payment details."
             });
         }
 
@@ -309,6 +338,11 @@ const updatePG = async (req, res) => {
             number_of_floors: parseInt(number_of_floors),
             rent: parseFloat(rent),
             security_fee: parseFloat(security_fee) || 0,
+            payment_bank_name: payment_bank_name.trim(),
+            payment_account_holder_name: payment_account_holder_name.trim(),
+            payment_account_number: payment_account_number.trim(),
+            payment_ifsc_code: payment_ifsc_code.trim().toUpperCase(),
+            payment_upi_id: payment_upi_id?.trim() || null,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             remove_qr: remove_qr === true || remove_qr === 'true'
