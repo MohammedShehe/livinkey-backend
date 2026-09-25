@@ -184,17 +184,41 @@ const getBills = async (filters = {}) => {
             t.phone as tenant_phone,
             p.name as pg_name,
             r.room_number,
+            /* Payment summary:
+               - bill_payments is the online/ledger source.
+               - cash_payments is the authoritative cash source, including
+                 legacy cash payments created before the current ledger flow.
+               Cash payments may also have a CASH-<id> bill_payments ledger
+               row in newer data, so exclude those from online totals. */
             COALESCE(
-                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 0), 
-                0
+                (SELECT SUM(amount)
+                 FROM bill_payments
+                 WHERE bill_id = b.id
+                   AND LOWER(COALESCE(payment_method,'')) <> 'cash'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM cash_payments cp
+                       WHERE cp.bill_id = b.id
+                         AND cp.status = 'verified'
+                         AND bill_payments.transaction_id = CONCAT('CASH-', cp.id)
+                   )
+                ), 0
+            ) +
+            COALESCE(
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_paid,
             COALESCE(
-                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
-                0
+                (SELECT SUM(amount)
+                 FROM bill_payments
+                 WHERE bill_id = b.id AND is_partial = 1
+                   AND LOWER(COALESCE(payment_method,'')) <> 'cash'), 0
             ) as total_partial_paid,
             COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
-                0
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_cash_paid,
             DATEDIFF(NOW(), b.sent_at) as days_since_sent,
             CASE 
@@ -265,17 +289,41 @@ const getBillById = async (billId) => {
             td.room_id,
             p.name as pg_name,
             r.room_number,
+            /* Payment summary:
+               - bill_payments is the online/ledger source.
+               - cash_payments is the authoritative cash source, including
+                 legacy cash payments created before the current ledger flow.
+               Cash payments may also have a CASH-<id> bill_payments ledger
+               row in newer data, so exclude those from online totals. */
             COALESCE(
-                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 0), 
-                0
+                (SELECT SUM(amount)
+                 FROM bill_payments
+                 WHERE bill_id = b.id
+                   AND LOWER(COALESCE(payment_method,'')) <> 'cash'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM cash_payments cp
+                       WHERE cp.bill_id = b.id
+                         AND cp.status = 'verified'
+                         AND bill_payments.transaction_id = CONCAT('CASH-', cp.id)
+                   )
+                ), 0
+            ) +
+            COALESCE(
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_paid,
             COALESCE(
-                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id AND is_partial = 1), 
-                0
+                (SELECT SUM(amount)
+                 FROM bill_payments
+                 WHERE bill_id = b.id AND is_partial = 1
+                   AND LOWER(COALESCE(payment_method,'')) <> 'cash'), 0
             ) as total_partial_paid,
             COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
-                0
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_cash_paid,
             DATEDIFF(NOW(), b.sent_at) as days_since_sent,
             CASE 
@@ -297,8 +345,25 @@ const getBillById = async (billId) => {
             b.payment_details_qr,
             b.payment_details_qr_public_id,
             b.payment_details_qr_resource_type,
-            COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))='cash'),0) AS ledger_cash_paid,
-            COALESCE((SELECT SUM(amount) FROM bill_payments WHERE bill_id=b.id AND LOWER(COALESCE(payment_method,''))<>'cash'),0) AS ledger_online_paid,
+            COALESCE(
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id=b.id AND status='verified'), 0
+            ) AS ledger_cash_paid,
+            COALESCE(
+                (SELECT SUM(amount)
+                 FROM bill_payments bp2
+                 WHERE bp2.bill_id=b.id
+                   AND LOWER(COALESCE(bp2.payment_method,''))<>'cash'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM cash_payments cp2
+                       WHERE cp2.bill_id=b.id
+                         AND cp2.status='verified'
+                         AND bp2.transaction_id=CONCAT('CASH-', cp2.id)
+                   )
+                ), 0
+            ) AS ledger_online_paid,
             (SELECT bal.note FROM bill_audit_logs bal WHERE bal.bill_id=b.id ORDER BY bal.created_at DESC, bal.id DESC LIMIT 1) AS admin_note,
             (SELECT a.name FROM bill_audit_logs bal LEFT JOIN admins a ON a.id=bal.admin_id WHERE bal.bill_id=b.id ORDER BY bal.created_at DESC, bal.id DESC LIMIT 1) AS admin_note_by
         FROM bills b
@@ -319,12 +384,28 @@ const getBillsByTenant = async (tenantId) => {
         SELECT 
             b.*,
             COALESCE(
-                (SELECT SUM(amount) FROM bill_payments WHERE bill_id = b.id), 
-                0
+                (SELECT SUM(amount)
+                 FROM bill_payments
+                 WHERE bill_id = b.id
+                   AND LOWER(COALESCE(payment_method,'')) <> 'cash'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM cash_payments cp
+                       WHERE cp.bill_id = b.id
+                         AND cp.status = 'verified'
+                         AND bill_payments.transaction_id = CONCAT('CASH-', cp.id)
+                   )
+                ), 0
+            ) +
+            COALESCE(
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_paid,
             COALESCE(
-                (SELECT SUM(amount) FROM cash_payments WHERE bill_id = b.id AND status = 'verified'), 
-                0
+                (SELECT SUM(amount)
+                 FROM cash_payments
+                 WHERE bill_id = b.id AND status = 'verified'), 0
             ) as total_cash_paid,
             CASE 
                 WHEN b.qr_expires_at IS NOT NULL AND b.qr_expires_at > NOW() THEN 'active'
