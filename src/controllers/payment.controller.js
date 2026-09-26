@@ -146,10 +146,22 @@ const getPaymentHistory = async (req, res) => {
             LEFT JOIN tenant_details td ON b.tenant_id = td.tenant_id
             LEFT JOIN pgs p ON td.pg_id = p.id
             LEFT JOIN rooms r ON td.room_id = r.id
-            WHERE b.tenant_id = ?
+            WHERE (b.tenant_id = ? OR EXISTS (
+                SELECT 1
+                FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                WHERE bg.bill_id = b.id AND bgm.tenant_id = ?
+            ))
+            AND NOT EXISTS (
+                SELECT 1
+                FROM payment_proofs pp
+                WHERE pp.bill_id = bp.bill_id
+                  AND pp.transaction_id = bp.transaction_id
+                  AND pp.status IN ('pending', 'verified')
+            )
             ORDER BY bp.created_at DESC
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
         
         // Get cash payments
@@ -178,10 +190,15 @@ const getPaymentHistory = async (req, res) => {
             LEFT JOIN pgs p ON td.pg_id = p.id
             LEFT JOIN rooms r ON td.room_id = r.id
             LEFT JOIN admins a ON cp.verified_by = a.id
-            WHERE b.tenant_id = ?
+            WHERE (b.tenant_id = ? OR EXISTS (
+                SELECT 1
+                FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                WHERE bg.bill_id = b.id AND bgm.tenant_id = ?
+            ))
             ORDER BY cp.created_at DESC
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
         
         // Get payment proofs (shared by tenant)
@@ -208,10 +225,15 @@ const getPaymentHistory = async (req, res) => {
             LEFT JOIN tenant_details td ON b.tenant_id = td.tenant_id
             LEFT JOIN pgs p ON td.pg_id = p.id
             LEFT JOIN rooms r ON td.room_id = r.id
-            WHERE pp.tenant_id = ?
+            WHERE (pp.tenant_id = ? OR EXISTS (
+                SELECT 1
+                FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                WHERE bg.bill_id = pp.bill_id AND bgm.tenant_id = ?
+            ))
             ORDER BY pp.created_at DESC
             `,
-            [tenantId]
+            [tenantId, tenantId]
         );
         
         // Get tenant info

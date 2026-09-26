@@ -224,7 +224,7 @@ const submitPaymentProof = async (req, res) => {
             WHERE id = ? AND deleted_at IS NULL AND (tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=bills.id AND bgm.tenant_id = ?))
             FOR UPDATE
             `,
-            [bill_id, tenantId]
+            [bill_id, tenantId, tenantId]
         );
 
         if (billCheck.length === 0) {
@@ -684,20 +684,29 @@ const getPaymentReceipt = async (req, res) => {
                     r.room_number
                 FROM payment_proofs pp
                 INNER JOIN bills b ON pp.bill_id = b.id
-                INNER JOIN tenants t ON b.tenant_id = t.id
+                INNER JOIN tenants t ON pp.tenant_id = t.id
                 LEFT JOIN tenant_details td ON t.id = td.tenant_id
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
-                WHERE pp.id = ? AND pp.tenant_id = ?
+                WHERE pp.id = ?
+                  AND (
+                    pp.tenant_id = ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM bill_group_members bgm
+                        INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                        WHERE bg.bill_id = pp.bill_id
+                          AND bgm.tenant_id = ?
+                    )
+                  )
                 `,
                 [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         }
 
-        connection.release();
-
         if (!paymentData) {
+            connection.release();
             return res.status(404).json({
                 success: false,
                 message: "Payment not found"
@@ -707,6 +716,7 @@ const getPaymentReceipt = async (req, res) => {
             return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
         }
         await attachReceiptLedgerContext(connection, paymentData, type);
+        connection.release();
 
         // Generate receipt HTML
         const receiptHTML = generatePaymentReceipt(paymentData, type);
@@ -859,20 +869,29 @@ const downloadPaymentReceipt = async (req, res) => {
                     r.room_number
                 FROM payment_proofs pp
                 INNER JOIN bills b ON pp.bill_id = b.id
-                INNER JOIN tenants t ON b.tenant_id = t.id
+                INNER JOIN tenants t ON pp.tenant_id = t.id
                 LEFT JOIN tenant_details td ON t.id = td.tenant_id
                 LEFT JOIN pgs p ON td.pg_id = p.id
                 LEFT JOIN rooms r ON td.room_id = r.id
-                WHERE pp.id = ? AND pp.tenant_id = ?
+                WHERE pp.id = ?
+                  AND (
+                    pp.tenant_id = ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM bill_group_members bgm
+                        INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                        WHERE bg.bill_id = pp.bill_id
+                          AND bgm.tenant_id = ?
+                    )
+                  )
                 `,
                 [paymentId, tenantId, tenantId]
             );
             paymentData = rows[0];
         }
 
-        connection.release();
-
         if (!paymentData) {
+            connection.release();
             return res.status(404).json({
                 success: false,
                 message: "Payment not found"
@@ -882,6 +901,7 @@ const downloadPaymentReceipt = async (req, res) => {
             return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
         }
         await attachReceiptLedgerContext(connection, paymentData, type);
+        connection.release();
 
         // Generate receipt HTML
         const receiptHTML = generatePaymentReceipt(paymentData, type);

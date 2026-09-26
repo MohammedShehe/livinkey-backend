@@ -188,34 +188,58 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             r.room_number,
             -- Use bills table as source of truth for payment status
             COALESCE(
-                (SELECT status 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.status 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 'unpaid'
             ) as bill_status,
             COALESCE(
-                (SELECT total_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.total_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_total_amount,
             COALESCE(
-                (SELECT paid_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.paid_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_paid_amount,
             COALESCE(
-                (SELECT fine_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.fine_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_fine_amount
@@ -251,7 +275,17 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
     // Filter by bill_status using the SUBQUERY
     if (bill_status) {
         query += ` AND COALESCE(
-            (SELECT status FROM bills WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1),
+            (SELECT b2.status
+             FROM bills b2
+             WHERE b2.deleted_at IS NULL
+               AND (b2.tenant_id = t.id OR EXISTS (
+                   SELECT 1
+                   FROM bill_group_members bgm2
+                   INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                   WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+               ))
+             ORDER BY b2.created_at DESC
+             LIMIT 1),
             'unpaid'
         ) = ?`;
         params.push(bill_status);
@@ -303,34 +337,58 @@ const findById = async (id) => {
             COALESCE(ro.occupied_count, 0) as occupied_count,
             -- Use bills table as source of truth for payment status
             COALESCE(
-                (SELECT status 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.status 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 'unpaid'
             ) as bill_status,
             COALESCE(
-                (SELECT total_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.total_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_total_amount,
             COALESCE(
-                (SELECT paid_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.paid_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_paid_amount,
             COALESCE(
-                (SELECT fine_amount 
-                 FROM bills 
-                 WHERE tenant_id = t.id 
-                 ORDER BY created_at DESC 
+                (SELECT b2.fine_amount 
+                 FROM bills b2
+                 WHERE b2.deleted_at IS NULL
+                   AND (b2.tenant_id = t.id OR EXISTS (
+                       SELECT 1
+                       FROM bill_group_members bgm2
+                       INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
+                       WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
+                   ))
+                 ORDER BY b2.created_at DESC 
                  LIMIT 1),
                 0
             ) as bill_fine_amount
