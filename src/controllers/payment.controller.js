@@ -325,28 +325,115 @@ const getPaymentHistory = async (req, res) => {
  */
 
 const attachReceiptLedgerContext = async (connection, paymentData, type) => {
-    if (!paymentData || (type === 'proof' && paymentData.status !== 'verified')) return paymentData;
+    if (!paymentData || (type === 'proof' && paymentData.status !== 'verified')) {
+        return paymentData;
+    }
+
     let ledgerId = null;
-    if (type === 'online') ledgerId = paymentData.id;
+
+    if (type === 'online') {
+        ledgerId = paymentData.id;
+    }
+
     if (type === 'cash') {
-        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [`CASH-${paymentData.id}`, paymentData.bill_id]);
+        // Newer cash payments may have a corresponding bill_payments
+        // ledger row. Legacy production cash payments may not. Both must
+        // produce the same receipt/payment totals.
+        const [rows] = await connection.execute(
+            `SELECT id
+             FROM bill_payments
+             WHERE transaction_id = ? AND bill_id = ?
+             LIMIT 1`,
+            [`CASH-${paymentData.id}`, paymentData.bill_id]
+        );
         ledgerId = rows[0]?.id || null;
     }
+
     if (type === 'proof') {
-        const [rows] = await connection.execute(`SELECT id FROM bill_payments WHERE transaction_id = ? AND bill_id = ? LIMIT 1`, [paymentData.transaction_id, paymentData.bill_id]);
+        const [rows] = await connection.execute(
+            `SELECT id
+             FROM bill_payments
+             WHERE transaction_id = ? AND bill_id = ?
+             LIMIT 1`,
+            [paymentData.transaction_id, paymentData.bill_id]
+        );
         ledgerId = rows[0]?.id || null;
     }
-    if (!ledgerId) return paymentData;
-    const [ledgerRows] = await connection.execute(`SELECT id, payment_date, amount FROM bill_payments WHERE id = ? LIMIT 1`, [ledgerId]);
-    if (!ledgerRows.length) return paymentData;
-    const ledger = ledgerRows[0];
+
+    let paymentDate = paymentData.payment_date || paymentData.created_at || new Date();
+
+    if (ledgerId) {
+        const [ledgerRows] = await connection.execute(
+            `SELECT id, payment_date, amount
+             FROM bill_payments
+             WHERE id = ?
+             LIMIT 1`,
+            [ledgerId]
+        );
+
+        if (ledgerRows.length) {
+            paymentDate = ledgerRows[0].payment_date;
+            paymentData.payment_date = paymentDate;
+        }
+    }
+
+    /*
+     * IMPORTANT:
+     * Do not use bills.paid_amount as "paid before this payment".
+     * It is a running total and therefore gives incorrect receipt values.
+     *
+     * The live database contains legacy cash_payments rows that predate the
+     * bill_payments ledger. Count verified cash directly, while excluding
+     * CASH-<id> ledger rows from bill_payments to prevent double counting.
+     */
     const [priorRows] = await connection.execute(
-        `SELECT COALESCE(SUM(amount),0) AS paid_before_payment FROM bill_payments WHERE bill_id = ? AND (payment_date < ? OR (payment_date = ? AND id < ?))`,
-        [paymentData.bill_id, ledger.payment_date, ledger.payment_date, ledger.id]
+        `SELECT
+            COALESCE((
+                SELECT SUM(bp.amount)
+                FROM bill_payments bp
+                WHERE bp.bill_id = ?
+                  AND LOWER(COALESCE(bp.payment_method,'')) <> 'cash'
+                  AND (
+                      bp.payment_date < ?
+                      OR (bp.payment_date = ? AND bp.id < ?)
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM cash_payments cp
+                      WHERE cp.bill_id = bp.bill_id
+                        AND cp.status = 'verified'
+                        AND bp.transaction_id = CONCAT('CASH-', cp.id)
+                  )
+            ), 0)
+            +
+            COALESCE((
+                SELECT SUM(cp.amount)
+                FROM cash_payments cp
+                WHERE cp.bill_id = ?
+                  AND cp.status = 'verified'
+                  AND (
+                      cp.payment_date < ?
+                      OR (cp.payment_date = ? AND cp.id < ?)
+                  )
+            ), 0) AS paid_before_payment`,
+        [
+            paymentData.bill_id,
+            paymentDate,
+            paymentDate,
+            Number(ledgerId || Number.MAX_SAFE_INTEGER),
+            paymentData.bill_id,
+            paymentDate,
+            paymentDate,
+            type === 'cash' ? Number(paymentData.id) : Number.MAX_SAFE_INTEGER
+        ]
     );
+
     paymentData.paid_before_payment = Number(priorRows[0]?.paid_before_payment || 0);
-    paymentData.payment_date = ledger.payment_date;
-    paymentData.paid_amount = paymentData.paid_before_payment + Number(paymentData.amount_paid ?? paymentData.amount ?? 0);
+    paymentData.payment_date = paymentDate;
+    paymentData.paid_amount =
+        paymentData.paid_before_payment +
+        Number(paymentData.amount_paid ?? paymentData.amount ?? 0);
+
     return paymentData;
 };
 
