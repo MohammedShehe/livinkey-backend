@@ -15,6 +15,23 @@ const cleanQuestion = (question) =>
 const normalizeAmenity = (value) =>
     String(value || "").trim().replace(/\s+/g, " ");
 
+// Normalize punctuation/symbols so database amenities such as "24×7 Power Backup"
+// match user questions such as "24*7 Power Backup", "24x7 Power Backup",
+// "24 7 Power Backup", or "24-7 Power Backup".
+const canonicalText = (value) =>
+    String(value || "")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .replace(/\b(\d+)\s*x\s*(\d+)\b/gi, "$1 $2")
+        .replace(/\s+/g, " ")
+        .trim();
+
+const phraseMatches = (text, phrase) => {
+    const haystack = ` ${canonicalText(text)} `;
+    const needle = ` ${canonicalText(phrase)} `;
+    return needle.trim().length > 0 && haystack.includes(needle);
+};
+
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
 const formatPg = (pg, includeAmenity = false) => {
@@ -23,7 +40,7 @@ const formatPg = (pg, includeAmenity = false) => {
         `• ${pg.name}`,
         `Rent: ${money(pg.rent)}`,
         `Location: ${pg.location}`,
-        `Available spots: ${available}`
+        `Vacant rooms: ${available}`
     ];
 
     if (includeAmenity && pg.amenities) {
@@ -40,7 +57,7 @@ async function getPgRows({ search = null, amenity = null, location = null, order
         const orderBy = {
             rent_asc: "p.rent ASC, p.name ASC",
             rent_desc: "p.rent DESC, p.name ASC",
-            available: "available_spots DESC, p.rent ASC, p.name ASC",
+            available: "empty_rooms DESC, p.rent ASC, p.name ASC",
             name: "p.name ASC"
         }[order] || "p.rent ASC, p.name ASC";
 
@@ -53,11 +70,12 @@ async function getPgRows({ search = null, amenity = null, location = null, order
                 p.security_fee,
                 COALESCE(SUM(r.capacity), 0) AS total_capacity,
                 COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0) AS total_occupied,
-                GREATEST(
-                    COALESCE(SUM(r.capacity), 0) -
-                    COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0),
-                    0
-                ) AS available_spots,
+                COUNT(DISTINCT CASE
+                    WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                END) AS empty_rooms,
+                COUNT(DISTINCT CASE
+                    WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                END) AS available_spots,
                 COALESCE((
                     SELECT GROUP_CONCAT(DISTINCT pa.amenity_name ORDER BY pa.amenity_name SEPARATOR ', ')
                     FROM pg_amenities pa
@@ -168,10 +186,10 @@ async function getStats() {
             SELECT
                 COUNT(DISTINCT p.id) AS total_pgs,
                 COUNT(DISTINCT CASE
-                    WHEN COALESCE(capacity.total_capacity, 0) -
-                         COALESCE(capacity.total_occupied, 0) > 0
+                    WHEN COALESCE(capacity.empty_rooms, 0) > 0
                     THEN p.id
                 END) AS pgs_with_availability,
+                COALESCE(SUM(COALESCE(capacity.total_empty_rooms, 0)), 0) AS total_empty_rooms,
                 COALESCE(SUM(COALESCE(capacity.total_capacity, 0)), 0) AS total_capacity,
                 COALESCE(SUM(COALESCE(capacity.total_occupied, 0)), 0) AS total_occupied,
                 MIN(p.rent) AS min_rent,
@@ -181,7 +199,13 @@ async function getStats() {
                 SELECT
                     f.pg_id,
                     SUM(r.capacity) AS total_capacity,
-                    SUM(COALESCE(ro.occupied_count, 0)) AS total_occupied
+                    SUM(COALESCE(ro.occupied_count, 0)) AS total_occupied,
+                    COUNT(DISTINCT CASE
+                        WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                    END) AS empty_rooms,
+                    COUNT(DISTINCT CASE
+                        WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                    END) AS total_empty_rooms
                 FROM floors f
                 JOIN rooms r
                   ON r.floor_id = f.id
@@ -276,11 +300,12 @@ async function getPgDetails(pgId) {
                 p.security_fee,
                 COALESCE(SUM(r.capacity), 0) AS total_capacity,
                 COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0) AS total_occupied,
-                GREATEST(
-                    COALESCE(SUM(r.capacity), 0) -
-                    COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0),
-                    0
-                ) AS available_spots,
+                COUNT(DISTINCT CASE
+                    WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                END) AS empty_rooms,
+                COUNT(DISTINCT CASE
+                    WHEN COALESCE(ro.occupied_count, 0) = 0 THEN r.id
+                END) AS available_spots,
                 COALESCE((
                     SELECT GROUP_CONCAT(DISTINCT pa.amenity_name ORDER BY pa.amenity_name SEPARATOR ', ')
                     FROM pg_amenities pa
@@ -392,7 +417,7 @@ async function answerQuestion(question) {
                 `${details.name} is currently listed in the database.`,
                 `Rent: ${money(details.rent)}`,
                 `Location: ${details.location}`,
-                `Available spots: ${Number(details.available_spots || 0)}`,
+                `Completely vacant rooms: ${Number(details.available_spots || 0)}`,
                 details.amenities ? `Amenities: ${details.amenities}` : "No amenities are currently listed."
             ].join("\n"),
             source: "database",
@@ -410,6 +435,14 @@ async function answerQuestion(question) {
     const asksSummary = /\b(how many|count|total|summary|overview)\b/.test(msg);
     const asksSecurity = /\b(security fee|deposit|security deposit)\b/.test(msg);
     const asksFood = /\b(food|meal|mess|breakfast|lunch|dinner)\b/.test(msg);
+
+    // Match an actual database amenity before generic fallbacks.
+    // This makes 24×7 / 24*7 / 24x7 / 24-7 / 24 7 equivalent.
+    const amenities = await getAmenitySummary();
+    const amenityMatch = amenities
+        .slice()
+        .sort((a, b) => canonicalText(b.amenity_name).length - canonicalText(a.amenity_name).length)
+        .find(a => phraseMatches(msg, a.amenity_name));
 
     if (asksFood) {
         const foodAmenities = (await getAmenitySummary())
@@ -455,7 +488,7 @@ async function answerQuestion(question) {
 
     if (asksAvailability) {
         const rows = await getPgRows({ order: "available" });
-        const available = rows.filter(pg => Number(pg.available_spots || 0) > 0);
+        const available = rows.filter(pg => Number(pg.empty_rooms || pg.available_spots || 0) > 0);
 
         if (available.length === 0) {
             return {
@@ -466,7 +499,7 @@ async function answerQuestion(question) {
 
         return {
             answer: [
-                `I found ${available.length} active PG(s) with availability in the current database:`,
+                `I found ${available.length} active PG(s) with at least one completely vacant room in the current database:`,
                 ...available.map(pg => formatPg(pg))
             ].join("\n"),
             source: "database",
@@ -494,9 +527,24 @@ async function answerQuestion(question) {
         };
     }
 
-    if (asksAmenities) {
-        const amenities = await getAmenitySummary();
+    if (amenityMatch && !asksVacantRooms && !asksRent && !asksLocation && !asksSecurity && !asksSummary && !asksFood) {
+        const rows = await getPgRows({
+            amenity: amenityMatch.amenity_name,
+            order: "rent_asc"
+        });
 
+        return {
+            answer: [
+                `${amenityMatch.amenity_name} is listed for ${amenityMatch.pg_count} active PG(s):`,
+                ...rows.map(pg => formatPg(pg, true))
+            ].join("\n"),
+            source: "database",
+            view: "pg_list",
+            data: rows
+        };
+    }
+
+    if (asksAmenities) {
         if (amenities.length === 0) {
             return {
                 answer: "No PG amenities are currently listed in the database.",
@@ -575,37 +623,18 @@ async function answerQuestion(question) {
         const withAvailability = Number(stats.pgs_with_availability || 0);
         const capacity = Number(stats.total_capacity || 0);
         const occupied = Number(stats.total_occupied || 0);
+        const emptyRooms = Number(stats.total_empty_rooms || 0);
 
         return {
             answer: [
                 `Active PGs: ${total}`,
-                `PGs with available spots: ${withAvailability}`,
+                `PGs with at least one completely vacant room: ${withAvailability}`,
+                `Completely vacant rooms: ${emptyRooms}`,
                 `Total capacity: ${capacity}`,
                 `Currently occupied: ${occupied}`,
                 `Current rent range: ${money(stats.min_rent)}–${money(stats.max_rent)}`
             ].join("\n"),
             source: "database"
-        };
-    }
-
-    // Try an amenity phrase before falling back.
-    const amenities = await getAmenitySummary();
-    const amenityMatch = amenities.find(a => msg.includes(a.amenity_name.toLowerCase()));
-
-    if (amenityMatch) {
-        const rows = await getPgRows({
-            amenity: amenityMatch.amenity_name,
-            order: "rent_asc"
-        });
-
-        return {
-            answer: [
-                `${amenityMatch.amenity_name} is listed for ${amenityMatch.pg_count} active PG(s):`,
-                ...rows.map(pg => formatPg(pg))
-            ].join("\n"),
-            source: "database",
-            view: "pg_list",
-            data: rows
         };
     }
 
