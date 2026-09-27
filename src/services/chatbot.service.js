@@ -426,7 +426,9 @@ async function answerQuestion(question) {
         };
     }
 
+    // Match both "vacant rooms" and "rooms ... vacant" (e.g. "Which rooms are completely vacant right now?")
     const asksVacantRooms = /\b(vacant|empty|unoccupied|free)\s+(room|rooms)\b/.test(msg)
+        || /\b(room|rooms)\b.{0,40}\b(vacant|empty|unoccupied|free)\b/.test(msg)
         || /\b(vacancy|vacant rooms|empty rooms)\b/.test(msg);
     const asksAvailability = /\b(available|availability|vacan|vacancy|free spot|empty|open room)\b/.test(msg);
     const asksRent = /\b(rent|price|prices|cost|cheapest|expensive|monthly)\b/.test(msg);
