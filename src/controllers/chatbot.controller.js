@@ -9,10 +9,6 @@ const chatbotService = require("../services/chatbot.service");
  * - Only public PG information is exposed.
  */
 exports.getQuickQuestions = async (req, res) => {
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.set("Pragma", "no-cache");
-    res.set("Expires", "0");
-
     try {
         const data = await chatbotService.getQuickQuestions();
 
@@ -30,10 +26,6 @@ exports.getQuickQuestions = async (req, res) => {
 };
 
 exports.ask = async (req, res) => {
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.set("Pragma", "no-cache");
-    res.set("Expires", "0");
-
     try {
         const question = typeof req.body?.question === "string"
             ? req.body.question.trim()

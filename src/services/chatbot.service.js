@@ -1,31 +1,19 @@
 const db = require("../config/db");
 
-// Public chatbot limits are intentionally generous enough to search the full
-// active catalogue while keeping individual responses readable.
-const DISPLAY_LIMIT = 12;
-const SEARCH_LIMIT = 100;
+const MAX_RESULTS = 8;
 
 const money = (value) => {
     const amount = Number(value || 0);
-    return `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    return `₹${amount.toLocaleString("en-IN", {
+        maximumFractionDigits: 0
+    })}`;
 };
 
 const cleanQuestion = (question) =>
-    String(question || "")
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s₹,.-]/gu, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+    question.toLowerCase().replace(/[^\p{L}\p{N}\s₹.-]/gu, " ").replace(/\s+/g, " ").trim();
 
-const normalizeText = (value) =>
-    String(value || "")
-        .toLowerCase()
-        .replace(/&/g, " and ")
-        .replace(/[^\p{L}\p{N}\s]/gu, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-const normalizeAmenity = (value) => String(value || "").trim().replace(/\s+/g, " ");
+const normalizeAmenity = (value) =>
+    String(value || "").trim().replace(/\s+/g, " ");
 
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
@@ -45,19 +33,7 @@ const formatPg = (pg, includeAmenity = false) => {
     return parts.join(" | ");
 };
 
-const formatPgList = (rows, includeAmenity = false) =>
-    rows.slice(0, DISPLAY_LIMIT).map((pg) => formatPg(pg, includeAmenity));
-
-async function getPgRows({
-    search = null,
-    amenity = null,
-    location = null,
-    minRent = null,
-    maxRent = null,
-    availableOnly = false,
-    order = "rent_asc",
-    limit = SEARCH_LIMIT
-} = {}) {
+async function getPgRows({ search = null, amenity = null, location = null, order = "rent_asc" } = {}) {
     const connection = await db.getConnection();
 
     try {
@@ -68,8 +44,6 @@ async function getPgRows({
             name: "p.name ASC"
         }[order] || "p.rent ASC, p.name ASC";
 
-        const safeLimit = Math.max(1, Math.min(Number(limit) || SEARCH_LIMIT, SEARCH_LIMIT));
-
         let query = `
             SELECT
                 p.id,
@@ -77,7 +51,6 @@ async function getPgRows({
                 p.location,
                 p.rent,
                 p.security_fee,
-                COALESCE(COUNT(DISTINCT r.id), 0) AS total_rooms,
                 COALESCE(SUM(r.capacity), 0) AS total_capacity,
                 COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0) AS total_occupied,
                 GREATEST(
@@ -86,25 +59,14 @@ async function getPgRows({
                     0
                 ) AS available_spots,
                 COALESCE((
-                    SELECT GROUP_CONCAT(
-                        DISTINCT pa.amenity_name
-                        ORDER BY pa.amenity_name
-                        SEPARATOR ', '
-                    )
+                    SELECT GROUP_CONCAT(DISTINCT pa.amenity_name ORDER BY pa.amenity_name SEPARATOR ', ')
                     FROM pg_amenities pa
                     WHERE pa.pg_id = p.id
                 ), '') AS amenities
             FROM pgs p
-            LEFT JOIN floors f
-              ON f.pg_id = p.id
-             AND f.is_active = 1
-             AND f.deleted_at IS NULL
-            LEFT JOIN rooms r
-              ON r.floor_id = f.id
-             AND r.is_active = 1
-             AND r.deleted_at IS NULL
-            LEFT JOIN room_occupancy ro
-              ON ro.room_id = r.id
+            LEFT JOIN floors f ON f.pg_id = p.id AND f.is_active = 1
+            LEFT JOIN rooms r ON r.floor_id = f.id AND r.is_active = 1 AND r.deleted_at IS NULL
+            LEFT JOIN room_occupancy ro ON ro.room_id = r.id
             WHERE p.is_active = 1
         `;
 
@@ -127,37 +89,69 @@ async function getPgRows({
                     SELECT 1
                     FROM pg_amenities pa_filter
                     WHERE pa_filter.pg_id = p.id
-                      AND LOWER(pa_filter.amenity_name) LIKE LOWER(?)
+                      AND pa_filter.amenity_name LIKE ?
                 )
             `;
             params.push(`%${amenity}%`);
         }
 
-        if (minRent !== null && minRent !== undefined) {
-            query += ` AND p.rent >= ?`;
-            params.push(Number(minRent));
-        }
-
-        if (maxRent !== null && maxRent !== undefined) {
-            query += ` AND p.rent <= ?`;
-            params.push(Number(maxRent));
-        }
-
         query += `
             GROUP BY p.id, p.name, p.location, p.rent, p.security_fee
+            ORDER BY ${orderBy}
+            LIMIT ${MAX_RESULTS}
         `;
 
-        if (availableOnly) {
-            query += `
-                HAVING GREATEST(
-                    COALESCE(SUM(r.capacity), 0) -
-                    COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0),
-                    0
-                ) > 0
-            `;
+        const [rows] = await connection.execute(query, params);
+        return rows;
+    } finally {
+        connection.release();
+    }
+}
+
+async function getVacantRooms({ location = null, pgId = null } = {}) {
+    const connection = await db.getConnection();
+
+    try {
+        let query = `
+            SELECT
+                p.id AS pg_id,
+                p.name AS pg_name,
+                p.location,
+                p.rent AS pg_rent,
+                f.floor_number,
+                r.id AS room_id,
+                r.room_number,
+                r.capacity,
+                r.rent AS room_rent,
+                COALESCE(ro.occupied_count, 0) AS occupied_count
+            FROM pgs p
+            INNER JOIN floors f
+                ON f.pg_id = p.id
+               AND f.is_active = 1
+            INNER JOIN rooms r
+                ON r.floor_id = f.id
+               AND r.is_active = 1
+               AND r.deleted_at IS NULL
+            LEFT JOIN room_occupancy ro
+                ON ro.room_id = r.id
+            WHERE p.is_active = 1
+              AND COALESCE(ro.occupied_count, 0) = 0
+              AND COALESCE(r.capacity, 0) > 0
+        `;
+
+        const params = [];
+
+        if (location) {
+            query += ` AND p.location LIKE ?`;
+            params.push(`%${location}%`);
         }
 
-        query += ` ORDER BY ${orderBy} LIMIT ${safeLimit}`;
+        if (pgId) {
+            query += ` AND p.id = ?`;
+            params.push(pgId);
+        }
+
+        query += ` ORDER BY p.name ASC, f.floor_number ASC, r.room_number ASC LIMIT 100`;
 
         const [rows] = await connection.execute(query, params);
         return rows;
@@ -195,7 +189,6 @@ async function getStats() {
                  AND r.deleted_at IS NULL
                 LEFT JOIN room_occupancy ro ON ro.room_id = r.id
                 WHERE f.is_active = 1
-                  AND f.deleted_at IS NULL
                 GROUP BY f.pg_id
             ) capacity ON capacity.pg_id = p.id
             WHERE p.is_active = 1
@@ -213,16 +206,14 @@ async function getAmenitySummary() {
     try {
         const [rows] = await connection.execute(`
             SELECT
-                TRIM(pa.amenity_name) AS amenity_name,
+                pa.amenity_name,
                 COUNT(DISTINCT pa.pg_id) AS pg_count
             FROM pg_amenities pa
-            INNER JOIN pgs p
-                ON p.id = pa.pg_id
-               AND p.is_active = 1
+            INNER JOIN pgs p ON p.id = pa.pg_id AND p.is_active = 1
             WHERE TRIM(pa.amenity_name) <> ''
-            GROUP BY TRIM(pa.amenity_name)
-            ORDER BY pg_count DESC, amenity_name ASC
-            LIMIT 100
+            GROUP BY pa.amenity_name
+            ORDER BY pg_count DESC, pa.amenity_name ASC
+            LIMIT 20
         `);
 
         return rows;
@@ -237,15 +228,14 @@ async function getLocationSummary() {
     try {
         const [rows] = await connection.execute(`
             SELECT
-                TRIM(p.location) AS location,
+                p.location,
                 COUNT(*) AS pg_count,
                 MIN(p.rent) AS min_rent,
                 MAX(p.rent) AS max_rent
             FROM pgs p
             WHERE p.is_active = 1
-              AND TRIM(p.location) <> ''
-            GROUP BY TRIM(p.location)
-            ORDER BY pg_count DESC, location ASC
+            GROUP BY p.location
+            ORDER BY pg_count DESC, p.location ASC
         `);
 
         return rows;
@@ -254,17 +244,20 @@ async function getLocationSummary() {
     }
 }
 
-async function getActivePgsForMatching() {
+async function findNamedPg(question) {
     const connection = await db.getConnection();
 
     try {
         const [rows] = await connection.execute(`
-            SELECT id, name, location, rent
+            SELECT id, name, location, rent, security_fee
             FROM pgs
             WHERE is_active = 1
-            ORDER BY CHAR_LENGTH(name) DESC, name ASC
-        `);
-        return rows;
+              AND name LIKE ?
+            ORDER BY CHAR_LENGTH(name) ASC
+            LIMIT 1
+        `, [`%${question}%`]);
+
+        return rows[0] || null;
     } finally {
         connection.release();
     }
@@ -281,7 +274,6 @@ async function getPgDetails(pgId) {
                 p.location,
                 p.rent,
                 p.security_fee,
-                COALESCE(COUNT(DISTINCT r.id), 0) AS total_rooms,
                 COALESCE(SUM(r.capacity), 0) AS total_capacity,
                 COALESCE(SUM(COALESCE(ro.occupied_count, 0)), 0) AS total_occupied,
                 GREATEST(
@@ -290,27 +282,15 @@ async function getPgDetails(pgId) {
                     0
                 ) AS available_spots,
                 COALESCE((
-                    SELECT GROUP_CONCAT(
-                        DISTINCT pa.amenity_name
-                        ORDER BY pa.amenity_name
-                        SEPARATOR ', '
-                    )
+                    SELECT GROUP_CONCAT(DISTINCT pa.amenity_name ORDER BY pa.amenity_name SEPARATOR ', ')
                     FROM pg_amenities pa
                     WHERE pa.pg_id = p.id
                 ), '') AS amenities
             FROM pgs p
-            LEFT JOIN floors f
-              ON f.pg_id = p.id
-             AND f.is_active = 1
-             AND f.deleted_at IS NULL
-            LEFT JOIN rooms r
-              ON r.floor_id = f.id
-             AND r.is_active = 1
-             AND r.deleted_at IS NULL
-            LEFT JOIN room_occupancy ro
-              ON ro.room_id = r.id
-            WHERE p.id = ?
-              AND p.is_active = 1
+            LEFT JOIN floors f ON f.pg_id = p.id AND f.is_active = 1
+            LEFT JOIN rooms r ON r.floor_id = f.id AND r.is_active = 1 AND r.deleted_at IS NULL
+            LEFT JOIN room_occupancy ro ON ro.room_id = r.id
+            WHERE p.id = ? AND p.is_active = 1
             GROUP BY p.id, p.name, p.location, p.rent, p.security_fee
             LIMIT 1
         `, [pgId]);
@@ -319,88 +299,6 @@ async function getPgDetails(pgId) {
     } finally {
         connection.release();
     }
-}
-
-function findAmenityMatch(message, amenities) {
-    const normalizedMessage = normalizeText(message);
-
-    // Prefer longer names first, so e.g. "Free WiFi" wins over "WiFi".
-    const sorted = [...amenities].sort(
-        (a, b) => normalizeText(b.amenity_name).length - normalizeText(a.amenity_name).length
-    );
-
-    return sorted.find((row) => {
-        const amenity = normalizeText(row.amenity_name);
-        if (!amenity) return false;
-        if (normalizedMessage.includes(amenity)) return true;
-
-        // Handle common singular/plural wording without hardcoding an amenity list.
-        if (amenity.endsWith("s") && normalizedMessage.includes(amenity.slice(0, -1))) return true;
-        if (!amenity.endsWith("s") && normalizedMessage.includes(`${amenity}s`)) return true;
-
-        return false;
-    }) || null;
-}
-
-function findLocationMatch(message, locations) {
-    const normalizedMessage = normalizeText(message);
-    return [...locations]
-        .sort((a, b) => normalizeText(b.location).length - normalizeText(a.location).length)
-        .find((row) => {
-            const location = normalizeText(row.location);
-            return location && normalizedMessage.includes(location);
-        }) || null;
-}
-
-function parseMoneyValue(value) {
-    const normalized = String(value || "").toLowerCase().replace(/,/g, "").trim();
-    if (!normalized) return null;
-    const match = normalized.match(/(\d+(?:\.\d+)?)\s*(k|thousand|lakh|lac)?/i);
-    if (!match) return null;
-
-    let amount = Number(match[1]);
-    const suffix = (match[2] || "").toLowerCase();
-    if (suffix === "k" || suffix === "thousand") amount *= 1000;
-    if (suffix === "lakh" || suffix === "lac") amount *= 100000;
-    return Number.isFinite(amount) ? amount : null;
-}
-
-function parseRentRange(message) {
-    const normalized = message.replace(/,/g, "");
-
-    const between = normalized.match(/between\s+(?:₹\s*)?([\d.]+\s*(?:k|thousand|lakh|lac)?)\s+(?:and|to|-)\s+(?:₹\s*)?([\d.]+\s*(?:k|thousand|lakh|lac)?)/i);
-    if (between) {
-        return {
-            minRent: parseMoneyValue(between[1]),
-            maxRent: parseMoneyValue(between[2])
-        };
-    }
-
-    const under = normalized.match(/(?:under|below|less than|upto|up to|max(?:imum)?(?:\s+rent)?(?:\s+of)?)\s*(?:₹\s*)?([\d.]+\s*(?:k|thousand|lakh|lac)?)/i);
-    if (under) return { minRent: null, maxRent: parseMoneyValue(under[1]) };
-
-    const over = normalized.match(/(?:above|over|more than|at least|from)\s*(?:₹\s*)?([\d.]+\s*(?:k|thousand|lakh|lac)?)/i);
-    if (over) return { minRent: parseMoneyValue(over[1]), maxRent: null };
-
-    return { minRent: null, maxRent: null };
-}
-
-function wantsCheapest(message) {
-    return /\b(cheapest|lowest|least expensive|minimum rent|low(?:est)? rent)\b/.test(message);
-}
-
-function wantsMostExpensive(message) {
-    return /\b(most expensive|highest|maximum rent|high(?:est)? rent)\b/.test(message);
-}
-
-function formatAvailability(rows, heading) {
-    if (!rows.length) {
-        return `${heading}\nNo active PG currently matches the requested criteria in the database.`;
-    }
-
-    const shown = rows.slice(0, DISPLAY_LIMIT);
-    const extra = rows.length > DISPLAY_LIMIT ? `\n…and ${rows.length - DISPLAY_LIMIT} more.` : "";
-    return [heading, ...formatPgList(shown), extra].filter(Boolean).join("\n");
 }
 
 async function getQuickQuestions() {
@@ -418,43 +316,46 @@ async function getQuickQuestions() {
             question: "Which PGs currently have available spots?"
         });
         questions.push({
-            label: "💰 Current rents",
+            label: "🚪 Vacant rooms",
+            question: "Which rooms are completely vacant right now?"
+        });
+        questions.push({
+            label: "💰 Rent prices",
             question: "What are the current rent prices?"
         });
     }
 
-    // These buttons are created from actual database amenity names.
-    amenities.slice(0, 4).forEach((row) => {
-        const amenity = normalizeAmenity(row.amenity_name);
-        if (!amenity) return;
+    const amenityNames = amenities
+        .slice(0, 3)
+        .map(row => normalizeAmenity(row.amenity_name));
+
+    for (const amenity of amenityNames) {
         questions.push({
             label: `✨ ${amenity}`,
             question: `Which PGs have ${amenity}?`
         });
-    });
+    }
 
     if (locations.length > 0) {
-        const location = normalizeAmenity(locations[0].location);
         questions.push({
-            label: "📍 PG locations",
-            question: `Which PGs are in ${location}?`
+            label: "📍 Locations",
+            question: "Which locations have PGs and what are their rents?"
         });
     }
 
     questions.push({
-        label: "🛏️ Lowest rent",
+        label: "🛏️ Cheapest PGs",
         question: "Which PGs have the lowest rent?"
     });
 
     questions.push({
-        label: "📊 Live summary",
+        label: "📊 PG summary",
         question: "How many active PGs are there and how many have availability?"
     });
 
     return {
         questions: questions.slice(0, 8),
         generated_from_database: true,
-        generated_at: new Date().toISOString(),
         stats: {
             total_pgs: Number(stats.total_pgs || 0),
             pgs_with_availability: Number(stats.pgs_with_availability || 0),
@@ -465,210 +366,189 @@ async function getQuickQuestions() {
 }
 
 async function answerQuestion(question) {
-    const raw = String(question || "").trim();
+    const raw = question.trim();
     const msg = cleanQuestion(raw);
 
     if (!msg) {
         return {
-            answer: "Please enter a question about the current PGs.",
+            answer: "Please enter a question about our PGs.",
             source: "database"
         };
     }
 
-    const [stats, amenities, locations, activePgs] = await Promise.all([
-        getStats(),
-        getAmenitySummary(),
-        getLocationSummary(),
-        getActivePgsForMatching()
-    ]);
+    const stats = await getStats();
 
-    const amenityMatch = findAmenityMatch(msg, amenities);
-    const locationMatch = findLocationMatch(msg, locations);
-    const named = activePgs.find((pg) => {
-        const name = normalizeText(pg.name);
-        return name && msg.includes(name);
+    // Specific PG lookup: only use the name when it matches a current active PG.
+    const allPgs = await getPgRows({ order: "name" });
+    const named = allPgs.find(pg => {
+        const name = String(pg.name || "").toLowerCase();
+        return name && msg.includes(name.toLowerCase());
     });
 
-    const asksAvailability = /\b(available|availability|vacan|vacancy|free spot|free spots|empty|open room|open rooms|vacant)\b/.test(msg);
-    const asksRent = /\b(rent|price|prices|cost|cheapest|expensive|monthly|affordable|budget)\b/.test(msg);
-    const asksAmenities = /\b(amenit|facilit|feature|features|what do you offer|what is included|included)\b/.test(msg);
-    const asksLocation = /\b(location|locations|where|area|areas|near|lawgate|law gate|phagwara|green valley)\b/.test(msg) || Boolean(locationMatch);
-    const asksSummary = /\b(how many|count|total|summary|overview|capacity|occupied|occupancy|beds|spots)\b/.test(msg);
-    const asksSecurity = /\b(security fee|deposit|security deposit)\b/.test(msg);
-    const asksFood = /\b(food|meal|mess|breakfast|lunch|dinner)\b/.test(msg);
-    const asksBooking = /\b(book|booking|reserve|reservation|how to join|how do i join|admission)\b/.test(msg);
-    const rentRange = parseRentRange(msg);
-
-    // A question about a named PG can be combined with an amenity question.
     if (named) {
         const details = await getPgDetails(named.id);
-        if (!details) {
-            return {
-                answer: "That PG is not currently active in the database.",
-                source: "database"
-            };
-        }
-
-        if (amenityMatch) {
-            const pgAmenities = normalizeText(details.amenities).split(",").map((x) => x.trim()).filter(Boolean);
-            const hasAmenity = pgAmenities.some((a) => {
-                const target = normalizeText(amenityMatch.amenity_name);
-                return a === target || a.includes(target) || target.includes(a);
-            });
-
-            return {
-                answer: hasAmenity
-                    ? `Yes. ${details.name} lists ${amenityMatch.amenity_name} in the database.`
-                    : `No. ${details.name} does not currently list ${amenityMatch.amenity_name} in the database.`,
-                source: "database",
-                data: details
-            };
-        }
-
         return {
             answer: [
                 `${details.name} is currently listed in the database.`,
                 `Rent: ${money(details.rent)}`,
-                `Security fee: ${money(details.security_fee)}`,
                 `Location: ${details.location}`,
-                `Rooms: ${Number(details.total_rooms || 0)}`,
-                `Total capacity: ${Number(details.total_capacity || 0)}`,
-                `Occupied: ${Number(details.total_occupied || 0)}`,
                 `Available spots: ${Number(details.available_spots || 0)}`,
-                details.amenities
-                    ? `Amenities: ${details.amenities}`
-                    : "No amenities are currently listed."
+                details.amenities ? `Amenities: ${details.amenities}` : "No amenities are currently listed."
             ].join("\n"),
             source: "database",
+            view: "pg_detail",
             data: details
         };
     }
 
-    // Amenity questions are checked before broad availability/rent intent.
-    // This is what makes a message such as "Washing Machine?" work.
-    if (amenityMatch) {
-        const rows = await getPgRows({
-            amenity: amenityMatch.amenity_name,
-            location: locationMatch ? locationMatch.location : null,
-            minRent: rentRange.minRent,
-            maxRent: rentRange.maxRent,
-            availableOnly: asksAvailability,
-            order: wantsMostExpensive(msg) ? "rent_desc" : "rent_asc"
-        });
-
-        const qualifiers = [];
-        if (locationMatch) qualifiers.push(`in ${locationMatch.location}`);
-        if (rentRange.maxRent !== null) qualifiers.push(`with rent up to ${money(rentRange.maxRent)}`);
-        if (rentRange.minRent !== null) qualifiers.push(`with rent from ${money(rentRange.minRent)}`);
-        if (asksAvailability) qualifiers.push("with available spots");
-
-        return {
-            answer: formatAvailability(
-                rows,
-                `${amenityMatch.amenity_name} is listed for active PGs${qualifiers.length ? ` ${qualifiers.join(" ")}` : ""}:`
-            ),
-            source: "database",
-            data: rows
-        };
-    }
+    const asksVacantRooms = /\b(vacant|empty|unoccupied|free)\s+(room|rooms)\b/.test(msg)
+        || /\b(vacancy|vacant rooms|empty rooms)\b/.test(msg);
+    const asksAvailability = /\b(available|availability|vacan|vacancy|free spot|empty|open room)\b/.test(msg);
+    const asksRent = /\b(rent|price|prices|cost|cheapest|expensive|monthly)\b/.test(msg);
+    const asksAmenities = /\b(amenit|facilit|feature|features)\b/.test(msg);
+    const asksLocation = /\b(location|locations|where|area|areas|lawgate|law gate|phagwara|green valley)\b/.test(msg);
+    const asksSummary = /\b(how many|count|total|summary|overview)\b/.test(msg);
+    const asksSecurity = /\b(security fee|deposit|security deposit)\b/.test(msg);
+    const asksFood = /\b(food|meal|mess|breakfast|lunch|dinner)\b/.test(msg);
 
     if (asksFood) {
-        const foodAmenities = amenities.filter((row) =>
-            /\b(food|meal|mess|breakfast|lunch|dinner)\b/i.test(row.amenity_name)
-        );
+        const foodAmenities = (await getAmenitySummary())
+            .filter(row => /\b(food|meal|mess|breakfast|lunch|dinner)\b/i.test(row.amenity_name));
 
         if (foodAmenities.length === 0) {
             return {
-                answer: "I checked the current PG amenities in the database, but no food, meal, or mess facility is listed. I won't guess beyond the stored data.",
+                answer: "I checked the current PG amenities in the database, but no food, meal, or mess facility is listed. I don't want to guess beyond the stored data.",
                 source: "database"
             };
         }
 
         return {
-            answer: [
-                "Food-related facilities currently stored in the database:",
-                ...foodAmenities.map((a) => `• ${a.amenity_name} — ${a.pg_count} PG(s)`)
-            ].join("\n"),
-            source: "database",
-            data: foodAmenities
-        };
-    }
-
-    if (asksBooking) {
-        return {
-            answer: "The current public database does not contain a booking/reservation procedure. I can answer questions about the PG data that is actually stored.",
+            answer: `The database lists these food-related facilities: ${foodAmenities.map(a => `${a.amenity_name} (${a.pg_count} PGs)`).join(", ")}.`,
             source: "database"
         };
     }
 
-    if (asksAvailability) {
-        const rows = await getPgRows({
-            location: locationMatch ? locationMatch.location : null,
-            minRent: rentRange.minRent,
-            maxRent: rentRange.maxRent,
-            availableOnly: true,
-            order: "available"
-        });
+    if (asksVacantRooms) {
+        const rows = await getVacantRooms();
 
-        return {
-            answer: formatAvailability(rows, "Active PGs with available spots in the current database:"),
-            source: "database",
-            data: rows
-        };
-    }
-
-    if (asksRent || rentRange.minRent !== null || rentRange.maxRent !== null) {
-        const order = wantsMostExpensive(msg) ? "rent_desc" : "rent_asc";
-        const rows = await getPgRows({
-            location: locationMatch ? locationMatch.location : null,
-            minRent: rentRange.minRent,
-            maxRent: rentRange.maxRent,
-            order
-        });
-
-        if (!rows.length) {
+        if (rows.length === 0) {
             return {
-                answer: "No active PG matches that rent/location criteria in the current database.",
-                source: "database"
-            };
-        }
-
-        const min = Number(stats.min_rent || 0);
-        const max = Number(stats.max_rent || 0);
-        const title = wantsCheapest(msg)
-            ? "Lowest-rent active PGs in the current database:"
-            : wantsMostExpensive(msg)
-                ? "Highest-rent active PGs in the current database:"
-                : `Current monthly rent range in the database: ${money(min)} to ${money(max)}.`;
-
-        return {
-            answer: [title, ...formatPgList(rows)].join("\n"),
-            source: "database",
-            data: rows
-        };
-    }
-
-    if (asksLocation) {
-        if (locationMatch) {
-            const rows = await getPgRows({
-                location: locationMatch.location,
-                order: "rent_asc"
-            });
-
-            return {
-                answer: formatAvailability(
-                    rows,
-                    `Active PGs in ${locationMatch.location}:`
-                ),
+                answer: "There are currently no completely vacant rooms in the active PG database.",
                 source: "database",
-                data: rows
+                view: "vacant_rooms",
+                data: []
             };
         }
 
         return {
             answer: [
-                "Current PG locations stored in the database:",
-                ...locations.map((row) =>
+                `I found ${rows.length} completely vacant room(s) in the current database:`,
+                ...rows.map(room =>
+                    `• ${room.pg_name} — Room ${room.room_number} | Floor ${room.floor_number} | Capacity: ${room.capacity} | Room rent: ${money(room.room_rent || room.pg_rent)} | ${room.location}`
+                )
+             ].join("\n"),
+            source: "database",
+            view: "vacant_rooms",
+            data: rows
+        };
+    }
+
+    if (asksAvailability) {
+        const rows = await getPgRows({ order: "available" });
+        const available = rows.filter(pg => Number(pg.available_spots || 0) > 0);
+
+        if (available.length === 0) {
+            return {
+                answer: "There are currently no active PGs with available spots in the database.",
+                source: "database"
+            };
+        }
+
+        return {
+            answer: [
+                `I found ${available.length} active PG(s) with availability in the current database:`,
+                ...available.map(pg => formatPg(pg))
+            ].join("\n"),
+            source: "database",
+            view: "pg_list",
+            data: available
+        };
+    }
+
+    if (asksRent) {
+        const rows = await getPgRows({
+            order: /\b(cheapest|lowest)\b/.test(msg) ? "rent_asc" : "rent_asc"
+        });
+
+        const min = Number(stats.min_rent || 0);
+        const max = Number(stats.max_rent || 0);
+
+        return {
+            answer: [
+                `Current monthly PG rents in the database range from ${money(min)} to ${money(max)}.`,
+                ...rows.map(pg => formatPg(pg))
+            ].join("\n"),
+            source: "database",
+            view: "pg_list",
+            data: rows
+        };
+    }
+
+    if (asksAmenities) {
+        const amenities = await getAmenitySummary();
+
+        if (amenities.length === 0) {
+            return {
+                answer: "No PG amenities are currently listed in the database.",
+                source: "database"
+            };
+        }
+
+        const requested = raw.replace(/\b(which|what|pgs?|have|has|with|amenities|facilities|features|available|do|you|offer|are|there)\b/gi, " ").trim();
+
+        if (requested.length >= 2) {
+            const matched = amenities.filter(a =>
+                a.amenity_name.toLowerCase().includes(requested.toLowerCase())
+            );
+
+            if (matched.length > 0) {
+                const rows = await getPgRows({ amenity: requested, order: "rent_asc" });
+                return {
+                    answer: [
+                        `${matched[0].amenity_name} is listed for ${matched[0].pg_count} active PG(s):`,
+                        ...rows.map(pg => formatPg(pg))
+                    ].join("\n"),
+                    source: "database",
+                    view: "pg_list",
+                    data: rows
+                };
+            }
+        }
+
+        return {
+            answer: [
+                "Amenities currently stored in the database:",
+                ...amenities.map(a => `• ${a.amenity_name} — ${a.pg_count} PG(s)`)
+            ].join("\n"),
+            source: "database",
+            data: amenities
+        };
+    }
+
+    if (asksLocation) {
+        const locations = await getLocationSummary();
+
+        if (locations.length === 0) {
+            return {
+                answer: "No active PG locations are currently listed in the database.",
+                source: "database"
+            };
+        }
+
+        return {
+            answer: [
+                "Current PG locations and rent ranges:",
+                ...locations.map(row =>
                     `• ${row.location}: ${row.pg_count} PG(s), ${money(row.min_rent)}–${money(row.max_rent)}`
                 )
             ].join("\n"),
@@ -679,51 +559,66 @@ async function answerQuestion(question) {
 
     if (asksSecurity) {
         const rows = await getPgRows({ order: "rent_asc" });
+
         return {
             answer: [
                 "Current security fees stored for active PGs:",
-                ...formatPgList(rows).map((line, index) => `${line} | Security fee: ${money(rows[index].security_fee)}`)
+                ...rows.map(pg => `• ${pg.name}: ${money(pg.security_fee)}`)
             ].join("\n"),
             source: "database",
             data: rows
         };
     }
 
-    if (asksAmenities) {
-        if (!amenities.length) {
-            return {
-                answer: "No PG amenities are currently listed in the database.",
-                source: "database"
-            };
-        }
-
-        return {
-            answer: [
-                "Amenities currently stored in the database:",
-                ...amenities.map((a) => `• ${a.amenity_name} — ${a.pg_count} PG(s)`)
-            ].join("\n"),
-            source: "database",
-            data: amenities
-        };
-    }
-
     if (asksSummary) {
+        const total = Number(stats.total_pgs || 0);
+        const withAvailability = Number(stats.pgs_with_availability || 0);
+        const capacity = Number(stats.total_capacity || 0);
+        const occupied = Number(stats.total_occupied || 0);
+
         return {
             answer: [
-                `Active PGs: ${Number(stats.total_pgs || 0)}`,
-                `PGs with available spots: ${Number(stats.pgs_with_availability || 0)}`,
-                `Total capacity: ${Number(stats.total_capacity || 0)}`,
-                `Currently occupied: ${Number(stats.total_occupied || 0)}`,
+                `Active PGs: ${total}`,
+                `PGs with available spots: ${withAvailability}`,
+                `Total capacity: ${capacity}`,
+                `Currently occupied: ${occupied}`,
                 `Current rent range: ${money(stats.min_rent)}–${money(stats.max_rent)}`
             ].join("\n"),
             source: "database"
         };
     }
 
+    // Try an amenity phrase before falling back.
+    const amenities = await getAmenitySummary();
+    const amenityMatch = amenities.find(a => msg.includes(a.amenity_name.toLowerCase()));
+
+    if (amenityMatch) {
+        const rows = await getPgRows({
+            amenity: amenityMatch.amenity_name,
+            order: "rent_asc"
+        });
+
+        return {
+            answer: [
+                `${amenityMatch.amenity_name} is listed for ${amenityMatch.pg_count} active PG(s):`,
+                ...rows.map(pg => formatPg(pg))
+            ].join("\n"),
+            source: "database",
+            view: "pg_list",
+            data: rows
+        };
+    }
+
     return {
         answer: [
-            "I can answer from the current LIVINKEY PG database.",
-            "Try asking about an actual PG name, an amenity, rent, availability, location, security fee, or the current PG summary."
+            "I can answer using the current PG database.",
+            "Try asking about:",
+            "• available PGs",
+            "• rent prices",
+            "• amenities such as AC or WiFi",
+            "• locations",
+            "• security fees",
+            "• PG availability/count"
         ].join("\n"),
         source: "database"
     };
