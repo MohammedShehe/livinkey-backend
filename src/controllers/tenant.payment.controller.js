@@ -2,14 +2,234 @@ const db = require("../config/db");
 const { uploadFile } = require("../services/upload.service");
 const { generatePaymentReceipt } = require("../services/receipt.service");
 const paymentService = require("../services/payment.service");
+const fs = require("fs");
+const { generateQRCode } = require("../utils/helpers");
 // FIXED: needed to notify admins when a tenant submits a payment proof
 const NotificationEventManager = require("../utils/notification.events");
 
+
+/**
+ * Multi-bill payment helpers.
+ *
+ * Payment scope:
+ *  - bill: one explicitly selected bill
+ *  - outstanding: the tenant's complete outstanding balance
+ *
+ * For outstanding payments the server allocates oldest due bills first.
+ * A previously-partially-paid bill must be settled in full before the
+ * allocation can move to a newer bill. This preserves the existing
+ * one-partial-payment-per-bill rule.
+ */
+const getTenantOutstandingRows = async (connection, tenantId, { lock = false } = {}) => {
+    const lockClause = lock ? " FOR UPDATE" : "";
+    const [rows] = await connection.execute(`
+        SELECT
+            b.id,
+            b.tenant_id,
+            b.room_id,
+            b.bill_group_id,
+            b.billing_month,
+            b.period_from,
+            b.period_till,
+            b.total_amount,
+            b.fine_amount,
+            b.paid_amount,
+            b.status,
+            b.payment_upi_id,
+            b.payment_account_holder_name,
+            b.payment_bank_name,
+            b.payment_account_number,
+            b.payment_ifsc_code,
+            b.payment_details_source,
+            b.payment_details_qr,
+            b.payment_qr,
+            b.partial_payment_qr,
+            b.admin_qr,
+            b.valid_until,
+            r.room_number,
+            GREATEST(b.total_amount + b.fine_amount - b.paid_amount, 0) AS due_amount,
+            EXISTS(
+                SELECT 1 FROM bill_payments bp
+                WHERE bp.bill_id=b.id AND bp.is_partial=1
+            ) AS has_verified_partial,
+            EXISTS(
+                SELECT 1 FROM payment_proofs pp
+                WHERE pp.bill_id=b.id AND pp.status='pending'
+            ) AS has_pending_payment_proof
+        FROM bills b
+        LEFT JOIN rooms r ON r.id=b.room_id
+        WHERE
+            b.deleted_at IS NULL
+            AND (b.total_amount + b.fine_amount - b.paid_amount) > 0
+            AND (
+                b.tenant_id=?
+                OR EXISTS (
+                    SELECT 1
+                    FROM bill_group_members bgm
+                    INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                    WHERE bg.bill_id=b.id AND bgm.tenant_id=?
+                )
+            )
+        ORDER BY b.created_at ASC, b.id ASC
+        ${lockClause}
+    `, [tenantId, tenantId]);
+    return rows;
+};
+
+const buildPaymentAllocationPreview = async (connection, tenantId, {
+    scope = 'bill',
+    billId = null,
+    amount,
+    lock = false
+} = {}) => {
+    const requested = Number(amount);
+    if (!Number.isFinite(requested) || requested <= 0) {
+        throw new Error("Payment amount must be greater than 0.");
+    }
+
+    let rows;
+    if (scope === 'bill') {
+        if (!billId) throw new Error("Bill ID is required for a bill payment.");
+
+        const lockClause = lock ? " FOR UPDATE" : "";
+        const [result] = await connection.execute(`
+            SELECT
+                b.id, b.tenant_id, b.room_id, b.bill_group_id, b.billing_month,
+                b.period_from, b.period_till, b.total_amount, b.fine_amount,
+                b.paid_amount, b.status, b.payment_upi_id,
+                b.payment_account_holder_name, b.payment_bank_name,
+                b.payment_account_number, b.payment_ifsc_code,
+                b.payment_details_source, b.payment_details_qr,
+                b.payment_qr, b.partial_payment_qr, b.admin_qr, b.valid_until,
+                r.room_number,
+                GREATEST(b.total_amount + b.fine_amount - b.paid_amount, 0) AS due_amount,
+                EXISTS(SELECT 1 FROM bill_payments bp WHERE bp.bill_id=b.id AND bp.is_partial=1) AS has_verified_partial,
+                EXISTS(SELECT 1 FROM payment_proofs pp WHERE pp.bill_id=b.id AND pp.status='pending') AS has_pending_payment_proof,
+                EXISTS(
+                    SELECT 1 FROM payment_proofs pp_all
+                    WHERE pp_all.tenant_id=b.tenant_id AND pp_all.status='pending'
+                ) AS has_pending_outstanding_payment_proof
+            FROM bills b
+            LEFT JOIN rooms r ON r.id=b.room_id
+            WHERE b.id=? AND b.deleted_at IS NULL
+              AND (
+                b.tenant_id=?
+                OR EXISTS(
+                    SELECT 1 FROM bill_group_members bgm
+                    INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                    WHERE bg.bill_id=b.id AND bgm.tenant_id=?
+                )
+              )
+            ${lockClause}
+        `, [billId, tenantId, tenantId]);
+        rows = result;
+    } else if (scope === 'outstanding') {
+        rows = await getTenantOutstandingRows(connection, tenantId, { lock });
+    } else {
+        throw new Error("Invalid payment scope. Use 'bill' or 'outstanding'.");
+    }
+
+    if (!rows.length) throw new Error("No outstanding bill was found.");
+
+    const totalOutstanding = rows.reduce(
+        (sum, row) => sum + Math.max(Number(row.due_amount || 0), 0), 0
+    );
+
+    if (requested > totalOutstanding + 0.005) {
+        throw new Error(
+            `Payment amount ₹${requested.toFixed(2)} exceeds the ${scope === 'outstanding' ? 'total outstanding' : 'selected bill'} due of ₹${totalOutstanding.toFixed(2)}.`
+        );
+    }
+
+    if (scope === 'outstanding' && requested < totalOutstanding - 0.005 &&
+        requested + 0.005 < totalOutstanding * 0.5) {
+        throw new Error(
+            `A partial payment must be at least 50% of the total outstanding balance: ₹${(totalOutstanding * 0.5).toFixed(2)}.`
+        );
+    }
+
+    if (scope === 'bill') {
+        const row = rows[0];
+        const due = Math.max(Number(row.due_amount || 0), 0);
+        if (requested < due - 0.005 && requested + 0.005 < due * 0.5) {
+            throw new Error(
+                `A partial payment must be at least 50% of the current bill due: ₹${(due * 0.5).toFixed(2)}.`
+            );
+        }
+        if (row.has_pending_payment_proof) {
+            throw new Error("A payment proof for this bill is awaiting admin verification. Please wait before making another payment.");
+        }
+        if (row.has_verified_partial && requested < due - 0.005) {
+            throw new Error(
+                `A partial payment has already been verified for this bill. You must now pay the full remaining balance of ₹${due.toFixed(2)}.`
+            );
+        }
+    } else {
+        // One pending proof at a time for an outstanding-balance payment.
+        const [pending] = await connection.execute(`
+            SELECT id FROM payment_proofs
+            WHERE tenant_id=? AND status='pending'
+            LIMIT 1
+        `, [tenantId]);
+        if (pending.length) {
+            throw new Error("A payment proof is already awaiting admin verification. Please wait before submitting another payment.");
+        }
+    }
+
+    let remaining = requested;
+    const allocations = [];
+
+    for (const row of rows) {
+        if (remaining <= 0.005) break;
+        const due = Math.max(Number(row.due_amount || 0), 0);
+        if (due <= 0) continue;
+
+        const allocation = Math.min(remaining, due);
+        const leavesBalance = allocation < due - 0.005;
+
+        if (leavesBalance && row.has_verified_partial) {
+            throw new Error(
+                `Bill #${row.id} already has a verified partial payment. Your payment must fully settle its remaining due of ₹${due.toFixed(2)} before newer bills can be paid.`
+            );
+        }
+
+        if (leavesBalance && allocation + 0.005 < due * 0.5 && scope === 'bill') {
+            throw new Error(
+                `A partial payment for Bill #${row.id} must be at least 50% of its current due.`
+            );
+        }
+
+        allocations.push({
+            bill_id: Number(row.id),
+            amount: Number(allocation.toFixed(2)),
+            due_before: Number(due.toFixed(2)),
+            due_after: Number(Math.max(due - allocation, 0).toFixed(2)),
+            is_partial: leavesBalance,
+            row
+        });
+        remaining = Number((remaining - allocation).toFixed(2));
+    }
+
+    if (remaining > 0.005) {
+        throw new Error("Unable to allocate the requested payment across the tenant's outstanding bills.");
+    }
+
+    return {
+        scope,
+        target_bill_id: scope === 'bill' ? Number(billId) : null,
+        amount: Number(requested.toFixed(2)),
+        total_outstanding: Number(totalOutstanding.toFixed(2)),
+        allocations
+    };
+};
+
 const getBillDetails = async (req, res) => {
+    let connection = null;
+    let connectionReleased = false;
     try {
         const tenantId = req.tenant.id;
 
-        const connection = await db.getConnection();
+        connection = await db.getConnection();
 
         // Get current bill for tenant
         const [bills] = await connection.execute(
@@ -73,7 +293,31 @@ const getBillDetails = async (req, res) => {
             [tenantId, tenantId]
         );
 
+        // Return every outstanding bill as well as the primary bill. This makes
+        // the tenant app show the previous unpaid bills, the newly created bill,
+        // and one authoritative combined outstanding balance.
+        const [outstandingBills] = await connection.execute(`
+            SELECT b.id, b.billing_month, b.total_amount, b.fine_amount, b.paid_amount,
+                   b.status, b.sent_at, b.valid_until, b.room_id, r.room_number,
+                   GREATEST(b.total_amount + b.fine_amount - b.paid_amount, 0) AS due_amount
+            FROM bills b
+            LEFT JOIN rooms r ON r.id=b.room_id
+            WHERE (b.tenant_id=? OR EXISTS (
+                SELECT 1 FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                WHERE bg.bill_id=b.id AND bgm.tenant_id=?
+            ))
+              AND b.deleted_at IS NULL
+              AND (b.total_amount + b.fine_amount - b.paid_amount) > 0
+            ORDER BY b.created_at DESC
+        `, [tenantId, tenantId]);
+
+        const totalOutstanding = outstandingBills.reduce(
+            (sum, item) => sum + Math.max(Number(item.due_amount || 0), 0), 0
+        );
+
         connection.release();
+        connectionReleased = true;
 
         if (bills.length === 0) {
             return res.status(404).json({
@@ -118,10 +362,27 @@ const getBillDetails = async (req, res) => {
                 payment_details_qr: bill.payment_details_qr,
                 has_verified_partial: Boolean(bill.has_verified_partial),
                 has_pending_payment_proof: Boolean(bill.has_pending_payment_proof),
+                has_pending_outstanding_payment_proof: Boolean(bill.has_pending_outstanding_payment_proof),
                 total_paid_online: parseFloat(bill.ledger_online_paid || 0),
                 total_paid_cash: parseFloat(bill.ledger_cash_paid || 0),
                 total_due: totalDue,
-                is_overdue: bill.status === 'unpaid' && new Date(bill.valid_until) < new Date()
+                is_overdue: bill.status === 'unpaid' && new Date(bill.valid_until) < new Date(),
+                room_id: bill.room_id || bill.bill_room_id || null,
+                is_group_bill: Boolean(bill.bill_group_id),
+                outstanding_bills: outstandingBills.map(item => ({
+                    id: item.id,
+                    billing_month: item.billing_month,
+                    total_amount: Number(item.total_amount || 0),
+                    fine_amount: Number(item.fine_amount || 0),
+                    paid_amount: Number(item.paid_amount || 0),
+                    due_amount: Number(item.due_amount || 0),
+                    status: item.status,
+                    sent_at: item.sent_at,
+                    valid_until: item.valid_until,
+                    room_id: item.room_id || null,
+                    room_number: item.room_number || null
+                })),
+                total_outstanding: totalOutstanding
             },
             tenant: {
                 full_name: bill.tenant_name,
@@ -138,6 +399,7 @@ const getBillDetails = async (req, res) => {
         });
 
     } catch (error) {
+        try { if (typeof connection !== 'undefined' && !connectionReleased) connection.release(); } catch (_) {}
         console.error("Get Bill Details Error:", error);
         return res.status(500).json({
             success: false,
@@ -146,208 +408,202 @@ const getBillDetails = async (req, res) => {
     }
 };
 
-const generatePartialPaymentQR = async (req, res) => {
+const generatePaymentQR = async (req, res) => {
     try {
         const tenantId = req.tenant.id;
-        const { bill_id, amount } = req.body;
+        const {
+            bill_id,
+            amount,
+            scope = 'bill'
+        } = req.body;
+
         const requested = Number(amount);
-        if (!bill_id || !Number.isFinite(requested) || requested <= 0) {
-            return res.status(400).json({ success: false, message: "Bill and a valid payment amount are required" });
+        if (!Number.isFinite(requested) || requested <= 0) {
+            return res.status(400).json({ success:false, message:"A valid payment amount is required." });
         }
 
         const connection = await db.getConnection();
         try {
-            const [rows] = await connection.execute(
-                `SELECT id, tenant_id, status, total_amount, paid_amount, fine_amount,
-                        payment_upi_id, payment_account_holder_name
-                 FROM bills WHERE id=? AND deleted_at IS NULL AND (tenant_id=? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=bills.id AND bgm.tenant_id=?)) FOR UPDATE`,
-                [bill_id, tenantId, tenantId]
-            );
-            if (!rows.length) return res.status(404).json({ success:false, message:"Bill not found" });
-            const bill = rows[0];
-            const due = Math.max(Number(bill.total_amount)+Number(bill.fine_amount||0)-Number(bill.paid_amount||0),0);
-            if (bill.status === 'paid' || due <= 0) return res.status(400).json({success:false,message:"Bill is already fully paid"});
-            if (requested > due + 0.005) return res.status(400).json({success:false,message:`Amount exceeds current due of ₹${due.toFixed(2)}`});
+            const preview = await buildPaymentAllocationPreview(connection, tenantId, {
+                scope,
+                billId: bill_id,
+                amount: requested,
+                lock: false
+            });
 
-            const [pendingProofs] = await connection.execute(
-                `SELECT id, amount_paid FROM payment_proofs WHERE bill_id=? AND status='pending' LIMIT 1`,
-                [bill_id]
-            );
-            if (pendingProofs.length) {
-                return res.status(409).json({success:false,message:"A payment proof for this bill is awaiting admin verification. Please wait for verification before making another payment."});
+            const anchor = preview.allocations[0]?.row;
+            if (!anchor) {
+                return res.status(400).json({ success:false, message:"No outstanding bill is available for payment." });
             }
-            const [partials] = await connection.execute(
-                `SELECT id FROM bill_payments WHERE bill_id=? AND is_partial=1 LIMIT 1`,
-                [bill_id]
-            );
-            if (partials.length && requested < due - 0.005) {
-                return res.status(400).json({success:false,message:`A partial payment has already been verified for this bill. You must now pay the full remaining balance of ₹${due.toFixed(2)}.`});
+
+            // Generate the QR using the SAME technique used by normal bill
+            // auto-generated QR codes. The important difference is that the
+            // payload is built from the fresh payment preview, so the QR always
+            // contains the REAL amount being paid right now.
+            //
+            // Do not require a UPI ID here. A UPI QR and Livinkey's normal bill
+            // QR are two different things. The latter is an application/payment
+            // reference QR and works even when the bill has only bank details or
+            // an uploaded static payment QR.
+            const paymentAmount = Number(preview.amount.toFixed(2));
+            const allocations = preview.allocations.map(a => ({
+                billId: a.bill_id,
+                amount: Number(Number(a.amount).toFixed(2)),
+                dueBefore: Number(Number(a.due_before).toFixed(2)),
+                dueAfter: Number(Number(a.due_after).toFixed(2)),
+                isPartial: !!a.is_partial
+            }));
+            const qrPayload = {
+                billId: scope === 'bill' ? anchor.id : null,
+                tenantId,
+                amount: paymentAmount,
+                type: scope === 'outstanding' ? 'outstanding_payment' : 'full_payment',
+                paymentScope: scope,
+                targetBillId: preview.target_bill_id,
+                allocations
+            };
+
+            let qrCode = null;
+            let qrCodePublicId = null;
+            let qrCodeResourceType = null;
+            let qrPath = null;
+            try {
+                qrPath = await generateQRCode(JSON.stringify(qrPayload), scope === 'outstanding' ? 'outstanding' : 'full');
+                const upload = await uploadFile(
+                    { buffer: fs.readFileSync(qrPath), originalname: 'payment_qr.png' },
+                    'livinkey/bills/qr'
+                );
+                if (!upload || !upload.secure_url) {
+                    throw new Error('Failed to generate/upload payment QR code');
+                }
+                qrCode = upload.secure_url;
+                qrCodePublicId = upload.public_id || null;
+                qrCodeResourceType = upload.resource_type || null;
+            } finally {
+                if (qrPath && fs.existsSync(qrPath)) {
+                    try { fs.unlinkSync(qrPath); } catch (_) {}
+                }
             }
-            if (requested < due - 0.005 && requested + 0.005 < due * 0.5) {
-                return res.status(400).json({success:false,message:`Your partial payment is ₹${requested.toFixed(2)}, but the minimum allowed partial payment is 50% of the current due: ₹${(due * 0.5).toFixed(2)}.`});
-            }
-            const options = await paymentService.generatePaymentOptions(bill, { amount: requested });
-            return res.json({ success:true, data: options });
+
+            return res.json({
+                success: true,
+                data: {
+                    qr_code: qrCode,
+                    qr_code_public_id: qrCodePublicId,
+                    qr_code_resource_type: qrCodeResourceType,
+                    qr_payload: qrPayload,
+                    payment_scope: scope,
+                    target_bill_id: preview.target_bill_id,
+                    total_outstanding: preview.total_outstanding,
+                    payment_amount: paymentAmount,
+                    allocations: preview.allocations.map(a => ({
+                        bill_id: a.bill_id,
+                        amount: a.amount,
+                        due_before: a.due_before,
+                        due_after: a.due_after,
+                        is_partial: a.is_partial
+                    }))
+                }
+            });
         } finally {
             connection.release();
         }
     } catch (error) {
-        console.error("Generate Partial Payment QR Error:", error);
+        console.error("Generate Payment QR Error:", error);
         return res.status(400).json({ success:false, message:error.message || "Unable to generate payment QR" });
     }
 };
 
+// Backward-compatible endpoint used by older app builds.
+const generatePartialPaymentQR = async (req, res) => {
+    return generatePaymentQR(req, res);
+};
+
+
 const submitPaymentProof = async (req, res) => {
+    let connection = null;
     try {
         const tenantId = req.tenant.id;
-        const { bill_id, transaction_id, amount_paid } = req.body;
+        const {
+            bill_id,
+            transaction_id,
+            amount_paid,
+            payment_scope = 'bill',
+            payment_target_bill_id
+        } = req.body;
         const file = req.file;
 
-        if (!bill_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Bill ID is required"
-            });
+        if (!bill_id && payment_scope !== 'outstanding') {
+            return res.status(400).json({ success:false, message:"Bill ID is required." });
         }
-
         if (!transaction_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Transaction ID is required"
-            });
+            return res.status(400).json({ success:false, message:"Transaction ID is required." });
         }
-
-        if (!amount_paid || amount_paid <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid payment amount is required"
-            });
-        }
-
-        if (!file) {
-            return res.status(400).json({
-                success: false,
-                message: "Payment screenshot is required"
-            });
-        }
-
-        const connection = await db.getConnection();
-
-        // Verify bill belongs to tenant and is not fully paid
-        const [billCheck] = await connection.execute(
-            `
-            SELECT id, status, total_amount, paid_amount, fine_amount
-            FROM bills
-            WHERE id = ? AND deleted_at IS NULL AND (tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=bills.id AND bgm.tenant_id = ?))
-            FOR UPDATE
-            `,
-            [bill_id, tenantId, tenantId]
-        );
-
-        if (billCheck.length === 0) {
-            connection.release();
-            return res.status(404).json({
-                success: false,
-                message: "Bill not found"
-            });
-        }
-
-        const bill = billCheck[0];
-
-        if (bill.status === 'paid') {
-            connection.release();
-            return res.status(400).json({
-                success: false,
-                message: "Bill is already fully paid"
-            });
-        }
-
-        const due = Math.max(
-            Number(bill.total_amount) + Number(bill.fine_amount || 0) - Number(bill.paid_amount || 0),
-            0
-        );
         const amount = Number(amount_paid);
-        if (amount > due + 0.005) {
-            connection.release();
-            return res.status(400).json({
-                success: false,
-                message: `Amount exceeds the current due amount of ₹${due.toFixed(2)}`
-            });
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ success:false, message:"Valid payment amount is required." });
+        }
+        if (!file) {
+            return res.status(400).json({ success:false, message:"Payment screenshot is required." });
+        }
+        if (!['bill', 'outstanding'].includes(payment_scope)) {
+            return res.status(400).json({ success:false, message:"Invalid payment scope." });
         }
 
-        const [pendingProofs] = await connection.execute(
-            `SELECT id FROM payment_proofs WHERE bill_id=? AND status='pending' LIMIT 1`,
-            [bill_id]
-        );
-        if (pendingProofs.length) {
-            connection.release();
-            return res.status(409).json({
-                success: false,
-                message: "A payment proof for this bill is already awaiting admin verification. Please wait for verification before submitting another payment."
-            });
-        }
-        const isPartial = amount < due - 0.005;
-        if (isPartial && amount + 0.005 < due * 0.5) {
-            connection.release();
-            return res.status(400).json({
-                success: false,
-                message: `Your partial payment is ₹${amount.toFixed(2)}, but the minimum allowed partial payment is 50% of the current due: ₹${(due * 0.5).toFixed(2)}.`
-            });
-        }
-        const [partialRows] = await connection.execute(
-            `SELECT id FROM bill_payments WHERE bill_id = ? AND is_partial = 1 LIMIT 1`,
-            [bill_id]
-        );
-        if (isPartial && partialRows.length) {
-            connection.release();
-            return res.status(400).json({
-                success: false,
-                message: `A partial payment has already been verified for this bill. You must now pay the full remaining balance of ₹${due.toFixed(2)}.`
-            });
-        }
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        const targetBillId = payment_scope === 'bill'
+            ? Number(bill_id)
+            : (payment_target_bill_id ? Number(payment_target_bill_id) : null);
+
+        const preview = await buildPaymentAllocationPreview(connection, tenantId, {
+            scope: payment_scope,
+            billId: targetBillId,
+            amount,
+            lock: true
+        });
+
+        // The proof row keeps an anchor bill for legacy joins/listing. For an
+        // outstanding payment this is the oldest bill that receives money.
+        const anchorBillId = preview.allocations[0].bill_id;
 
         const [duplicateTx] = await connection.execute(
-            `SELECT id FROM payment_proofs WHERE tenant_id = ? AND transaction_id = ? LIMIT 1`,
+            `SELECT id FROM payment_proofs WHERE tenant_id=? AND transaction_id=? LIMIT 1`,
             [tenantId, transaction_id]
         );
         if (duplicateTx.length) {
-            connection.release();
-            return res.status(409).json({
-                success: false,
-                message: "This transaction ID has already been submitted."
-            });
+            await connection.rollback();
+            return res.status(409).json({ success:false, message:"This transaction ID has already been submitted." });
         }
 
-        // Upload payment proof
         const uploadResult = await uploadFile(
             file,
             `livinkey/payments/proofs/${tenantId}`
         );
-
         if (!uploadResult) {
-            connection.release();
-            return res.status(500).json({
-                success: false,
-                message: "Failed to upload payment proof"
-            });
+            await connection.rollback();
+            return res.status(500).json({ success:false, message:"Failed to upload payment proof" });
         }
 
-        // ============================================================
-        // FIXED: capture the tenant's name (for the admin notification
-        // message) and the inserted proof's id (needed as the
-        // notification's entity_id / link target).
-        // ============================================================
         const [tenantRows] = await connection.execute(
-            `SELECT full_name FROM tenants WHERE id = ?`,
+            `SELECT full_name FROM tenants WHERE id=?`,
             [tenantId]
         );
         const tenantName = tenantRows[0]?.full_name || 'Tenant';
 
-        // Insert payment proof
+        const dueBefore = preview.scope === 'outstanding'
+            ? preview.total_outstanding
+            : preview.allocations[0].due_before;
+        const isPartial = amount < dueBefore - 0.005;
+        const dueAfter = Math.max(dueBefore - amount, 0);
+
         const [proofResult] = await connection.execute(
             `
             INSERT INTO payment_proofs (
                 bill_id,
+                payment_scope,
+                payment_target_bill_id,
                 tenant_id,
                 transaction_id,
                 amount_paid,
@@ -356,54 +612,69 @@ const submitPaymentProof = async (req, res) => {
                 proof_resource_type,
                 status,
                 is_partial,
-                due_before_payment
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                due_before_payment,
+                due_after_payment
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
             `,
             [
-                bill_id,
+                anchorBillId,
+                payment_scope,
+                targetBillId,
                 tenantId,
                 transaction_id,
-                amount_paid,
+                amount,
                 uploadResult.secure_url,
                 uploadResult.public_id,
                 uploadResult.resource_type || 'image',
-                'pending',
                 isPartial ? 1 : 0,
-                due
+                dueBefore,
+                dueAfter
             ]
         );
 
-        connection.release();
+        await connection.commit();
 
-        // ============================================================
-        // FIXED: this previously never notified anyone. Admins now get
-        // a "new payment proof submitted" notification.
-        // ============================================================
         try {
             await NotificationEventManager.onPaymentProofSubmitted({
                 id: proofResult.insertId,
-                bill_id,
+                bill_id: anchorBillId,
                 tenant_id: tenantId,
                 tenant_name: tenantName,
-                amount_paid
+                amount_paid: amount,
+                payment_scope
             });
         } catch (notifError) {
             console.error("Failed to send payment proof submitted notification:", notifError);
         }
 
         return res.status(201).json({
-            success: true,
-            message: "Payment proof submitted successfully. Awaiting admin verification."
+            success:true,
+            message:"Payment proof submitted successfully. Awaiting admin verification.",
+            data:{
+                proof_id: proofResult.insertId,
+                payment_scope,
+                amount_paid: amount,
+                total_outstanding: preview.total_outstanding,
+                allocations: preview.allocations.map(a => ({
+                    bill_id:a.bill_id,
+                    amount:a.amount,
+                    due_before:a.due_before,
+                    due_after:a.due_after
+                }))
+            }
         });
-
     } catch (error) {
+        try { if (connection) await connection.rollback(); } catch (_) {}
         console.error("Submit Payment Proof Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message || "Internal server error"
+        return res.status(400).json({
+            success:false,
+            message:error.message || "Unable to submit payment proof"
         });
+    } finally {
+        try { if (connection) connection.release(); } catch (_) {}
     }
 };
+
 
 const getPaymentHistory = async (req, res) => {
     try {
@@ -434,9 +705,10 @@ const getPaymentHistory = async (req, res) => {
             WHERE (b.tenant_id = ? OR EXISTS (SELECT 1 FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id AND bgm.tenant_id=?))
               AND LOWER(COALESCE(bp.payment_method,'')) <> 'cash'
               AND NOT EXISTS (
-                  SELECT 1 FROM payment_proofs pp
-                  WHERE pp.bill_id = bp.bill_id
-                    AND pp.transaction_id = bp.transaction_id
+                  SELECT 1
+                  FROM payment_allocations pa
+                  INNER JOIN payment_proofs pp ON pp.id = pa.payment_proof_id
+                  WHERE pa.bill_payment_id = bp.id
               )
             ORDER BY bp.created_at DESC
             `,
@@ -820,6 +1092,19 @@ const getPaymentReceipt = async (req, res) => {
             return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
         }
         await attachReceiptLedgerContext(connection, paymentData, type);
+        if (type === 'proof') {
+            const [allocationRows] = await connection.execute(
+                `SELECT pa.*, b.billing_month, b.total_amount AS bill_total,
+                        b.fine_amount, b.status AS bill_status, r.room_number
+                 FROM payment_allocations pa
+                 INNER JOIN bills b ON b.id=pa.bill_id
+                 LEFT JOIN rooms r ON r.id=b.room_id
+                 WHERE pa.payment_proof_id=?
+                 ORDER BY pa.allocation_order ASC`,
+                [paymentId]
+            );
+            paymentData.payment_allocations = allocationRows;
+        }
         connection.release();
 
         // Generate receipt HTML
@@ -1005,6 +1290,19 @@ const downloadPaymentReceipt = async (req, res) => {
             return res.status(400).json({ success: false, message: "A receipt is available only after the payment proof is verified." });
         }
         await attachReceiptLedgerContext(connection, paymentData, type);
+        if (type === 'proof') {
+            const [allocationRows] = await connection.execute(
+                `SELECT pa.*, b.billing_month, b.total_amount AS bill_total,
+                        b.fine_amount, b.status AS bill_status, r.room_number
+                 FROM payment_allocations pa
+                 INNER JOIN bills b ON b.id=pa.bill_id
+                 LEFT JOIN rooms r ON r.id=b.room_id
+                 WHERE pa.payment_proof_id=?
+                 ORDER BY pa.allocation_order ASC`,
+                [paymentId]
+            );
+            paymentData.payment_allocations = allocationRows;
+        }
         connection.release();
 
         // Generate receipt HTML
@@ -1027,6 +1325,7 @@ const downloadPaymentReceipt = async (req, res) => {
 
 module.exports = {
     getBillDetails,
+    generatePaymentQR,
     generatePartialPaymentQR,
     submitPaymentProof,
     getPaymentHistory,

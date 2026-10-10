@@ -27,6 +27,10 @@ const guestNotificationRoutes = require("./routes/guest.notification.routes");
 const adminNotificationRoutes = require("./routes/admin.notification.routes");
 const activityLogRoutes = require("./routes/activity.log.routes");
 const ensureActivitySchema = require("./config/activity.schema");
+const webhookRoutes = require("./routes/webhook.routes");
+const conversationRoutes = require("./routes/conversation.routes");
+const livinkeyNoticeRoutes = require("./routes/livinkey.notice.routes");
+const livinkeyAdRoutes = require("./routes/livinkey.ad.routes");
 
 const app = express();
 
@@ -93,6 +97,10 @@ app.use("/api/tenant-notifications", tenantNotificationRoutes);
 app.use("/api/guest-notifications", guestNotificationRoutes);
 app.use("/api/admin-notifications", adminNotificationRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
+app.use("/api/webhooks", webhookRoutes);
+app.use("/api/conversations", conversationRoutes);
+app.use("/api/livinkey-notices", livinkeyNoticeRoutes);
+app.use("/api/livinkey-ads", livinkeyAdRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {

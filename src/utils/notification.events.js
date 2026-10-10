@@ -115,6 +115,74 @@ class NotificationEventManager {
     }
 
     /**
+     * Check tenant stay periods ending in exactly one month.
+     * Runs daily and is date-exact, so each tenant is notified once for the matching end date.
+     * WhatsApp is attempted first; email is used as fallback.
+     */
+    static async checkTenantStayExpiry() {
+        const db = require('../config/db');
+        const { sendTextMessage } = require('../services/whatsapp.service');
+        const { sendTenantStayExpiryEmail, sendAdminStayExpiryEmail } = require('../services/mail.service');
+        try {
+            const connection = await db.getConnection();
+            const [tenants] = await connection.execute(`
+                SELECT t.id, t.full_name, t.email, t.country_code, t.phone, t.international_phone,
+                       td.period_of_stay, td.arrival_date, p.name AS pg_name,
+                       DATE_ADD(td.arrival_date, INTERVAL td.period_of_stay MONTH) AS stay_end_date
+                FROM tenants t
+                INNER JOIN tenant_details td ON td.tenant_id = t.id
+                LEFT JOIN pgs p ON p.id = td.pg_id
+                WHERE t.role='tenant' AND t.is_active=1 AND td.period_of_stay BETWEEN 1 AND 12
+                  AND td.arrival_date IS NOT NULL
+                  AND DATE_ADD(td.arrival_date, INTERVAL td.period_of_stay MONTH) = DATE_ADD(CURDATE(), INTERVAL 1 MONTH)`);
+            const [admins] = await connection.execute(`SELECT id, name, email, phone FROM admins WHERE is_active=1 AND role='super_admin'`);
+            connection.release();
+
+            let sent = 0;
+            for (const tenant of tenants) {
+                const endDate = new Date(tenant.stay_end_date).toISOString().slice(0,10);
+                const dedupeConnection = await db.getConnection();
+                const [dedupeResult] = await dedupeConnection.execute(
+                    `INSERT IGNORE INTO tenant_stay_expiry_notifications (tenant_id, stay_end_date) VALUES (?, ?)`,
+                    [tenant.id, endDate]
+                );
+                dedupeConnection.release();
+                if (dedupeResult.affectedRows === 0) continue;
+                const message = `Hello ${tenant.full_name}, your agreed stay at ${tenant.pg_name || 'Livinkey'} will end in one month (${endDate}), as per your agreement. Please contact the Super Admin if you require an extension.`;
+                let tenantDelivered = false;
+                const tenantWhatsapp = String(tenant.international_phone || `${tenant.country_code || ''}${String(tenant.phone || '')}`).replace(/[^+\d]/g, '');
+                if (tenantWhatsapp) {
+                    try { await sendTextMessage(tenantWhatsapp, message); tenantDelivered = true; } catch (e) { console.error('Tenant stay WhatsApp failed:', tenant.id, e.message); }
+                }
+                if (!tenantDelivered && tenant.email) {
+                    try { await sendTenantStayExpiryEmail(tenant.email, tenant.full_name, tenant.pg_name, endDate); tenantDelivered = true; } catch (e) { console.error('Tenant stay email failed:', tenant.id, e.message); }
+                }
+
+                for (const admin of admins) {
+                    const adminMessage = `Tenant ${tenant.full_name}'s agreed stay at ${tenant.pg_name || 'Livinkey'} will end in one month (${endDate}). Contact the tenant regarding extension if required.`;
+                    let delivered = false;
+                    if (admin.phone) {
+                        const adminWhatsapp = String(admin.phone).replace(/[^+\d]/g, '');
+                        try { await sendTextMessage(adminWhatsapp, adminMessage); delivered = true; } catch (e) { console.error('Admin stay WhatsApp failed:', admin.id, e.message); }
+                    }
+                    if (!delivered && admin.email) {
+                        try { await sendAdminStayExpiryEmail(admin.email, admin.name, tenant.full_name, tenant.pg_name, endDate); delivered = true; } catch (e) { console.error('Admin stay email failed:', admin.id, e.message); }
+                    }
+                }
+
+                const messageData = NotificationService.generateNotificationMessages.tenantStayExpiry(tenant, endDate);
+                await NotificationService.sendNotificationToSuperAdmins('TENANT_STAY_EXPIRY', { ...messageData, entity_id: tenant.id, entity_type: 'tenant', link: `/tenants/${tenant.id}` });
+                await tenantNotificationService.sendTenantNotification(tenant.id, 'STAY_EXPIRY', { title: 'Stay Period Ending Soon', message });
+                sent++;
+            }
+            return sent;
+        } catch (error) {
+            console.error('Error checking tenant stay expiry:', error);
+            return 0;
+        }
+    }
+
+    /**
      * Handle tenant creation event
      */
     static async onTenantCreated(tenant) {

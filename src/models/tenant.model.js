@@ -21,12 +21,13 @@ const createTenant = async (connection, tenantData) => {
             country_code,
             phone,
             international_phone,
+            parent_phone,
             gender,
             password,
             created_by,
             residency,
             must_change_password
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             tenantData.role,
@@ -36,6 +37,7 @@ const createTenant = async (connection, tenantData) => {
             tenantData.country_code,
             tenantData.phone,
             tenantData.international_phone || null,
+            tenantData.parent_phone || null,
             tenantData.gender,
             tenantData.password,
             tenantData.created_by,
@@ -65,10 +67,11 @@ const createTenantDetails = async (connection, detailsData) => {
             paid_from,
             paid_till,
             arrival_date,
+            period_of_stay,
             document_url,
             document_public_id,
             document_resource_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             detailsData.tenant_id,
@@ -86,6 +89,7 @@ const createTenantDetails = async (connection, detailsData) => {
             toDateOrNull(detailsData.paid_from),
             toDateOrNull(detailsData.paid_till),
             toDateOrNull(detailsData.arrival_date),
+            detailsData.period_of_stay || null,
             detailsData.document_url || null,
             detailsData.document_public_id || null,
             detailsData.document_resource_type || null
@@ -166,6 +170,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             t.country_code,
             t.phone,
             t.international_phone,
+            t.parent_phone,
             t.gender,
             t.created_at,
             t.updated_at,
@@ -183,6 +188,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             td.paid_from,
             td.paid_till,
             td.arrival_date,
+            td.period_of_stay,
             td.document_url,
             p.name as pg_name,
             r.room_number,
@@ -309,6 +315,7 @@ const findById = async (id) => {
             t.country_code,
             t.phone,
             t.international_phone,
+            t.parent_phone,
             t.gender,
             t.password,
             t.must_change_password,
@@ -328,6 +335,7 @@ const findById = async (id) => {
             td.paid_from,
             td.paid_till,
             td.arrival_date,
+            td.period_of_stay,
             td.document_url,
             td.document_public_id,
             td.document_resource_type,
@@ -580,6 +588,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             country_code = ?,
             phone = ?,
             international_phone = ?,
+            parent_phone = ?,
             gender = ?,
             residency = ?
         WHERE id = ?
@@ -591,6 +600,7 @@ const updateTenant = async (connection, tenantId, tenantData) => {
             tenantData.country_code,
             tenantData.phone,
             tenantData.international_phone || null,
+            tenantData.parent_phone || null,
             tenantData.gender,
             tenantData.residency || null,
             tenantId
@@ -627,7 +637,8 @@ const updateTenantDetails = async (connection, tenantId, detailsData) => {
             payment_date = ?,
             paid_from = ?,
             paid_till = ?,
-            arrival_date = ?
+            arrival_date = ?,
+            period_of_stay = ?
         WHERE tenant_id = ?
         `,
         [
@@ -643,6 +654,7 @@ const updateTenantDetails = async (connection, tenantId, detailsData) => {
             toDateOrNull(detailsData.paid_from),
             toDateOrNull(detailsData.paid_till),
             toDateOrNull(detailsData.arrival_date),
+            detailsData.period_of_stay || null,
             tenantId
         ]
     );

@@ -21,8 +21,10 @@ const createPG = async (connection, pgData) => {
             payment_account_number,
             payment_ifsc_code,
             payment_upi_id,
+            tenant_agreement_enabled,
+            tenant_agreement_text,
             created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             pgData.name,
@@ -38,6 +40,8 @@ const createPG = async (connection, pgData) => {
             pgData.payment_account_number || null,
             pgData.payment_ifsc_code || null,
             pgData.payment_upi_id || null,
+            pgData.tenant_agreement_enabled === false ? 0 : 1,
+            pgData.tenant_agreement_text || null,
             pgData.created_by
         ]
     );
@@ -118,6 +122,8 @@ const findById = async (pgId) => {
             payment_account_number,
             payment_ifsc_code,
             payment_upi_id,
+            tenant_agreement_enabled,
+            tenant_agreement_text,
             is_active,
             created_by,
             created_at,
@@ -344,6 +350,8 @@ const getAllPGs = async (search = null, isActive = null) => {
             p.payment_account_number,
             p.payment_ifsc_code,
             p.payment_upi_id,
+            p.tenant_agreement_enabled,
+            p.tenant_agreement_text,
             p.is_active,
             p.created_by,
             p.created_at,
@@ -488,7 +496,9 @@ const updatePG = async (connection, pgId, pgData) => {
             payment_account_holder_name = ?,
             payment_account_number = ?,
             payment_ifsc_code = ?,
-            payment_upi_id = ?
+            payment_upi_id = ?,
+            tenant_agreement_enabled = ?,
+            tenant_agreement_text = ?
         WHERE id = ?
         `,
         [
@@ -505,6 +515,8 @@ const updatePG = async (connection, pgId, pgData) => {
             pgData.payment_account_number || null,
             pgData.payment_ifsc_code || null,
             pgData.payment_upi_id || null,
+            pgData.tenant_agreement_enabled === false ? 0 : 1,
+            pgData.tenant_agreement_text || null,
             pgId
         ]
     );

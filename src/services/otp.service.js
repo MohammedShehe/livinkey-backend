@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { sendOTPEmail } = require("./mail.service");
+const messagingService = require("./messaging.service");
 
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -31,7 +31,8 @@ const generateAndSendOTP = async (admin, context = "Login") => {
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    await sendOTPEmail(admin.email, otp, context);
+    // WhatsApp primary + Email fallback
+    await messagingService.sendOTP(admin, otp, context);
 
     return { otp, hashedOTP, expiry };
 };
@@ -54,12 +55,13 @@ const generateAndSendTenantOTP = async (tenant, context = "Forgot Password") => 
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    await sendOTPEmail(tenant.email, otp, context);
+    // WhatsApp primary + Email fallback
+    await messagingService.sendOTP(tenant, otp, context);
 
     return { otp, hashedOTP, expiry };
 };
 
-// For Guest OTP (NEW)
+// For Guest OTP
 const generateAndSendGuestOTP = async (guest, context = "Forgot Password") => {
     if (guest.otp_sent_at) {
         const lastSent = new Date(guest.otp_sent_at);
@@ -77,7 +79,8 @@ const generateAndSendGuestOTP = async (guest, context = "Forgot Password") => {
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    await sendOTPEmail(guest.email, otp, context);
+    // WhatsApp primary + Email fallback
+    await messagingService.sendOTP(guest, otp, context);
 
     return { otp, hashedOTP, expiry };
 };

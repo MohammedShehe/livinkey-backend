@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const adminNotificationService = require("../services/admin.notification.service");
 const mailService = require("../services/mail.service");
+const messagingService = require("../services/messaging.service");
 const NotificationEventManager = require("../utils/notification.events");
 
 /**
@@ -131,6 +132,13 @@ exports.sendTenantNotification = async (req, res) => {
 
             for (const tenant of tenants) {
                 try {
+                    try {
+                        await messagingService.sendCustom(
+                            { id: tenant.id, phone: tenant.phone, email: tenant.email, full_name: tenant.full_name, role: "tenant" },
+                            title.trim(),
+                            message.trim()
+                        );
+                    } catch (waErr) { console.error("WA admin notif failed:", waErr.message); }
                     await mailService.sendCustomAdminNotificationEmail(
                         tenant.email,
                         tenant.full_name,

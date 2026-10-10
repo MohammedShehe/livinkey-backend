@@ -99,6 +99,12 @@ const TENANT_NOTIFICATION_TYPES = {
         icon: '📢',
         color: '#3498db',
         linkPrefix: '/tenant-notifications'
+    },
+    STAY_EXPIRY: {
+        type: 'stay_expiry',
+        icon: '🏠',
+        color: '#e74c3c',
+        linkPrefix: '/tenant-notifications'
     }
 };
 

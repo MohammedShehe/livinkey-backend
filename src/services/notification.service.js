@@ -19,6 +19,12 @@ const NOTIFICATION_TYPES = {
         color: '#e67e22',
         linkPrefix: '/tenants/'
     },
+    TENANT_STAY_EXPIRY: {
+        type: 'tenant_stay_expiry',
+        icon: '🏠',
+        color: '#e74c3c',
+        linkPrefix: '/tenants/'
+    },
     TENANT_REGISTERED: {
         type: 'tenant_registered',
         icon: '👤',
@@ -347,6 +353,12 @@ const generateNotificationMessages = {
     tenantPaymentDue: (tenant, days) => ({
         title: 'Payment Overdue',
         message: `${tenant.full_name}'s rent is ${days} day${days > 1 ? 's' : ''} overdue`,
+        entity_id: tenant.id,
+        entity_type: 'tenant'
+    }),
+    tenantStayExpiry: (tenant, endDate) => ({
+        title: 'Tenant Stay Ends in One Month',
+        message: `${tenant.full_name}'s agreed stay ends in one month (${endDate}). Contact the Super Admin for an extension.`,
         entity_id: tenant.id,
         entity_type: 'tenant'
     }),

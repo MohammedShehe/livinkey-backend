@@ -11,6 +11,7 @@ const createTenant = async (req, res) => {
             country_code,
             phone,
             international_phone,
+            parent_phone,
             gender,
             pg_id,
             room_id,
@@ -26,6 +27,7 @@ const createTenant = async (req, res) => {
             paid_from,
             paid_till,
             arrival_date,
+            period_of_stay,
             number_of_tenants
         } = req.body;
 
@@ -44,10 +46,10 @@ const createTenant = async (req, res) => {
         }
 
         if (role === 'tenant') {
-            if (!pg_id || !room_id || !residency || !rent || !security_fee || !payment_date || !paid_from || !paid_till || !arrival_date) {
+            if (!pg_id || !room_id || !residency || !rent || !security_fee || !payment_date || !paid_from || !paid_till || !arrival_date || !period_of_stay) {
                 return res.status(400).json({
                     success: false,
-                    message: "All tenant-specific fields are required: pg_id, room_id, residency, rent, security_fee, payment_date, paid_from, paid_till, arrival_date"
+                    message: "All tenant-specific fields are required: pg_id, room_id, residency, rent, security_fee, payment_date, paid_from, paid_till, arrival_date, period_of_stay"
                 });
             }
 
@@ -55,6 +57,14 @@ const createTenant = async (req, res) => {
                 return res.status(400).json({
                     success: false,
                     message: "Residency must be either 'national' or 'international'"
+                });
+            }
+
+            const parsedPeriodOfStay = parseInt(period_of_stay, 10);
+            if (!Number.isInteger(parsedPeriodOfStay) || parsedPeriodOfStay < 1 || parsedPeriodOfStay > 12) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Period of stay must be between 1 and 12 months"
                 });
             }
 
@@ -76,6 +86,7 @@ const createTenant = async (req, res) => {
             country_code,
             phone,
             international_phone: international_phone || null,
+            parent_phone: parent_phone || null,
             gender,
             created_by: req.admin.id
         };
@@ -95,6 +106,7 @@ const createTenant = async (req, res) => {
             tenantData.paid_from = paid_from;
             tenantData.paid_till = paid_till;
             tenantData.arrival_date = arrival_date;
+            tenantData.period_of_stay = parseInt(period_of_stay, 10);
             const parsedCount = parseInt(number_of_tenants);
             tenantData.number_of_tenants = (isNaN(parsedCount) || parsedCount <= 0) ? 1 : parsedCount;
         }
@@ -260,6 +272,7 @@ const updateTenant = async (req, res) => {
             country_code,
             phone,
             international_phone,
+            parent_phone,
             gender,
             pg_id,
             room_id,
@@ -275,6 +288,7 @@ const updateTenant = async (req, res) => {
             paid_from,
             paid_till,
             arrival_date,
+            period_of_stay,
             number_of_tenants
         } = req.body;
 
@@ -293,10 +307,10 @@ const updateTenant = async (req, res) => {
         }
 
         if (role === 'tenant') {
-            if (!pg_id || !room_id || !residency || !rent || !security_fee || !payment_date || !paid_from || !paid_till || !arrival_date) {
+            if (!pg_id || !room_id || !residency || !rent || !security_fee || !payment_date || !paid_from || !paid_till || !arrival_date || !period_of_stay) {
                 return res.status(400).json({
                     success: false,
-                    message: "All tenant-specific fields are required: pg_id, room_id, residency, rent, security_fee, payment_date, paid_from, paid_till, arrival_date"
+                    message: "All tenant-specific fields are required: pg_id, room_id, residency, rent, security_fee, payment_date, paid_from, paid_till, arrival_date, period_of_stay"
                 });
             }
 
@@ -304,6 +318,14 @@ const updateTenant = async (req, res) => {
                 return res.status(400).json({
                     success: false,
                     message: "Residency must be either 'national' or 'international'"
+                });
+            }
+
+            const parsedPeriodOfStay = parseInt(period_of_stay, 10);
+            if (!Number.isInteger(parsedPeriodOfStay) || parsedPeriodOfStay < 1 || parsedPeriodOfStay > 12) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Period of stay must be between 1 and 12 months"
                 });
             }
 
@@ -325,6 +347,7 @@ const updateTenant = async (req, res) => {
             country_code,
             phone,
             international_phone: international_phone || null,
+            parent_phone: parent_phone || null,
             gender
         };
 
@@ -343,6 +366,7 @@ const updateTenant = async (req, res) => {
             tenantData.paid_from = paid_from;
             tenantData.paid_till = paid_till;
             tenantData.arrival_date = arrival_date;
+            tenantData.period_of_stay = parseInt(period_of_stay, 10);
             const parsedCount = parseInt(number_of_tenants);
             tenantData.number_of_tenants = (isNaN(parsedCount) || parsedCount <= 0) ? 1 : parsedCount;
         }

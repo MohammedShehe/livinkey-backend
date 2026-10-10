@@ -21,6 +21,7 @@ const getTenantHomeData = async (req, res) => {
                 td.paid_from,
                 td.paid_till,
                 td.arrival_date,
+                td.period_of_stay,
                 td.residency,
                 p.name as pg_name,
                 r.room_number,
@@ -73,6 +74,31 @@ const getTenantHomeData = async (req, res) => {
         );
 
         const currentBill = billData[0] || null;
+
+        // Complete outstanding balance across all unpaid bills. This is
+        // intentionally independent of current_bill so a paid current bill
+        // does not hide older unpaid bills from the tenant dashboard.
+        const [outstandingData] = await connection.execute(
+            `
+            SELECT
+                COUNT(*) AS bill_count,
+                COALESCE(SUM(GREATEST(b.total_amount + b.fine_amount - b.paid_amount, 0)), 0) AS total_amount
+            FROM bills b
+            WHERE b.deleted_at IS NULL
+              AND (b.total_amount + b.fine_amount - b.paid_amount) > 0
+              AND (
+                b.tenant_id = ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM bill_group_members bgm
+                    INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                    WHERE bg.bill_id = b.id AND bgm.tenant_id = ?
+                )
+              )
+            `,
+            [tenantId, tenantId]
+        );
+        const outstanding = outstandingData[0] || {};
 
         // Get maintenance requests count
         let maintenance = {
@@ -157,122 +183,179 @@ const getTenantHomeData = async (req, res) => {
             }
         };
 
-        // Get today's date (start of day for accurate comparison)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // ============================================================
+        // RENT STATUS (production)
+        // Source of truth: tenant_details.paid_till (set by admin when
+        // payments are approved). Do NOT recalculate coverage from
+        // SUM(paid_amount) — that drifts from admin-entered periods.
+        // ============================================================
+        const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+        const toDateOnly = (value) => {
+            if (!value) return null;
+            const d = value instanceof Date ? new Date(value) : new Date(value);
+            if (isNaN(d.getTime())) return null;
+            d.setHours(0, 0, 0, 0);
+            return d;
+        };
+
+        const daysBetween = (from, to) => {
+            // Whole calendar days from `from` to `to` (can be negative)
+            return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
+        };
+
+        const addMonthsClamped = (date, months) => {
+            const d = new Date(date);
+            const day = d.getDate();
+            d.setDate(1);
+            d.setMonth(d.getMonth() + months);
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            d.setDate(Math.min(day, lastDay));
+            d.setHours(0, 0, 0, 0);
+            return d;
+        };
+
+        const nextPaymentDateFromDay = (fromDate, paymentDayOfMonth) => {
+            // Next occurrence of paymentDayOfMonth on or after fromDate
+            const day = parseInt(paymentDayOfMonth, 10);
+            if (!day || day < 1 || day > 31) return null;
+
+            let candidate = new Date(fromDate);
+            const lastThisMonth = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
+            candidate.setDate(Math.min(day, lastThisMonth));
+            candidate.setHours(0, 0, 0, 0);
+
+            if (candidate < fromDate) {
+                candidate = addMonthsClamped(candidate, 1);
+                const lastNext = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
+                candidate.setDate(Math.min(day, lastNext));
+                candidate.setHours(0, 0, 0, 0);
+            }
+            return candidate;
+        };
+
+        const calendarMonthsBetween = (from, to) => {
+            // Full calendar months crossed from from→to (minimum 1 if to > from)
+            if (to <= from) return 0;
+            let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+            if (to.getDate() > from.getDate()) months += 1;
+            return Math.max(months, 1);
+        };
+
+        const today = toDateOnly(new Date());
 
         const monthlyRent = parseFloat(tenant.rent) || 0;
         const paidFromValid = isValidDate(tenant.paid_from);
         const paidTillValid = isValidDate(tenant.paid_till);
 
         let rentStatus = 'unpaid';
-        let dueDays = 0;
+        let dueDays = 0;       // days overdue when unpaid; 0 when paid
         let nextPaymentDate = null;
-        let daysLeft = 0;
+        let daysLeft = 0;      // days until coverage ends / next due
         let amountOwed = 0;
         let totalPaid = 0;
         let expectedPayment = 0;
         let monthsPaid = 0;
+        let rentStatusMessage = 'Payment period not set';
 
-        if (paidFromValid && monthlyRent > 0) {
-            try {
-                const paidFrom = new Date(tenant.paid_from);
-                paidFrom.setHours(0, 0, 0, 0);
+        // Total paid across direct bills + shared group bills (consistent with outstanding)
+        const [paidData] = await connection.execute(
+            `
+            SELECT COALESCE(SUM(b.paid_amount), 0) AS total_paid
+            FROM bills b
+            WHERE b.deleted_at IS NULL
+              AND (
+                b.tenant_id = ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM bill_group_members bgm
+                    INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                    WHERE bg.bill_id = b.id AND bgm.tenant_id = ?
+                )
+              )
+            `,
+            [tenantId, tenantId]
+        );
+        totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
 
-                // Get total paid from bills table
-                const [paidData] = await connection.execute(
-                    `
-                    SELECT COALESCE(SUM(paid_amount), 0) as total_paid
-                    FROM bills 
-                    WHERE tenant_id = ?
-                    `,
-                    [tenantId]
-                );
-                totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
+        const paidFrom = paidFromValid ? toDateOnly(tenant.paid_from) : null;
+        const paidTill = paidTillValid ? toDateOnly(tenant.paid_till) : null;
 
-                // ============================================================
-                // FIXED: Calculate months since paid_from safely
-                // ============================================================
-                let monthsSinceStart = 0;
-                if (today >= paidFrom) {
-                    monthsSinceStart = Math.floor((today - paidFrom) / (1000 * 60 * 60 * 24 * 30));
-                    // Ensure at least 1 month
-                    monthsSinceStart = Math.max(monthsSinceStart, 1);
+        if (paidFrom && monthlyRent > 0) {
+            // months covered by recorded payments (informational only)
+            monthsPaid = Math.floor(totalPaid / monthlyRent);
+            if (today >= paidFrom) {
+                const monthsElapsed = calendarMonthsBetween(paidFrom, today);
+                expectedPayment = monthlyRent * monthsElapsed;
+            } else {
+                expectedPayment = 0;
+            }
+        }
+
+        if (paidTill) {
+            // Coverage is inclusive of paid_till (admin sets the last covered day)
+            if (today.getTime() <= paidTill.getTime()) {
+                rentStatus = 'paid';
+                daysLeft = daysBetween(today, paidTill); // remaining covered days
+                dueDays = 0;
+                amountOwed = 0;
+                rentStatusMessage = daysLeft === 0
+                    ? 'Paid — coverage ends today'
+                    : `Paid — covered for ${daysLeft} more day${daysLeft === 1 ? '' : 's'}`;
+
+                // Next payment: day after coverage ends, aligned to payment_date if set
+                const dayAfterCoverage = new Date(paidTill);
+                dayAfterCoverage.setDate(dayAfterCoverage.getDate() + 1);
+                dayAfterCoverage.setHours(0, 0, 0, 0);
+
+                if (tenant.payment_date) {
+                    nextPaymentDate = nextPaymentDateFromDay(dayAfterCoverage, tenant.payment_date);
                 } else {
-                    // paid_from is in the future - treat as not started yet
-                    monthsSinceStart = 0;
+                    nextPaymentDate = dayAfterCoverage;
                 }
-                
-                expectedPayment = monthlyRent * monthsSinceStart;
+                // daysLeft for "Next Payment" card should reflect time until next due
+                if (nextPaymentDate) {
+                    daysLeft = Math.max(0, daysBetween(today, nextPaymentDate));
+                }
+            } else {
+                rentStatus = 'unpaid';
+                dueDays = daysBetween(paidTill, today); // days past coverage
+                rentStatusMessage = dueDays === 1
+                    ? 'Overdue by 1 day'
+                    : `Overdue by ${dueDays} days`;
 
-                // ============================================================
-                // Calculate paid_till date from totalPaid
-                // ============================================================
-                monthsPaid = Math.floor(totalPaid / monthlyRent);
-                const calculatedPaidTill = new Date(paidFrom);
-                calculatedPaidTill.setMonth(calculatedPaidTill.getMonth() + monthsPaid);
-                calculatedPaidTill.setHours(0, 0, 0, 0);
-
-                // Use the actual paid_till from database if available, otherwise use calculated
-                const effectivePaidTill = paidTillValid ? new Date(tenant.paid_till) : calculatedPaidTill;
-                effectivePaidTill.setHours(0, 0, 0, 0);
-
-                // ============================================================
-                // Check if today is beyond paid_till
-                // ============================================================
-                if (today <= effectivePaidTill) {
-                    // Tenant is paid up to date
-                    rentStatus = 'paid';
-                    const diffTime = effectivePaidTill.getTime() - today.getTime();
-                    dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    if (dueDays < 0) dueDays = 0;
-                } else {
-                    // Tenant is overdue
-                    rentStatus = 'unpaid';
-                    const diffTime = today.getTime() - effectivePaidTill.getTime();
-                    dueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    
-                    // Calculate amount owed (rounded up to nearest month)
-                    const overdueMonths = Math.ceil(dueDays / 30);
+                // Prefer real outstanding bill balance; fall back to period estimate
+                const outstandingAmt = Number(outstanding.total_amount || 0);
+                if (outstandingAmt > 0) {
+                    amountOwed = outstandingAmt;
+                } else if (monthlyRent > 0) {
+                    const overdueMonths = calendarMonthsBetween(paidTill, today);
                     amountOwed = overdueMonths * monthlyRent;
                 }
 
-                // ============================================================
-                // Calculate next payment date using payment_date
-                // ============================================================
+                // Next payment is effectively due now (or next scheduled day if still ahead)
                 if (tenant.payment_date) {
-                    const nextDate = new Date(today);
-                    const currentMonth = today.getMonth();
-                    const currentYear = today.getFullYear();
-                    
-                    let paymentDay = parseInt(tenant.payment_date);
-                    if (paymentDay > 28) {
-                        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-                        paymentDay = Math.min(paymentDay, lastDayOfMonth);
-                    }
-                    
-                    nextDate.setDate(paymentDay);
-                    
-                    if (nextDate < today) {
-                        nextDate.setMonth(nextDate.getMonth() + 1);
-                    }
-                    
-                    const nextMonth = nextDate.getMonth();
-                    const nextYear = nextDate.getFullYear();
-                    let nextPaymentDay = parseInt(tenant.payment_date);
-                    const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
-                    nextPaymentDay = Math.min(nextPaymentDay, lastDayOfNextMonth);
-                    nextDate.setDate(nextPaymentDay);
-                    
-                    nextPaymentDate = nextDate;
-                    const diffTime = nextDate.getTime() - today.getTime();
-                    daysLeft = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    if (daysLeft < 0) daysLeft = 0;
+                    const scheduled = nextPaymentDateFromDay(today, tenant.payment_date);
+                    nextPaymentDate = scheduled;
+                } else {
+                    nextPaymentDate = today;
                 }
+                daysLeft = 0;
+            }
+        } else {
+            // No paid_till on record — cannot claim coverage
+            rentStatus = 'unpaid';
+            dueDays = 0;
+            amountOwed = Number(outstanding.total_amount || 0);
+            rentStatusMessage = paidFrom
+                ? 'Payment coverage not recorded'
+                : 'Payment period not set';
 
-            } catch (dateError) {
-                // If date calculation fails, use fallback values
-                console.error("Date calculation error:", dateError);
+            if (tenant.payment_date) {
+                nextPaymentDate = nextPaymentDateFromDay(today, tenant.payment_date);
+                if (nextPaymentDate) {
+                    daysLeft = Math.max(0, daysBetween(today, nextPaymentDate));
+                }
             }
         }
 
@@ -298,19 +381,8 @@ const getTenantHomeData = async (req, res) => {
             initials = tenant.full_name.substring(0, 2).toUpperCase();
         }
 
-        // Get total paid from bills for response
-        const [paidData] = await connection.execute(
-            `
-            SELECT COALESCE(SUM(paid_amount), 0) as total_paid
-            FROM bills 
-            WHERE tenant_id = ?
-            `,
-            [tenantId]
-        );
-        totalPaid = parseFloat(paidData[0]?.total_paid) || 0;
-
         // ============================================================
-        // FIXED: Format dates properly without time
+        // Format dates properly without time
         // ============================================================
         const formattedPaidFrom = tenant.paid_from && isValidDate(tenant.paid_from) 
             ? formatDateString(tenant.paid_from) 
@@ -346,7 +418,12 @@ const getTenantHomeData = async (req, res) => {
                 expected_payment: expectedPayment,
                 amount_owed: Math.max(amountOwed, 0),
                 months_paid: monthsPaid,
-                monthly_rent: monthlyRent
+                monthly_rent: monthlyRent,
+                message: rentStatusMessage
+            },
+            outstanding: {
+                total_amount: Number(outstanding.total_amount || 0),
+                bill_count: Number(outstanding.bill_count || 0)
             },
             current_bill: currentBill ? {
                 id: currentBill.id,

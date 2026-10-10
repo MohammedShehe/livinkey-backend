@@ -898,6 +898,25 @@ const sendCustomAdminNotificationEmail = async (email, tenantName, title, messag
     });
 };
 
+// ============ TENANT STAY EXPIRY EMAILS ============
+const sendTenantStayExpiryEmail = async (email, tenantName, pgName, endDate) => {
+    const content = `
+      <tr><td style="color:#000;font-size:22px;font-weight:600;padding-bottom:10px;text-align:center;">Stay Period Ending Soon</td></tr>
+      <tr><td style="color:#4a5568;font-size:16px;line-height:1.7;text-align:center;">Hello <strong>${tenantName}</strong>, your agreed stay at <strong>${pgName || 'Livinkey'}</strong> will end in one month, on <strong>${endDate}</strong>, as per your agreement.</td></tr>
+      <tr><td style="color:#4a5568;font-size:16px;line-height:1.7;text-align:center;padding-top:10px;">If you need an extension, please contact the Super Admin before your agreement ends.</td></tr>`;
+    const html = buildEmailTemplate({ title:'🏠 Livinkey Stay Period Ending Soon', content, headerIcon:'🏠', headerLabel:'Livinkey', headerColor:'#92C24A', alertMessage:'Please contact the Super Admin if you require an extension.', alertColor:'#e67e22', footerText:'This is an automated message, please do not reply.' });
+    await transporter.sendMail({ from:`"Livinkey" <${process.env.EMAIL_USER}>`, to:email, subject:'🏠 Livinkey - Your Stay Period Ends in One Month', html });
+};
+
+const sendAdminStayExpiryEmail = async (email, adminName, tenantName, pgName, endDate) => {
+    const content = `
+      <tr><td style="color:#000;font-size:22px;font-weight:600;padding-bottom:10px;text-align:center;">Tenant Stay Expiry Alert</td></tr>
+      <tr><td style="color:#4a5568;font-size:16px;line-height:1.7;text-align:center;">Hello <strong>${adminName}</strong>, tenant <strong>${tenantName}</strong>'s agreed stay at <strong>${pgName || 'Livinkey'}</strong> will end in one month, on <strong>${endDate}</strong>.</td></tr>
+      <tr><td style="color:#4a5568;font-size:16px;line-height:1.7;text-align:center;padding-top:10px;">Please contact the tenant if an extension is required.</td></tr>`;
+    const html = buildEmailTemplate({ title:'⚠️ Livinkey Tenant Stay Expiry', content, headerIcon:'⚠️', headerLabel:'Livinkey Admin', headerColor:'#92C24A', alertMessage:'Review the tenant agreement and extension request if applicable.', alertColor:'#e67e22', footerText:'This is an automated message from Livinkey.' });
+    await transporter.sendMail({ from:`"Livinkey Admin" <${process.env.EMAIL_USER}>`, to:email, subject:`⚠️ Livinkey - ${tenantName} Stay Ends in One Month`, html });
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeAdminEmail,
@@ -913,5 +932,7 @@ module.exports = {
     sendEFRROExpiryTenantEmail,
     sendEFRROExpiryAdminEmail,
     sendMaintenanceCompletionReminder,
-    sendCustomAdminNotificationEmail
+    sendCustomAdminNotificationEmail,
+    sendTenantStayExpiryEmail,
+    sendAdminStayExpiryEmail
 };

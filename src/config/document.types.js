@@ -1,6 +1,7 @@
 // Document types for international tenants
 const INTERNATIONAL_DOCUMENTS = [
     { key: 'passport_photo', label: 'Passport Size Photo', required: true },
+    { key: 'signature', label: 'Signature', required: true },
     { key: 'passport', label: 'Passport', required: true },
     { key: 'visa', label: 'Visa', required: true },
     { key: 'arrival_stamp', label: 'Arrival Stamp', required: true },
@@ -12,6 +13,7 @@ const INTERNATIONAL_DOCUMENTS = [
 // Document types for national tenants (Indians)
 const NATIONAL_DOCUMENTS = [
     { key: 'passport_photo', label: 'Passport Size Photo', required: true },
+    { key: 'signature', label: 'Signature', required: true },
     { key: 'tenant_aadhaar', label: 'Tenant Aadhaar Card', required: true },
     { key: 'parent_aadhaar', label: 'Parent Aadhaar Card', required: true },
     { key: 'university_id', label: 'University ID', required: false }
@@ -20,6 +22,7 @@ const NATIONAL_DOCUMENTS = [
 // All document types mapping
 const DOCUMENT_TYPES = {
     passport_photo: { label: 'Passport Size Photo', category: 'photos' },
+    signature: { label: 'Signature', category: 'signatures' },
     passport: { label: 'Passport', category: 'passports' },
     visa: { label: 'Visa', category: 'visas' },
     arrival_stamp: { label: 'Arrival Stamp', category: 'arrival_stamps' },

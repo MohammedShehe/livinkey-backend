@@ -144,7 +144,10 @@ const createDefaultPermissions = async (connection, adminId) => {
         "maintenance",
         "documents",
         "feedbacks",
-        "activity_logs"
+        "activity_logs",
+        "conversations",
+        "ads",
+        "about_livinkey"
     ];
 
     const values = modules.map(module => [
@@ -289,30 +292,29 @@ const updatePermission = async (
         canEdit = Boolean(permission.edit);
     }
 
+    // Upsert so new modules (e.g. conversations) work without manual SQL
     const [result] = await connection.execute(
         `
-        UPDATE admin_permissions
-        SET
-            can_view=?,
-            can_add=?,
-            can_edit=?,
-            can_delete=?,
-            can_message=?,
-            can_export=?
-        WHERE
-            admin_id=?
-        AND
-            module_name=?
+        INSERT INTO admin_permissions
+            (admin_id, module_name, can_view, can_add, can_edit, can_delete, can_message, can_export)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            can_view=VALUES(can_view),
+            can_add=VALUES(can_add),
+            can_edit=VALUES(can_edit),
+            can_delete=VALUES(can_delete),
+            can_message=VALUES(can_message),
+            can_export=VALUES(can_export)
         `,
         [
+            adminId,
+            moduleName,
             canView,
             canAdd,
             canEdit,
             canDelete,
             canMessage,
-            canExport,
-            adminId,
-            moduleName
+            canExport
         ]
     );
     return result;

@@ -55,7 +55,8 @@ const updatePermissions = async (adminId, permissions) => {
             "maintenance",
             "documents",
             "feedbacks",
-            "activity_logs"
+            "activity_logs",
+            "conversations"
         ];
 
         for (const moduleName of Object.keys(permissions)) {

@@ -51,6 +51,8 @@ const createPG = async (pgData, files = {}) => {
             payment_account_number: pgData.payment_account_number,
             payment_ifsc_code: pgData.payment_ifsc_code,
             payment_upi_id: pgData.payment_upi_id,
+            tenant_agreement_enabled: pgData.tenant_agreement_enabled,
+            tenant_agreement_text: pgData.tenant_agreement_text,
             created_by: pgData.created_by
         });
 
@@ -259,7 +261,9 @@ const updatePG = async (pgId, pgData, files = {}) => {
             payment_account_holder_name: pgData.payment_account_holder_name,
             payment_account_number: pgData.payment_account_number,
             payment_ifsc_code: pgData.payment_ifsc_code,
-            payment_upi_id: pgData.payment_upi_id
+            payment_upi_id: pgData.payment_upi_id,
+            tenant_agreement_enabled: pgData.tenant_agreement_enabled,
+            tenant_agreement_text: pgData.tenant_agreement_text
         });
 
         // 8. Update Amenities

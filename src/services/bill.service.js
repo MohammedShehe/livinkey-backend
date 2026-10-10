@@ -4,12 +4,42 @@ const BillModel = require("../models/bill.model");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const paymentService = require("./payment.service");
-const { sendPaymentLinkEmail } = require("./mail.service");
+const messagingService = require("./messaging.service");
+
+// Helper: try WhatsApp notification (non-blocking)
+const tryWhatsApp = async (userObj, type, data = {}) => {
+    try {
+        // skipEmail: true because this file already sends email separately
+        const base = {
+            userId: userObj.id,
+            userType: userObj.role || "tenant",
+            phone: userObj.phone,
+            email: userObj.email,
+            name: userObj.full_name || userObj.name || "User",
+            skipEmail: true,
+        };
+        if (type === "bill") {
+            await messagingService.sendMessage({ ...base, type: "bill", templateData: data });
+        } else if (type === "fine") {
+            await messagingService.sendMessage({ ...base, type: "fine", templateData: data });
+        } else if (type === "otp") {
+            await messagingService.sendMessage({ ...base, type: "otp", templateData: { otp: data.otp, purpose: data.purpose || "Cash Payment" } });
+        } else if (type === "custom") {
+            await messagingService.sendMessage({ ...base, type: "custom", title: data.title || "Message", body: data.message || "" });
+        } else {
+            await messagingService.sendMessage({ ...base, type, ...data, skipEmail: true });
+        }
+    } catch (e) {
+        console.error("WhatsApp notification failed:", e.message);
+    }
+};
+
 const { 
     sendBillEmail, 
     sendFineNotificationEmail, 
     sendCustomBillMessageEmail, 
-    sendCashPaymentOTPEmail 
+    sendCashPaymentOTPEmail,
+    sendPaymentLinkEmail
 } = require("./mail.service");
 const NotificationEventManager = require("../utils/notification.events");
 const {
@@ -200,7 +230,8 @@ const createBill = async (billData, files = {}) => {
         }
 
         const [assignmentRows] = await connection.execute(
-            `SELECT td.room_id, td.pg_id, td.rent, r.is_active AS room_active, r.deleted_at AS room_deleted
+            `SELECT td.room_id, td.pg_id, td.rent, r.room_number, r.rent AS room_rent,
+                    r.is_active AS room_active, r.deleted_at AS room_deleted
              FROM tenant_details td
              INNER JOIN rooms r ON r.id=td.room_id
              WHERE td.tenant_id=? FOR UPDATE`,
@@ -209,14 +240,18 @@ const createBill = async (billData, files = {}) => {
         if (!assignmentRows.length || !assignmentRows[0].room_active || assignmentRows[0].room_deleted) {
             throw new Error("Tenant does not have a valid active room assignment.");
         }
+        if (billData.room_id && Number(billData.room_id) !== Number(assignmentRows[0].room_id)) {
+            throw new Error("Selected room does not match the tenant's current room assignment.");
+        }
+        billData.room_id = assignmentRows[0].room_id;
 
         const rentInput = Number(billData.rent_amount);
         if (!Number.isFinite(rentInput) || rentInput <= 0) {
             throw new Error("Rent amount must be greater than 0.");
         }
 
-        // Block only if tenant already has an OPEN bill (not paid).
-        // Paid tenants are eligible for a new monthly bill.
+        // Multiple bills are intentionally allowed. A tenant may have any number
+        // of outstanding bills; the tenant/admin balance is the sum of all open bills.
         // Resolve billing period (YYYY-MM). Default: current month.
         let billingMonth = (billData.billing_month || "").trim();
         if (!billingMonth) {
@@ -228,21 +263,11 @@ const createBill = async (billData, files = {}) => {
         }
         const [y, m] = billingMonth.split("-").map(Number);
         const periodFrom = `${billingMonth}-01`;
-        const periodTillDate = new Date(y, m, 0); // last day of month
+        const periodTillDate = new Date(y, m, 0);
         const periodTill = `${billingMonth}-${String(periodTillDate.getDate()).padStart(2, "0")}`;
         billData.billing_month = billingMonth;
         billData.period_from = periodFrom;
         billData.period_till = periodTill;
-
-        // Lock checks inside this transaction connection (prevents concurrent double-create)
-        const hasOpen = await BillModel.hasOpenBillForTenant(billData.tenant_id, null, connection);
-        if (hasOpen) {
-            throw new Error("This tenant already has an unpaid/open bill. Settle or delete it before creating a new one.");
-        }
-        const hasPeriod = await BillModel.hasBillForPeriod(billData.tenant_id, billingMonth, null, connection);
-        if (hasPeriod) {
-            throw new Error(`A bill already exists for this tenant for ${billingMonth}. Choose another billing month or edit/delete the existing bill.`);
-        }
 
         const totalAmount = parseFloat(billData.rent_amount) + 
                           parseFloat(billData.electricity_amount || 0) + 
@@ -385,6 +410,7 @@ const createBill = async (billData, files = {}) => {
 
         const billId = await BillModel.createBill(connection, {
             tenant_id: billData.tenant_id,
+            room_id: billData.room_id,
             billing_month: billData.billing_month,
             period_from: billData.period_from,
             period_till: billData.period_till,
@@ -473,6 +499,12 @@ const createBill = async (billData, files = {}) => {
                 meterImage2
             );
             emailSent = true;
+            // Also send via WhatsApp
+            tryWhatsApp(
+                { id: billForEmail.tenant_id, phone: billForEmail.tenant_phone, email: billForEmail.tenant_email, full_name: billForEmail.tenant_name, role: "tenant" },
+                "bill",
+                { amount: billForEmail.total_amount || billForEmail.amount, dueDate: billForEmail.due_date, billId: billForEmail.id }
+            );;
         } catch (emailError) {
             console.error("Failed to send bill email:", emailError);
         }
@@ -540,6 +572,10 @@ const getBillById = async (billId) => {
             bill.is_group_bill = false;
         }
         if (bill.due_amount < 0) bill.due_amount = 0;
+        bill.previous_outstanding_amount = Number(bill.previous_outstanding_amount) || 0;
+        bill.total_outstanding_amount = Number(bill.total_outstanding_amount) || 0;
+        bill.outstanding_bills = Array.isArray(bill.outstanding_bills) ? bill.outstanding_bills : [];
+        bill.previous_outstanding_bills = Array.isArray(bill.previous_outstanding_bills) ? bill.previous_outstanding_bills : [];
     }
     return bill;
 };
@@ -658,6 +694,12 @@ const sendCustomMessageToTenant = async (billId, messageData, files = {}) => {
         try {
             const updatedBill = await BillModel.getBillById(billId);
             const adminName = messageData.admin_name || 'Livinkey Admin';
+            // Dual channel
+            tryWhatsApp(
+                { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
+                "custom",
+                { title: messageData.subject || "Message", message: messageData.message }
+            );
             await sendCustomBillMessageEmail(
                 bill.tenant_email,
                 bill.tenant_name,
@@ -722,6 +764,11 @@ const requestCashPaymentOTP = async (billId, paymentData) => {
         await connection.commit();
 
         try {
+            tryWhatsApp(
+                { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
+                "otp",
+                { otp: otp, purpose: "Cash Payment" }
+            );
             await sendCashPaymentOTPEmail(
                 bill.tenant_email,
                 bill.tenant_name,
@@ -910,6 +957,30 @@ const verifyCashPayment = async (billId, otp, paymentData) => {
     }
 };
 
+// Calendar-date only (local Y/M/D) so midnight/TZ jitter does not skip or double a fine day.
+const toCalendarDate = (value) => {
+    if (value == null || value === "") return null;
+    if (value instanceof Date) {
+        if (Number.isNaN(value.getTime())) return null;
+        return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    }
+    const str = String(value);
+    const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+        return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    }
+    const d = new Date(str);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+const calendarDaysBetween = (fromDate, toDate) => {
+    const from = toCalendarDate(fromDate);
+    const to = toCalendarDate(toDate);
+    if (!from || !to) return 0;
+    return Math.max(0, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+};
+
 // ============ PROCESS DELAYED PAYMENTS ============
 const processDelayedPayments = async () => {
     const connection = await db.getConnection();
@@ -931,10 +1002,10 @@ const processDelayedPayments = async () => {
             FROM bills b
             INNER JOIN tenants t ON b.tenant_id = t.id
             LEFT JOIN tenant_details td ON t.id = td.tenant_id
-            WHERE b.status IN ('unpaid', 'partially_paid', 'delayed')
+            WHERE b.deleted_at IS NULL
+            AND b.status IN ('unpaid', 'partially_paid', 'delayed')
             AND b.valid_until < NOW()
             AND b.sent_at IS NOT NULL
-            AND b.initial_email_sent = 1
             ORDER BY b.valid_until ASC
             FOR UPDATE
             `
@@ -946,13 +1017,10 @@ const processDelayedPayments = async () => {
             }
 
             const fineStartDate = bill.fine_start_date
-                ? new Date(bill.fine_start_date + 'T00:00:00')
-                : new Date(new Date(bill.sent_at).getTime() + 7 * 24 * 60 * 60 * 1000);
-            const today = new Date();
-            const daysOverdue = Math.max(
-                0,
-                Math.floor((today.getTime() - fineStartDate.getTime()) / (1000 * 60 * 60 * 24))
-            );
+                ? toCalendarDate(bill.fine_start_date)
+                : toCalendarDate(new Date(new Date(bill.sent_at).getTime() + 7 * 24 * 60 * 60 * 1000));
+            const today = toCalendarDate(new Date());
+            const daysOverdue = calendarDaysBetween(fineStartDate, today);
             if (daysOverdue <= 0) continue;
 
             if (bill.status !== 'delayed' && bill.status !== 'overdue') {
@@ -962,6 +1030,26 @@ const processDelayedPayments = async () => {
                 } catch (notifError) {
                     console.error("Failed to send bill overdue notification:", notifError);
                 }
+            }
+
+            // Admin waive/reduce freezes auto-accrual so calculated fine cannot climb back.
+            if (Number(bill.fine_accrual_frozen) === 1) {
+                await connection.execute(
+                    `
+                    UPDATE bills
+                    SET
+                        valid_until = DATE_ADD(NOW(), INTERVAL 1 DAY),
+                        status = CASE
+                            WHEN paid_amount >= total_amount + IFNULL(fine_amount, 0) THEN 'paid'
+                            WHEN paid_amount > 0 THEN 'partially_paid'
+                            WHEN status IN ('delayed', 'overdue') THEN status
+                            ELSE 'delayed'
+                        END
+                    WHERE id = ?
+                    `,
+                    [bill.id]
+                );
+                continue;
             }
 
             const rate = Number(bill.daily_fine_rate || 100);
@@ -1062,6 +1150,11 @@ const processDelayedPayments = async () => {
                 if (shouldSendEmail) {
                     try {
                         const updatedBill = await BillModel.getBillById(bill.id);
+                        tryWhatsApp(
+                            { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
+                            "fine",
+                            { amount: fineAmount, reason: "Fine applied" }
+                        );
                         await sendFineNotificationEmail(
                             bill.tenant_email,
                             bill.tenant_name,
@@ -1085,6 +1178,24 @@ const processDelayedPayments = async () => {
                 }
                 
                 processedCount++;
+            } else {
+                // Fine already at calculated/cap level: still advance valid_until
+                // so the same bill is not re-selected on every cron tick.
+                await connection.execute(
+                    `
+                    UPDATE bills
+                    SET
+                        valid_until = DATE_ADD(NOW(), INTERVAL 1 DAY),
+                        status = CASE
+                            WHEN paid_amount >= total_amount + IFNULL(fine_amount, 0) THEN 'paid'
+                            WHEN paid_amount > 0 THEN 'partially_paid'
+                            ELSE 'delayed'
+                        END,
+                        fine_applied_days = GREATEST(IFNULL(fine_applied_days, 0), ?)
+                    WHERE id = ?
+                    `,
+                    [daysOverdue, bill.id]
+                );
             }
         }
         
@@ -1176,12 +1287,26 @@ const addPayment = async (billId, paymentData) => {
 
         // ✅ FIXED: Update tenant_details with admin-provided dates
         if (paymentData.paid_from && paymentData.paid_till) {
-            await updateTenantPaymentDates(
-                connection, 
-                bill.tenant_id, 
-                paymentData.paid_from, 
-                paymentData.paid_till
-            );
+            // A full/group bill is shared by every occupant. Keep each tenant's
+            // payment dates synchronized when the shared bill is settled.
+            const [groupTenants] = await connection.execute(`
+                SELECT bgm.tenant_id
+                FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                WHERE bg.bill_id=?
+            `, [billId]);
+            const tenantIdsToUpdate = groupTenants.length
+                ? groupTenants.map(r => Number(r.tenant_id))
+                : [Number(bill.tenant_id)];
+
+            for (const tenantId of tenantIdsToUpdate) {
+                await updateTenantPaymentDates(
+                    connection,
+                    tenantId,
+                    paymentData.paid_from,
+                    paymentData.paid_till
+                );
+            }
         }
 
         const updatedBill = await BillModel.getBillById(billId);
@@ -1238,14 +1363,25 @@ const addPayment = async (billId, paymentData) => {
         const finalBill = await BillModel.getBillById(billId);
 
         try {
-            const tenant = { full_name: bill.tenant_name, id: bill.tenant_id };
-            
-            if (newStatus === 'paid') {
-                await NotificationEventManager.onBillPaid(finalBill, tenant);
-                await NotificationEventManager.onTenantBillPaid(finalBill, tenant);
-            } else if (newStatus === 'partially_paid') {
-                await NotificationEventManager.onBillPartiallyPaid(finalBill, tenant);
-                await NotificationEventManager.onTenantBillPartiallyPaid(finalBill, tenant);
+            const [groupTenants] = await connection.execute(`
+                SELECT t.id, t.full_name
+                FROM bill_group_members bgm
+                INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                INNER JOIN tenants t ON t.id=bgm.tenant_id
+                WHERE bg.bill_id=?
+            `, [billId]);
+            const tenantsToNotify = groupTenants.length
+                ? groupTenants
+                : [{ id: bill.tenant_id, full_name: bill.tenant_name }];
+
+            for (const tenant of tenantsToNotify) {
+                if (newStatus === 'paid') {
+                    await NotificationEventManager.onBillPaid(finalBill, tenant);
+                    await NotificationEventManager.onTenantBillPaid(finalBill, tenant);
+                } else if (newStatus === 'partially_paid') {
+                    await NotificationEventManager.onBillPartiallyPaid(finalBill, tenant);
+                    await NotificationEventManager.onTenantBillPartiallyPaid(finalBill, tenant);
+                }
             }
         } catch (notifError) {
             console.error("Failed to send payment notification:", notifError);
@@ -1335,6 +1471,11 @@ const generateBillPaymentOptions = async (billId) => {
     }
 
     try {
+        tryWhatsApp(
+            { id: tenant.id, phone: tenant.phone, email: tenant.email, full_name: tenant.full_name, role: "tenant" },
+            "custom",
+            { title: "Payment Link", message: "Your payment options are ready. Please check the app or email." }
+        );
         await sendPaymentLinkEmail(
             tenant.email,
             tenant.full_name,
@@ -1690,99 +1831,230 @@ const deleteBill = async (billId, adminId = null) => {
     }
 };
 
-// ============ BATCH BILL CREATION ============
-// One admin action can create the same bill for every selected tenant
-// (including every active tenant in a room). Each tenant still receives an
-// independent bill record so payments remain isolated and auditable.
+// ============ ROOM-BASED BILL CREATION ============
+// One admin action always starts from a room. The backend derives the tenants
+// and their recorded rents from the database so the client cannot overbill or
+// accidentally omit a room occupant.
+//
+// "individual"/"split" => one bill per active tenant, with the room-level bill
+// split equally across all occupants.
+// "group"/"full" => one shared room bill; payment of that bill settles it for
+// every tenant in the room because all tenants reference the same bill group.
 const createBillsForTenants = async (tenantIds, billData, files = {}) => {
-    const ids = [...new Set((tenantIds || []).map(Number).filter(Number.isInteger))];
-    if (!ids.length) throw new Error("At least one tenant must be selected");
+    const requestedIds = [...new Set((tenantIds || []).map(Number).filter(Number.isInteger))];
+    if (!requestedIds.length) throw new Error("At least one tenant must be selected");
 
-    const mode = String(billData.bill_mode || 'individual').toLowerCase() === 'group' ? 'group' : 'individual';
+    // Billing type is meaningful only for a shared room. A single-tenant room
+    // always gets one normal individual bill; clients cannot force a group bill.
+    const requestedMode = ['group', 'full', 'full_bill'].includes(String(billData.bill_mode || '').toLowerCase())
+        ? 'group'
+        : 'individual';
 
-    if (mode === 'individual' || ids.length === 1) {
-        const results = [];
-        for (const tenantId of ids) {
-            try {
-                const bill = await createBill({ ...billData, tenant_id: tenantId, bill_mode: 'individual' }, files);
-                results.push({ tenant_id: tenantId, success: true, bill });
-            } catch (error) {
-                results.push({ tenant_id: tenantId, success: false, message: error.message });
-            }
-        }
-        const created = results.filter(r => r.success);
-        if (!created.length) throw new Error(results.find(r => !r.success)?.message || "No bills could be created");
-        return { mode: 'individual', created_count: created.length, failed_count: results.length - created.length, results };
-    }
-
-    // GROUP BILL: validate that all selected tenants belong to the same active room/PG
-    // and that none already has an open bill or a bill for the requested month.
-    const validationConnection = await db.getConnection();
-    try {
-        const [members] = await validationConnection.execute(`
-            SELECT td.tenant_id, td.pg_id, td.room_id, r.room_number
-            FROM tenant_details td
-            INNER JOIN rooms r ON r.id=td.room_id
-            INNER JOIN tenants t ON t.id=td.tenant_id
-            WHERE td.tenant_id IN (${ids.map(() => '?').join(',')})
-              AND t.role='tenant' AND t.is_active=1 AND r.is_active=1 AND r.deleted_at IS NULL`, ids);
-        if (members.length !== ids.length) throw new Error('All selected tenants must be active tenants with valid room assignments.');
-        const pgSet = new Set(members.map(x => String(x.pg_id)));
-        const roomSet = new Set(members.map(x => String(x.room_id)));
-        if (pgSet.size !== 1 || roomSet.size !== 1) throw new Error('Group billing is only allowed when all selected tenants belong to the same PG and same room.');
-        const [conflicts] = await validationConnection.execute(`
-            SELECT t.id,
-                   EXISTS(SELECT 1 FROM bills b WHERE b.tenant_id=t.id AND b.deleted_at IS NULL AND b.status <> 'paid') AS has_open,
-                   EXISTS(SELECT 1 FROM bills b WHERE b.tenant_id=t.id AND b.billing_month=? AND b.deleted_at IS NULL) AS has_period
-            FROM tenants t WHERE t.id IN (${ids.map(() => '?').join(',')})`, [billData.billing_month || null, ...ids]);
-        const conflict = conflicts.find(c => Number(c.has_open) || Number(c.has_period));
-        if (conflict) {
-            if (Number(conflict.has_open)) throw new Error(`Tenant ${conflict.id} already has an unpaid/open bill. Settle or delete it before creating a group bill.`);
-            throw new Error(`Tenant ${conflict.id} already has a bill for ${billData.billing_month}. Choose another billing month.`);
-        }
-    } finally { validationConnection.release(); }
-
-    const bill = await createBill({ ...billData, tenant_id: ids[0], bill_mode: 'group', skipEmail: true }, files);
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        const [groupResult] = await connection.execute(
-            `INSERT INTO bill_groups (bill_id, billing_month, created_by) VALUES (?, ?, ?)`,
-            [bill.id, bill.billing_month, billData.created_by]
-        );
-        const groupId = groupResult.insertId;
-        await connection.execute(`UPDATE bills SET bill_group_id=? WHERE id=?`, [groupId, bill.id]);
-        for (const tenantId of ids) {
-            await connection.execute(
-                `INSERT INTO bill_group_members (bill_group_id, tenant_id) VALUES (?, ?)`,
-                [groupId, tenantId]
-            );
+
+        // Resolve the room from the selected tenant set. If room_id was supplied,
+        // it must match every selected tenant. All active occupants are then billed
+        // so a malicious/buggy client cannot create a partial room bill.
+        const placeholders = requestedIds.map(() => '?').join(',');
+        const [members] = await connection.execute(`
+            SELECT td.tenant_id, td.pg_id, td.room_id, td.rent, r.room_number,
+                   r.rent AS room_rent, t.full_name, t.email, t.phone
+            FROM tenant_details td
+            INNER JOIN tenants t ON t.id=td.tenant_id
+            INNER JOIN rooms r ON r.id=td.room_id
+            WHERE td.tenant_id IN (${placeholders})
+              AND t.role='tenant' AND t.is_active=1
+              AND r.is_active=1 AND r.deleted_at IS NULL
+            FOR UPDATE
+        `, requestedIds);
+
+        if (members.length !== requestedIds.length) {
+            throw new Error("All selected tenants must be active tenants with valid room assignments.");
         }
+
+        const roomIds = [...new Set(members.map(x => Number(x.room_id)))];
+        const pgIds = [...new Set(members.map(x => Number(x.pg_id)))];
+        if (roomIds.length !== 1 || pgIds.length !== 1) {
+            throw new Error("Billing must be created for tenants in the same room and PG.");
+        }
+
+        const roomId = roomIds[0];
+        if (billData.room_id && Number(billData.room_id) !== roomId) {
+            throw new Error("The selected room does not match the selected tenants.");
+        }
+        if (billData.pg_id && Number(billData.pg_id) !== pgIds[0]) {
+            throw new Error("The selected PG does not match the selected room.");
+        }
+
+        const [allOccupants] = await connection.execute(`
+            SELECT td.tenant_id, td.rent, t.full_name, t.email, t.phone
+            FROM tenant_details td
+            INNER JOIN tenants t ON t.id=td.tenant_id
+            WHERE td.room_id=? AND td.pg_id=? AND t.role='tenant' AND t.is_active=1
+            ORDER BY t.full_name
+            FOR UPDATE
+        `, [roomId, pgIds[0]]);
+
+        if (!allOccupants.length) throw new Error("The selected room has no active tenants.");
+        const selectedSet = new Set(requestedIds);
+        if (allOccupants.some(x => !selectedSet.has(Number(x.tenant_id)))) {
+            throw new Error("All active tenants in the selected room must be included in the bill.");
+        }
+
+        const occupantCount = allOccupants.length;
+        // A group bill is allowed only when the selected room actually has
+        // multiple active tenants. This is enforced server-side as well as in
+        // the admin UI so the billing rule cannot be bypassed by a client.
+        const mode = requestedMode === 'group' && occupantCount > 1 ? 'group' : 'individual';
+        const roomRent = Number(members[0].room_rent || 0);
+        const recordedRentTotal = allOccupants.reduce((sum, x) => sum + Number(x.rent || 0), 0);
+        const roomTotalRent = roomRent > 0 ? roomRent : recordedRentTotal;
+        if (!Number.isFinite(roomTotalRent) || roomTotalRent <= 0) {
+            throw new Error("The selected room has no valid recorded rent.");
+        }
+
+        const electricity = Number(billData.electricity_amount || 0);
+        const maintenance = Number(billData.maintenance_amount || 0);
+        const other = Number(billData.other_charges || 0);
+        if (![electricity, maintenance, other].every(Number.isFinite) || electricity < 0 || maintenance < 0 || other < 0) {
+            throw new Error("Bill charges must be valid non-negative amounts.");
+        }
+
+        // ALL room-level bill components are split in Split Bill mode: rent,
+        // electricity, maintenance and other charges. Allocate cents
+        // deterministically so the tenant bills always add back to the exact
+        // original room bill (the final tenant receives any 0.01 remainder).
+        const allocateEvenly = (value) => {
+            const base = Math.floor((value / occupantCount) * 100) / 100;
+            const allocations = Array.from({ length: occupantCount }, () => base);
+            const remainder = Math.round((value - base * occupantCount) * 100) / 100;
+            allocations[allocations.length - 1] = Math.round((base + remainder) * 100) / 100;
+            return allocations;
+        };
+        const rentAllocations = allocateEvenly(roomTotalRent);
+        const electricityAllocations = allocateEvenly(electricity);
+        const maintenanceAllocations = allocateEvenly(maintenance);
+        const otherAllocations = allocateEvenly(other);
+
+        const createData = {
+            ...billData,
+            room_id: roomId,
+            pg_id: pgIds[0]
+        };
+
+        // Release this validation transaction before calling createBill, which
+        // owns its own transaction and sends notifications/emails.
         await connection.commit();
 
-        const fullBill = await BillModel.getBillById(bill.id);
-        let emailCount = 0;
-        for (const tenantId of ids) {
+        if (mode === 'group') {
+            const bill = await createBill({
+                ...createData,
+                tenant_id: Number(allOccupants[0].tenant_id),
+                rent_amount: roomTotalRent,
+                electricity_amount: electricity,
+                maintenance_amount: maintenance,
+                other_charges: other,
+                bill_mode: 'group',
+                skipEmail: true
+            }, files);
+
+            const groupConnection = await db.getConnection();
             try {
-                const [tenantRows] = await connection.execute(
-                    `SELECT id, full_name, email FROM tenants WHERE id=? LIMIT 1`, [tenantId]
+                await groupConnection.beginTransaction();
+                const [groupResult] = await groupConnection.execute(
+                    `INSERT INTO bill_groups (bill_id, billing_month, created_by) VALUES (?, ?, ?)`,
+                    [bill.id, bill.billing_month, billData.created_by]
                 );
-                const tenant = tenantRows[0];
-                if (!tenant?.email) continue;
-                await sendBillEmail(tenant.email, tenant.full_name, { ...fullBill, tenant_name: tenant.full_name, tenant_email: tenant.email }, fullBill.payment_qr, fullBill.partial_payment_qr, fullBill.electricity_meter_image, fullBill.admin_qr, fullBill.electricity_meter_image_2);
-                emailCount++;
-            } catch (e) { console.error(`Failed to send group bill email to tenant ${tenantId}:`, e.message); }
+                const groupId = groupResult.insertId;
+                await groupConnection.execute(`UPDATE bills SET bill_group_id=? WHERE id=?`, [groupId, bill.id]);
+                for (const tenant of allOccupants) {
+                    await groupConnection.execute(
+                        `INSERT INTO bill_group_members (bill_group_id, tenant_id) VALUES (?, ?)`,
+                        [groupId, tenant.tenant_id]
+                    );
+                }
+                await groupConnection.commit();
+
+                const fullBill = await BillModel.getBillById(bill.id);
+                let emailCount = 0;
+                for (const tenant of allOccupants) {
+                    try {
+                        if (tenant.email) {
+                            await sendBillEmail(
+                                tenant.email, tenant.full_name,
+                                { ...fullBill, tenant_name: tenant.full_name, tenant_email: tenant.email },
+                                fullBill.payment_qr, fullBill.partial_payment_qr,
+                                fullBill.electricity_meter_image, fullBill.admin_qr, fullBill.electricity_meter_image_2
+                            );
+                            emailCount++;
+                        }
+                        tryWhatsApp(
+                            { id: tenant.tenant_id, phone: tenant.phone, email: tenant.email, full_name: tenant.full_name, role: "tenant" },
+                            "bill",
+                            { amount: fullBill.total_amount, dueDate: fullBill.due_date, billId: fullBill.id }
+                        );
+                    } catch (e) {
+                        console.error(`Failed to notify group tenant ${tenant.tenant_id}:`, e.message);
+                    }
+                }
+
+                return {
+                    mode: 'group',
+                    group_id: groupId,
+                    bill_id: bill.id,
+                    room_id: roomId,
+                    created_count: 1,
+                    failed_count: 0,
+                    billed_tenant_count: occupantCount,
+                    email_sent_count: emailCount,
+                    results: allOccupants.map(t => ({ tenant_id: t.tenant_id, success: true, bill: fullBill }))
+                };
+            } catch (error) {
+                await groupConnection.rollback();
+                try { await db.execute(`UPDATE bills SET deleted_at=NOW() WHERE id=?`, [bill.id]); } catch (_) {}
+                throw error;
+            } finally {
+                groupConnection.release();
+            }
         }
+
+        const results = [];
+        for (let occupantIndex = 0; occupantIndex < allOccupants.length; occupantIndex++) {
+            const tenant = allOccupants[occupantIndex];
+            try {
+                const bill = await createBill({
+                    ...createData,
+                    tenant_id: Number(tenant.tenant_id),
+                    rent_amount: rentAllocations[occupantIndex],
+                    electricity_amount: electricityAllocations[occupantIndex],
+                    maintenance_amount: maintenanceAllocations[occupantIndex],
+                    other_charges: otherAllocations[occupantIndex],
+                    bill_mode: 'individual'
+                }, files);
+                results.push({ tenant_id: tenant.tenant_id, success: true, bill });
+            } catch (error) {
+                results.push({ tenant_id: tenant.tenant_id, success: false, message: error.message });
+            }
+        }
+
+        const created = results.filter(r => r.success);
+        if (!created.length) throw new Error(results[0]?.message || "No bills could be created");
         return {
-            mode: 'group', group_id: groupId, bill_id: bill.id,
-            created_count: 1, failed_count: 0, billed_tenant_count: ids.length,
-            email_sent_count: emailCount, results: ids.map(tenant_id => ({ tenant_id, success: true, bill: fullBill }))
+            mode: 'individual',
+            room_id: roomId,
+            created_count: created.length,
+            failed_count: results.length - created.length,
+            billed_tenant_count: occupantCount,
+            results
         };
     } catch (error) {
-        await connection.rollback();
-        try { await db.execute(`UPDATE bills SET deleted_at=NOW() WHERE id=?`, [bill.id]); } catch (_) {}
+        try { await connection.rollback(); } catch (_) {}
         throw error;
-    } finally { connection.release(); }
+    } finally {
+        connection.release();
+    }
 };
 
 module.exports = {

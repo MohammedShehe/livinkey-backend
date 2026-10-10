@@ -71,7 +71,19 @@ async function startServer() {
         });
         console.log('📅 Overdue payment notification scheduler running daily at 11:00 AM');
 
-        // Cron job 5: Check document reminders (daily at 9:30 AM)
+        // Cron job 5: Check tenant stay expiry (daily at 9:15 AM)
+        cron.schedule('15 9 * * *', async () => {
+            console.log('🔄 Checking tenant stay periods ending in one month...');
+            try {
+                const count = await NotificationEventManager.checkTenantStayExpiry();
+                console.log(`✅ Sent ${count} tenant stay expiry reminder(s)`);
+            } catch (error) {
+                console.error('❌ Error checking tenant stay expiry:', error);
+            }
+        });
+        console.log('📅 Tenant stay expiry checker scheduled daily at 9:15 AM');
+
+        // Cron job 6: Check document reminders (daily at 9:30 AM)
         cron.schedule('30 9 * * *', async () => {
             console.log('🔄 Checking document reminders...');
             try {

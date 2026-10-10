@@ -3,6 +3,7 @@ const BillModel = require("../models/bill.model");
 const FineAdjustmentModel = require("../models/bill.fine.adjustment.model");
 const { deleteFile } = require("./upload.service");
 const { regenerateBillQRCodes } = require("./bill.service");
+const messagingService = require("./messaging.service");
 const { sendFineAdjustedEmail } = require("./mail.service");
 const firebase = require("../config/firebase");
 const NotificationEventManager = require("../utils/notification.events");
@@ -64,14 +65,12 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
             reason: adjustmentData.reason.trim()
         });
 
-        // Update bill fine amount
+        // Update bill fine only (base total_amount is never mixed with fine).
         const totalAmount = parseFloat(bill.total_amount) || 0;
-        const newTotal = totalAmount + newFine;
+        const paidAmount = parseFloat(bill.paid_amount) || 0;
 
         // Determine new status
         let newStatus = bill.status;
-        const paidAmount = parseFloat(bill.paid_amount) || 0;
-
         const remainingAmount = totalAmount + newFine - paidAmount;
         if (remainingAmount <= 0) {
             newStatus = 'paid';
@@ -83,17 +82,19 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
             newStatus = 'unpaid';
         }
 
+        // Freeze auto-accrual so the daily job cannot raise this fine again
+        // after an admin waive/reduce. valid_until is extended for grace.
         await connection.execute(
             `
             UPDATE bills 
             SET 
                 fine_amount = ?,
-                total_amount = ?,
                 status = ?,
+                fine_accrual_frozen = 1,
                 valid_until = DATE_ADD(NOW(), INTERVAL 7 DAY)
             WHERE id = ?
             `,
-            [newFine, totalAmount, newStatus, billId]
+            [newFine, newStatus, billId]
         );
 
         // Regenerate QR codes with new total
@@ -160,7 +161,13 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
             };
 
             // Send email to tenant
-            await sendFineAdjustedEmail(
+            try {
+            await messagingService.sendFine(
+                { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
+                { amount: adjustmentData.new_fine_amount || adjustmentData.amount, reason: "Fine adjusted" }
+            );
+        } catch (waErr) { console.error("WhatsApp fine adjust failed:", waErr.message); }
+        await sendFineAdjustedEmail(
                 bill.tenant_email,
                 bill.tenant_name,
                 updatedBill,

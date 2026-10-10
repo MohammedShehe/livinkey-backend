@@ -559,7 +559,22 @@ const _fetchReceiptData = async (type, paymentId) => {
         paymentData = rows[0];
     }
 
-    if (paymentData) await attachReceiptLedgerContext(connection, paymentData, type);
+    if (paymentData) {
+        await attachReceiptLedgerContext(connection, paymentData, type);
+        if (type === 'proof') {
+            const [allocationRows] = await connection.execute(
+                `SELECT pa.*, b.billing_month, b.total_amount AS bill_total,
+                        b.fine_amount, b.status AS bill_status, r.room_number
+                 FROM payment_allocations pa
+                 INNER JOIN bills b ON b.id=pa.bill_id
+                 LEFT JOIN rooms r ON r.id=b.room_id
+                 WHERE pa.payment_proof_id=?
+                 ORDER BY pa.allocation_order ASC`,
+                [paymentId]
+            );
+            paymentData.payment_allocations = allocationRows;
+        }
+    }
     connection.release();
     return paymentData;
 };

@@ -5,6 +5,7 @@ const TenantNotificationService = require("../services/tenant.notification.servi
 const GuestNotificationService = require("../services/guest.notification.service");
 const Firebase = require("../config/firebase");
 const MailService = require("../services/mail.service");
+const messagingService = require("../services/messaging.service");
 
 const can = async (req, action) => {
     if (req.admin.role === "super_admin") return true;
@@ -113,7 +114,14 @@ const sendMessage = async (req,res) => {
 
         if (person.email) {
             try {
-                await MailService.sendCustomAdminNotificationEmail(person.email, person.full_name, subject.trim() || title.trim(), message.trim(), adminName);
+                try {
+                        await messagingService.sendCustom(
+                            { id: person.id, phone: person.phone, email: person.email, full_name: person.full_name, role: person.role || "tenant" },
+                            subject.trim() || title.trim(),
+                            message.trim()
+                        );
+                    } catch (waErr) { console.error("WA activity msg failed:", waErr.message); }
+                    await MailService.sendCustomAdminNotificationEmail(person.email, person.full_name, subject.trim() || title.trim(), message.trim(), adminName);
                 emailSent = 1;
             } catch (e) {
                 console.error("Activity message email failed:", e.message);

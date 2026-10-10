@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "nodemon src/server.js"
+    "start": "node src/server.js",
+    "migrate": "node scripts/migrate.js"
   },
   "author": "",
   "license": "ISC",
@@ -31,6 +32,7 @@
     "node-cron": "^4.6.0",
     "nodemailer": "^7.0.5",
     "qrcode": "^1.5.4",
+    "twilio": "^6.1.1",
     "uuid": "^14.0.1"
   },
   "devDependencies": {

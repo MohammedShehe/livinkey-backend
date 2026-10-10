@@ -95,6 +95,33 @@ const generatePaymentReceipt = (paymentData, type) => {
         </tr>
     `;
 
+    const paymentAllocations = Array.isArray(paymentData.payment_allocations)
+        ? paymentData.payment_allocations
+        : [];
+    const allocationSection = paymentAllocations.length > 0
+        ? `
+        <div class="bill-details" style="margin-top: 20px;">
+            <h3>Payment Allocation</h3>
+            <table>
+                ${paymentAllocations.map((a, i) => `
+                <tr>
+                    <td style="padding: 8px 0; color: #555;">
+                        Bill #${a.bill_id}${a.billing_month ? ` · ${a.billing_month}` : ''}
+                        ${a.is_partial ? ' · Partial' : ' · Settled'}
+                    </td>
+                    <td style="padding: 8px 0; text-align: right; font-weight: 700; color: #333;">
+                        ₹${parseFloat(a.amount || 0).toFixed(2)}
+                    </td>
+                </tr>`).join('')}
+                <tr>
+                    <td style="padding: 10px 0 0; border-top: 2px solid #e8ecf1; font-weight: 700;">Allocated Total</td>
+                    <td style="padding: 10px 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A;">
+                        ₹${paymentAllocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0).toFixed(2)}
+                    </td>
+                </tr>
+            </table>
+        </div>`
+        : '';
     return `
     <!DOCTYPE html>
     <html>
@@ -361,6 +388,8 @@ const generatePaymentReceipt = (paymentData, type) => {
                         ${billBreakdown}
                     </table>
                 </div>
+
+                ${allocationSection}
 
                 <!-- Payment Summary -->
                 <div class="payment-summary">

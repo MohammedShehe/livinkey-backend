@@ -5,6 +5,7 @@ const createBill = async (connection, billData) => {
         `
         INSERT INTO bills (
             tenant_id,
+            room_id,
             billing_month,
             period_from,
             period_till,
@@ -47,10 +48,11 @@ const createBill = async (connection, billData) => {
             fine_start_date,
             daily_fine_rate,
             max_fine
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             billData.tenant_id,
+            billData.room_id || null,
             billData.billing_month || null,
             billData.period_from || null,
             billData.period_till || null,
@@ -102,12 +104,13 @@ const createBill = async (connection, billData) => {
  * FIXED: Get unpaid tenants using bills table as source of truth
  */
 const getUnpaidTenants = async () => {
-    // Eligible for a NEW bill if active tenant, rent>0, paid_from set,
-    // no open (non-deleted) bill, and no non-deleted bill for the default/current billing month is required at create time.
-    // This list shows anyone who can receive a bill for *some* future period (no open balance bill).
+    // Kept under the existing endpoint name for frontend compatibility. This
+    // endpoint now returns every active tenant with a room assignment, not just
+    // tenants without an open bill, because production billing allows multiple
+    // simultaneous outstanding bills.
     const [rows] = await db.execute(
         `
-        SELECT 
+        SELECT
             t.id,
             t.full_name,
             t.email,
@@ -119,7 +122,7 @@ const getUnpaidTenants = async () => {
             td.payment_date,
             td.pg_id,
             td.room_id,
-            p.name as pg_name,
+            p.name AS pg_name,
             p.payment_bank_name,
             p.payment_account_holder_name,
             p.payment_account_number,
@@ -127,49 +130,46 @@ const getUnpaidTenants = async () => {
             p.payment_upi_id,
             p.payment_qr,
             r.room_number,
+            r.capacity AS room_capacity,
+            r.rent AS room_rent,
+            COALESCE((
+                SELECT SUM(GREATEST(b.total_amount + b.fine_amount - b.paid_amount, 0))
+                FROM bills b
+                WHERE b.deleted_at IS NULL
+                  AND b.status <> 'paid'
+                  AND (
+                    b.tenant_id=t.id OR EXISTS (
+                      SELECT 1 FROM bill_group_members bgm
+                      INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id
+                      WHERE bg.bill_id=b.id AND bgm.tenant_id=t.id
+                    )
+                  )
+            ), 0) AS outstanding_amount,
             (
-                SELECT status FROM bills
-                WHERE tenant_id = t.id AND deleted_at IS NULL
-                ORDER BY created_at DESC LIMIT 1
-            ) as bill_status,
+                SELECT b2.status FROM bills b2
+                WHERE b2.tenant_id=t.id AND b2.deleted_at IS NULL
+                ORDER BY b2.created_at DESC LIMIT 1
+            ) AS bill_status,
             (
-                SELECT billing_month FROM bills
-                WHERE tenant_id = t.id AND deleted_at IS NULL
-                ORDER BY created_at DESC LIMIT 1
-            ) as last_billing_month,
+                SELECT b2.billing_month FROM bills b2
+                WHERE b2.tenant_id=t.id AND b2.deleted_at IS NULL
+                ORDER BY b2.created_at DESC LIMIT 1
+            ) AS last_billing_month,
             (
-                SELECT sent_at FROM bills
-                WHERE tenant_id = t.id AND deleted_at IS NULL
-                ORDER BY created_at DESC LIMIT 1
-            ) as last_bill_at,
-            COALESCE(
-                (SELECT total_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
-                0
-            ) as total_amount,
-            COALESCE(
-                (SELECT paid_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
-                0
-            ) as paid_amount,
-            COALESCE(
-                (SELECT fine_amount FROM bills WHERE tenant_id = t.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
-                0
-            ) as fine_amount,
-            0 as amount_owed
+                SELECT b2.created_at FROM bills b2
+                WHERE b2.tenant_id=t.id AND b2.deleted_at IS NULL
+                ORDER BY b2.created_at DESC LIMIT 1
+            ) AS last_bill_at
         FROM tenants t
         INNER JOIN tenant_details td ON t.id = td.tenant_id
         INNER JOIN pgs p ON td.pg_id = p.id
         INNER JOIN rooms r ON td.room_id = r.id
-        WHERE t.role = 'tenant'
-        AND t.is_active = 1
-        AND td.paid_from IS NOT NULL
-        AND td.rent > 0
-        AND NOT EXISTS (
-            SELECT 1 FROM bills b
-            WHERE b.tenant_id = t.id
-              AND b.deleted_at IS NULL
-              AND b.status IN ('unpaid', 'partially_paid', 'delayed', 'overdue')
-        )
-        ORDER BY t.full_name ASC
+        WHERE t.role='tenant'
+          AND t.is_active=1
+          AND r.is_active=1
+          AND r.deleted_at IS NULL
+          AND td.rent > 0
+        ORDER BY p.name, r.room_number, t.full_name
         `
     );
     return rows;
@@ -227,6 +227,19 @@ const getBills = async (filters = {}) => {
                 ELSE 'none'
             END as qr_status,
             GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) as due_amount,
+            COALESCE((
+                SELECT SUM(GREATEST(ob.total_amount + ob.fine_amount - ob.paid_amount, 0))
+                FROM bills ob
+                WHERE ob.deleted_at IS NULL
+                  AND ob.status <> 'paid'
+                  AND (
+                    ob.tenant_id=t.id OR EXISTS (
+                      SELECT 1 FROM bill_group_members obgm
+                      INNER JOIN bill_groups obg ON obg.id=obgm.bill_group_id
+                      WHERE obg.bill_id=ob.id AND obgm.tenant_id=t.id
+                    )
+                  )
+            ), 0) AS tenant_outstanding_amount,
         CASE WHEN b.bill_group_id IS NULL THEN 0 ELSE 1 END AS is_group_bill,
         (SELECT COUNT(*) FROM bill_group_members bgm INNER JOIN bill_groups bg ON bg.id=bgm.bill_group_id WHERE bg.bill_id=b.id) AS group_member_count
         FROM bills b
@@ -375,7 +388,62 @@ const getBillById = async (billId) => {
         `,
         [billId]
     );
-    return rows[0] || null;
+    const bill = rows[0] || null;
+    if (!bill) return null;
+
+    // Production billing balance for the selected tenant. A tenant can now
+    // have multiple open bills, and a shared/group bill belongs to every
+    // tenant recorded in bill_group_members. The current bill is included in
+    // total outstanding but excluded from previous outstanding.
+    const tenantId = bill.tenant_id;
+    const [outstandingRows] = await db.execute(
+        `
+        SELECT
+            b.id,
+            b.billing_month,
+            b.created_at,
+            b.status,
+            b.total_amount,
+            b.fine_amount,
+            b.paid_amount,
+            GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) AS due_amount
+        FROM bills b
+        WHERE b.deleted_at IS NULL
+          AND b.status <> 'paid'
+          AND GREATEST((b.total_amount + b.fine_amount - b.paid_amount), 0) > 0
+          AND (
+              b.tenant_id = ?
+              OR EXISTS (
+                  SELECT 1
+                  FROM bill_group_members bgm
+                  INNER JOIN bill_groups bg ON bg.id = bgm.bill_group_id
+                  WHERE bg.bill_id = b.id
+                    AND bgm.tenant_id = ?
+              )
+          )
+        ORDER BY b.created_at DESC, b.id DESC
+        `,
+        [tenantId, tenantId]
+    );
+
+    const currentBillId = Number(bill.id);
+    const outstandingBills = outstandingRows.map(row => ({
+        id: Number(row.id),
+        billing_month: row.billing_month,
+        created_at: row.created_at,
+        status: row.status,
+        total_amount: Number(row.total_amount) || 0,
+        fine_amount: Number(row.fine_amount) || 0,
+        paid_amount: Number(row.paid_amount) || 0,
+        due_amount: Number(row.due_amount) || 0
+    }));
+
+    bill.outstanding_bills = outstandingBills;
+    bill.previous_outstanding_bills = outstandingBills.filter(row => row.id !== currentBillId);
+    bill.previous_outstanding_amount = bill.previous_outstanding_bills.reduce((sum, row) => sum + row.due_amount, 0);
+    bill.total_outstanding_amount = outstandingBills.reduce((sum, row) => sum + row.due_amount, 0);
+
+    return bill;
 };
 
 const getBillsByTenant = async (tenantId) => {

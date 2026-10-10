@@ -2,8 +2,10 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
+const messagingService = require("./messaging.service");
 const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
 const NotificationEventManager = require("../utils/notification.events");
+const agreementService = require('./agreement.service');
 const {
     generatePassword,
     normalizeNumberOfTenants,
@@ -90,6 +92,7 @@ const createTenant = async (tenantData, files = {}) => {
             country_code: tenantData.country_code,
             phone: tenantData.phone,
             international_phone: tenantData.international_phone || null,
+            parent_phone: tenantData.parent_phone || null,
             gender: tenantData.gender,
             password: hashedPassword,
             created_by: tenantData.created_by,
@@ -130,6 +133,7 @@ const createTenant = async (tenantData, files = {}) => {
                 paid_from: toDateOrNull(tenantData.paid_from),
                 paid_till: toDateOrNull(tenantData.paid_till),
                 arrival_date: toDateOrNull(tenantData.arrival_date),
+                period_of_stay: tenantData.period_of_stay,
                 document_url: documentUrl,
                 document_public_id: documentPublicId,
                 document_resource_type: documentResourceType
@@ -184,6 +188,18 @@ const createTenant = async (tenantData, files = {}) => {
         }
 
         try {
+            try {
+                await messagingService.sendMessage({
+                    userId: tenantId,
+                    userType: "tenant",
+                    phone: tenantData.phone,
+                    email: tenantData.email,
+                    name: tenantData.full_name,
+                    type: "custom",
+                    title: "Welcome to Livinkey",
+                    body: `Hello ${tenantData.full_name}, your account has been created successfully. Please login to continue.`
+                });
+            } catch (waErr) { console.error("WhatsApp welcome failed:", waErr.message); }
             await sendWelcomeTenantEmail(
                 tenantData.email,
                 tenantData.full_name,
@@ -223,7 +239,16 @@ const createTenant = async (tenantData, files = {}) => {
 };
 
 const getAllTenants = async (search = null, role = null, gender = null, bill_status = null, pg_id = null) => {
-    return await TenantModel.findAll(search, role, gender, bill_status, pg_id);
+    const tenants = await TenantModel.findAll(search, role, gender, bill_status, pg_id);
+    return Promise.all(tenants.map(async tenant => {
+        if (tenant.role !== 'tenant') return { ...tenant, agreement_status: 'not_required' };
+        try {
+            const agreement = await agreementService.getTenantAgreement(tenant.id);
+            return { ...tenant, agreement_status: !agreement || !agreement.enabled ? 'not_required' : (agreement.accepted ? 'accepted' : 'pending') };
+        } catch (_) {
+            return { ...tenant, agreement_status: 'pending' };
+        }
+    }));
 };
 
 const getTenantById = async (tenantId) => {
@@ -270,6 +295,7 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
             country_code: tenantData.country_code,
             phone: tenantData.phone,
             international_phone: tenantData.international_phone || null,
+            parent_phone: tenantData.parent_phone || null,
             gender: tenantData.gender,
             residency: tenantData.residency
         });
@@ -332,7 +358,8 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 payment_date: tenantData.payment_date,
                 paid_from: toDateOrNull(tenantData.paid_from),
                 paid_till: toDateOrNull(tenantData.paid_till),
-                arrival_date: toDateOrNull(tenantData.arrival_date)
+                arrival_date: toDateOrNull(tenantData.arrival_date),
+                period_of_stay: tenantData.period_of_stay
             });
 
             if (roomChanged) {
@@ -487,6 +514,17 @@ const checkAndSendEFRROExpiryNotifications = async () => {
         
         for (const tenant of expiringTenants) {
             try {
+                try {
+                    await messagingService.sendMessage({
+                        userId: tenant.id,
+                        userType: "tenant",
+                        phone: tenant.phone || tenant.email,
+                        email: tenant.email,
+                        name: tenant.full_name,
+                        type: "efrro",
+                        templateData: { daysLeft: tenant.days_until_expiry }
+                    });
+                } catch (waErr) { console.error("WhatsApp eFRRO failed:", waErr.message); }
                 await sendEFRROExpiryTenantEmail(
                     tenant.email,
                     tenant.full_name,

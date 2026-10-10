@@ -17,6 +17,8 @@ const createPG = async (req, res) => {
             payment_account_number,
             payment_ifsc_code,
             payment_upi_id,
+            tenant_agreement_enabled,
+            tenant_agreement_text,
             amenities,
             floors
         } = req.body;
@@ -126,6 +128,8 @@ const createPG = async (req, res) => {
             payment_account_number: payment_account_number.trim(),
             payment_ifsc_code: payment_ifsc_code.trim().toUpperCase(),
             payment_upi_id: payment_upi_id?.trim() || null,
+            tenant_agreement_enabled: tenant_agreement_enabled === undefined || tenant_agreement_enabled === '' ? true : (tenant_agreement_enabled === true || tenant_agreement_enabled === 'true' || tenant_agreement_enabled === '1'),
+            tenant_agreement_text: tenant_agreement_text?.trim() || null,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             created_by: req.admin.id
@@ -244,6 +248,8 @@ const updatePG = async (req, res) => {
             payment_account_number,
             payment_ifsc_code,
             payment_upi_id,
+            tenant_agreement_enabled,
+            tenant_agreement_text,
             amenities,
             floors,
             remove_qr
@@ -343,6 +349,8 @@ const updatePG = async (req, res) => {
             payment_account_number: payment_account_number.trim(),
             payment_ifsc_code: payment_ifsc_code.trim().toUpperCase(),
             payment_upi_id: payment_upi_id?.trim() || null,
+            tenant_agreement_enabled: tenant_agreement_enabled === undefined || tenant_agreement_enabled === '' ? true : (tenant_agreement_enabled === true || tenant_agreement_enabled === 'true' || tenant_agreement_enabled === '1'),
+            tenant_agreement_text: tenant_agreement_text?.trim() || null,
             amenities: parsedAmenities || [],
             floors: parsedFloors,
             remove_qr: remove_qr === true || remove_qr === 'true'

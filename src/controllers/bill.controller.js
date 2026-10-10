@@ -16,7 +16,9 @@ const createBill = async (req, res) => {
             payment_account_number,
             payment_ifsc_code,
             payment_upi_id,
-            bill_mode
+            bill_mode,
+            pg_id,
+            room_id
         } = req.body;
 
         let selectedTenantIds = [];
@@ -29,10 +31,10 @@ const createBill = async (req, res) => {
         }
         if (!selectedTenantIds.length && tenant_id) selectedTenantIds = [tenant_id];
 
-        if (!selectedTenantIds.length || !rent_amount) {
+        if (!selectedTenantIds.length) {
             return res.status(400).json({
                 success: false,
-                message: "At least one tenant and rent amount are required"
+                message: "At least one tenant is required"
             });
         }
 
@@ -50,7 +52,9 @@ const createBill = async (req, res) => {
             payment_upi_id: payment_upi_id?.trim() || null,
             created_by: req.admin.id,
             admin_name: req.admin.name || req.admin.full_name || 'Admin',
-            bill_mode: String(bill_mode || 'individual').toLowerCase() === 'group' ? 'group' : 'individual'
+            pg_id: pg_id ? Number(pg_id) : null,
+            room_id: room_id ? Number(room_id) : null,
+            bill_mode: ['group','full','full_bill'].includes(String(bill_mode || '').toLowerCase()) ? 'group' : 'individual'
         };
 
         const files = {

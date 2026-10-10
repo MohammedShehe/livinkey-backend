@@ -2,7 +2,7 @@ const db = require("../config/db");
 const TenantDocumentModel = require("../models/tenant.document.model");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
-const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS } = require("../config/document.types");
+const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS, DOCUMENT_TYPES } = require("../config/document.types");
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -29,6 +29,14 @@ const uploadDocument = async (tenantId, documentType, file) => {
         const tenant = await TenantModel.findById(tenantId);
         if (!tenant) {
             throw new Error("Tenant not found");
+        }
+
+        // Validate the document type against the tenant's residency-specific document list.
+        // This keeps special fields such as Signature consistent between the tenant app and admin.
+        const allowedDocuments = getRequiredDocuments(tenant.residency);
+        const documentDefinition = allowedDocuments.find(doc => doc.key === documentType);
+        if (!documentDefinition || !DOCUMENT_TYPES[documentType]) {
+            throw new Error("Invalid document type for this tenant");
         }
 
         // Check if document already exists

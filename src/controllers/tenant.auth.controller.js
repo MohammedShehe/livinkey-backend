@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const db = require("../config/db");
 const { generateToken } = require("../services/token.service");
 const { generateAndSendTenantOTP, compareOTP } = require("../services/otp.service");
+const agreementService = require("../services/agreement.service");
 
 exports.login = async (req, res) => {
     try {
@@ -30,6 +31,7 @@ exports.login = async (req, res) => {
                 td.rent,
                 td.payment_date,
                 td.arrival_date,
+                td.period_of_stay,
                 td.residency,
                 td.aadhaar_id,
                 td.c_form_number,
@@ -88,6 +90,10 @@ exports.login = async (req, res) => {
             metadata: { result: "success" }
         });
 
+        // Agreement is evaluated from the current PG template + current tenant data.
+        // This makes any relevant replacement change automatically require re-acceptance.
+        const agreement = await agreementService.getTenantAgreement(tenant.id);
+
         // Check if tenant must change password
         if (tenant.must_change_password === 1) {
             const token = generateToken({
@@ -108,7 +114,8 @@ exports.login = async (req, res) => {
                     id: tenant.id,
                     full_name: tenant.full_name,
                     email: tenant.email
-                }
+                },
+                agreement: agreement ? { required: agreement.enabled && !agreement.accepted, ...agreement } : null
             });
         }
 
@@ -128,7 +135,8 @@ exports.login = async (req, res) => {
             message: "Login successful.",
             token,
             user: tenant,
-            must_change_password: false
+            must_change_password: false,
+            agreement: agreement ? { required: agreement.enabled && !agreement.accepted, ...agreement } : null
         });
 
     } catch (error) {
