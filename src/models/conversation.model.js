@@ -77,8 +77,12 @@ const findAndCountAll = async ({ where = {}, order = [], limit = 20, offset = 0 
         countParams.push(s, s, s);
     }
 
-    sql += ` ORDER BY last_message_at DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    // mysql2 prepared LIMIT/OFFSET parameters can fail on some MySQL-compatible
+    // production deployments. Normalize them to safe integers and interpolate
+    // only these validated numeric values; all user-provided filters remain bound.
+    const safeLimit = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 20));
+    const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
+    sql += ` ORDER BY last_message_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 
     const [rows] = await db.execute(sql, params);
     const [countRows] = await db.execute(countSql, countParams);
