@@ -38,7 +38,7 @@ exports.acceptAgreement = async (req, res) => {
   }
 };
 
-// Download the latest currently-valid accepted agreement for a tenant.
+// Download the accepted agreement using the original LivinKey boxed form layout.
 exports.downloadAcceptedAgreement = async (req, res) => {
   try {
     const tenantId = Number(req.params.id);
@@ -48,51 +48,81 @@ exports.downloadAcceptedAgreement = async (req, res) => {
     const current = await agreementService.getTenantAgreement(tenantId);
     if (!current) return res.status(404).json({ success: false, message: 'Tenant not found.' });
     if (!current.accepted) return res.status(404).json({ success: false, message: 'No current accepted agreement is available for this tenant.' });
-    const [rows] = await db.execute(`SELECT a.agreement_text, a.accepted_at, t.full_name, t.email, t.phone, t.country_code, t.parent_phone, p.name AS pg_name, r.room_number FROM tenant_agreement_acceptances a JOIN tenants t ON t.id=a.tenant_id LEFT JOIN tenant_details td ON td.tenant_id=t.id LEFT JOIN pgs p ON p.id=td.pg_id LEFT JOIN rooms r ON r.id=td.room_id WHERE a.tenant_id=? AND a.agreement_hash=? LIMIT 1`, [tenantId, current.hash]);
+    const [rows] = await db.execute(`SELECT a.agreement_text, a.accepted_at, t.full_name, t.email, t.phone, t.country_code, t.parent_phone, t.gender, t.nationality, td.residency, td.aadhaar_id, td.c_form_number, td.period_of_stay, td.arrival_date, td.rent, td.security_fee, td.payment_date, p.name AS pg_name, r.room_number FROM tenant_agreement_acceptances a JOIN tenants t ON t.id=a.tenant_id LEFT JOIN tenant_details td ON td.tenant_id=t.id LEFT JOIN pgs p ON p.id=td.pg_id LEFT JOIN rooms r ON r.id=td.room_id WHERE a.tenant_id=? AND a.agreement_hash=? LIMIT 1`, [tenantId, current.hash]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Current accepted agreement record not found.' });
     const row = rows[0];
     const acceptedAt = row.accepted_at ? new Date(row.accepted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Not recorded';
-    const clean = (v) => String(v ?? '').normalize('NFKD').replace(/[^\x20-\x7E]/g, '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-    const wrap = (str, max=88) => { const words=String(str||'').split(/\s+/); const out=[]; let line=''; for(const word of words){ if((line+' '+word).trim().length>max && line){out.push(line);line=word;}else line=(line+' '+word).trim(); } if(line)out.push(line); return out; };
-    const lines = [
-      'LIVINKEY  |  TENANCY AGREEMENT',
-      'OFFICIAL RECORD • CURRENT ACCEPTED VERSION',
-      '', 'TENANT DETAILS',
-      `Tenant: ${row.full_name || ''}`, `Email: ${row.email || ''}`,
-      `Phone: ${row.country_code || ''} ${row.phone || ''}`, `Parent phone: ${row.parent_phone || 'Not provided'}`,
-      `Property: ${row.pg_name || '—'}    Room: ${row.room_number || '—'}`,
-      '', 'AGREEMENT TERMS', ...wrap(row.agreement_text, 88),
-      '', 'ACCEPTANCE RECORD', `Accepted on: ${acceptedAt}`,
-    ];
-    const pages=[]; for(let i=0;i<lines.length;i+=43) pages.push(lines.slice(i,i+43));
-    const objects=[]; const add=(v)=>{objects.push(v);return objects.length;};
-    const catalogId=add(''); const pagesId=add('');
-    const fontId=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-    const boldFontId=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
-    // Embed the company logo into the PDF so it remains visible when shared or printed.
-    const logoPath=path.join(__dirname, '..', 'assets', 'livinkey-logo.jpg');
-    const logoHex=fs.readFileSync(logoPath).toString('hex').toUpperCase()+'>';
-    const logoId=add(`<< /Type /XObject /Subtype /Image /Width 200 /Height 60 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logoHex.length} >>\nstream\n${logoHex}\nendstream`);
-    const pageIds=[];
-    for(let pageIndex=0; pageIndex<pages.length; pageIndex++){
-      const pageLines=pages[pageIndex];
-      let stream='';
-      stream+='q 220 0 0 66 48 755 cm /Logo Do Q\n';
-      stream+='BT /F2 16 Tf 48 731 Td ('+clean('TENANCY AGREEMENT')+') Tj ET\n';
-      stream+='BT /F1 8 Tf 48 716 Td ('+clean('OFFICIAL RECORD  |  CURRENT ACCEPTED VERSION')+') Tj ET\n';
-      stream+='0.35 0.55 0.12 rg 48 704 499 2 re f\n';
-      let y=680;
-      for(let i=2;i<pageLines.length;i++){
-        const line=pageLines[i];
-        const bold=/^(TENANT DETAILS|AGREEMENT TERMS|ACCEPTANCE RECORD)$/.test(line);
-        if(bold){ y-=4; stream+=`0.16 0.22 0.12 rg BT /F2 10 Tf 48 ${y} Td (${clean(line)}) Tj ET\n`; y-=19; }
-        else { stream+=`0.08 0.08 0.08 rg BT /F1 9 Tf 48 ${y} Td (${clean(line)}) Tj ET\n`; y-=14; }
-      }
-      stream+=`0.35 0.55 0.12 rg 48 42 499 1 re f\n`;
-      stream+=`0.2 0.2 0.2 rg BT /F1 8 Tf 48 28 Td (${clean('LivinKey  |  Confidential tenant record  |  Page '+(pageIndex+1)+' of '+pages.length)}) Tj ET\n`;
-      const contentId=add(`<< /Length ${Buffer.byteLength(stream,'binary')} >>\nstream\n${stream}endstream`);
-      const pageId=add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> /XObject << /Logo ${logoId} 0 R >> >> /Contents ${contentId} 0 R >>`);
-      pageIds.push(pageId);
+    const terms = require('../services/agreement.service').AGREEMENT_TERMS;
+    const esc = (v) => String(v ?? '').normalize('NFKD').replace(/[^\x20-\x7E]/g, '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    const objects = []; const add = (v) => { objects.push(v); return objects.length; };
+    const catalogId = add(''); const pagesId = add('');
+    const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const boldFontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+    const logoPath = path.join(__dirname, '..', 'assets', 'livinkey-logo.jpg');
+    let logoId = null;
+    if (fs.existsSync(logoPath)) {
+      const logoHex = fs.readFileSync(logoPath).toString('hex').toUpperCase() + '>';
+      logoId = add(`<< /Type /XObject /Subtype /Image /Width 200 /Height 60 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logoHex.length} >>\nstream\n${logoHex}\nendstream`);
+    }
+    const pages = [];
+    const line = (x1,y1,x2,y2) => `0.25 G 0.7 w ${x1} ${y1} m ${x2} ${y2} l S\n`;
+    const rect = (x,y,w,h) => `0.25 G 0.7 w ${x} ${y} ${w} ${h} re S\n`;
+    const txt = (x,y,size,text,bold=false) => `BT /${bold?'F2':'F1'} ${size} Tf ${x} ${y} Td (${esc(text)}) Tj ET\n`;
+    const field = (stream,x,y,w,label,value) => { stream += txt(x+5,y-13,7,label,true); stream += txt(x+5,y-28,9,String(value || '').slice(0,70)); stream += rect(x,y-36,w,36); return stream; };
+    // Page 1: agreement form fields in the same boxed/ruled style as the supplied sheet.
+    let st = '';
+    if (logoId) st += `q 110 0 0 33 245 790 cm /Logo Do Q\n`;
+    st += txt(185,778,14,'LIVINKEY AGREEMENT',true);
+    st += line(35,766,560,766);
+    st += txt(40,750,8,'APARTMENT NAME',true); st += txt(145,750,9,row.pg_name || '');
+    st += txt(370,750,8,'ROOM NO.',true); st += txt(430,750,9,row.room_number || '');
+    st += rect(35,730,340,24); st += rect(375,730,185,24);
+    st += txt(40,738,8,'TIME PERIOD',true); st += txt(130,738,9,`${row.period_of_stay || ''} MONTHS`);
+    st += txt(380,738,8,'ACCEPTED ON',true); st += txt(445,738,8,acceptedAt);
+    st += txt(40,710,10,'TENANT INFORMATION',true);
+    st = field(st,35,704,260,'NAME',row.full_name);
+    st = field(st,295,704,265,'MOBILE NO.',`${row.country_code || ''} ${row.phone || ''}`);
+    st = field(st,35,668,260,'PARENTS NO.',row.parent_phone);
+    st = field(st,295,668,265,'AADHAR/PASSPORT/VISA NO.',row.aadhaar_id || row.c_form_number || '');
+    st = field(st,35,632,260,'COLLEGE REGISTRATION NO.', '');
+    st = field(st,295,632,90,'BATCH','');
+    st = field(st,385,632,85,'GENDER',row.gender);
+    st = field(st,470,632,90,'NATIONALITY',row.nationality);
+    st += txt(40,582,10,'RENT INFORMATION',true);
+    st = field(st,35,576,175,'DATE OF JOINING',row.arrival_date ? new Date(row.arrival_date).toLocaleDateString('en-IN') : '');
+    st = field(st,210,576,175,'STARTING METER READING','');
+    st = field(st,385,576,175,'MONTHLY RENT AMOUNT RS',row.rent);
+    st = field(st,35,540,260,'SECURITY DEPOSIT RS',row.security_fee);
+    st = field(st,295,540,265,'PAYMENT DATE',row.payment_date);
+    st += txt(40,492,10,'TERMS & CONDITIONS',true);
+    st += rect(35,180,525,300);
+    const wrap = (text,max=105) => { const out=[]; let cur=''; for(const word of String(text).split(/\s+/)){ if((cur+' '+word).trim().length>max && cur){out.push(cur);cur=word;} else cur=(cur+' '+word).trim(); } if(cur)out.push(cur); return out; };
+    let y=464;
+    for(let i=0;i<12;i++){ const lines=wrap(`${i+1}. ${terms[i]}`,105); for(const l of lines){ if(y<190) break; st+=txt(42,y,6.7,l); y-=10; } }
+    st += txt(40,157,8,'Signature of Tenant',true); st += txt(220,157,8,'Signature of Tenant',true); st += txt(420,157,8,'Signature of Owner/Manager',true);
+    st += line(35,174,190,174)+line(205,174,360,174)+line(375,174,560,174);
+    st += txt(40,28,7,`LivinKey | Accepted electronically: ${acceptedAt} | Page 1`);
+    pages.push(st);
+    // Page 2: remaining original clauses and the exact stored accepted wording.
+    st = '';
+    if (logoId) st += `q 90 0 0 27 252 790 cm /Logo Do Q\n`;
+    st += txt(40,775,13,'LIVINKEY AGREEMENT - TERMS & CONDITIONS',true);
+    st += line(35,764,560,764);
+    let yy=740;
+    for(let i=12;i<terms.length;i++){
+      const lines=wrap(`${i+1}. ${terms[i]}`,105);
+      for(const l of lines){ st+=txt(42,yy,8,l); yy-=13; }
+      yy-=3;
+    }
+    yy-=12; st+=txt(40,yy,10,'AGREEMENT TEXT ACCEPTED BY TENANT',true); yy-=18;
+    for(const l of wrap(row.agreement_text || '',105)){ if(yy<55) break; st+=txt(42,yy,7.5,l); yy-=11; }
+    st+=line(35,42,560,42); st+=txt(40,28,7,`LivinKey | Accepted electronically: ${acceptedAt} | Page 2`);
+    pages.push(st);
+    const pageIds = [];
+    for (const stream of pages) {
+      const contentId = add(`<< /Length ${Buffer.byteLength(stream,'binary')} >>\nstream\n${stream}endstream`);
+      const xobj = logoId ? ` /XObject << /Logo ${logoId} 0 R >>` : '';
+      pageIds.push(add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >>${xobj} >> /Contents ${contentId} 0 R >>`));
     }
     objects[catalogId-1]=`<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
     objects[pagesId-1]=`<< /Type /Pages /Kids [${pageIds.map(id=>id+' 0 R').join(' ')}] /Count ${pageIds.length} >>`;
@@ -101,8 +131,9 @@ exports.downloadAcceptedAgreement = async (req, res) => {
     const xref=Buffer.byteLength(pdf,'binary'); pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
     for(let i=1;i<offsets.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
     pdf+=`trailer\n<< /Size ${objects.length+1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
-    const filename=`LivinKey-Agreement-${tenantId}.pdf`;
-    res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`attachment; filename="${filename}"`); res.setHeader('Cache-Control','no-store');
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition',`attachment; filename="LivinKey-Agreement-${tenantId}.pdf"`);
+    res.setHeader('Cache-Control','no-store');
     return res.send(Buffer.from(pdf,'binary'));
   } catch (error) { console.error('Download accepted agreement error:', error); return res.status(500).json({ success:false, message:'Unable to generate agreement PDF.' }); }
 };
