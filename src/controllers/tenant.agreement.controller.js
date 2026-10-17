@@ -67,7 +67,8 @@ exports.downloadAcceptedAgreement = async (req, res) => {
     const pages = [];
     const line = (x1,y1,x2,y2,weight=1) => `0.12 G ${weight} w ${x1} ${y1} m ${x2} ${y2} l S\n`;
     const rect = (x,y,w,h,weight=1) => `0.12 G ${weight} w ${x} ${y} ${w} ${h} re S\n`;
-    const txt = (x,y,size,text,bold=false) => `BT /${bold?'F2':'F1'} ${size} Tf ${x} ${y} Td (${esc(text)}) Tj ET\n`;
+    // Force solid black text; PDF fill colour is stateful and background fills otherwise leave text nearly white.
+    const txt = (x,y,size,text,bold=false) => `0 g BT /${bold?'F2':'F1'} ${size} Tf ${x} ${y} Td (${esc(text)}) Tj ET\n`;
     const safe = (v) => (v == null || String(v).trim().toLowerCase() === 'null' || String(v).trim() === '') ? '—' : String(v).trim();
     const field = (stream,x,y,w,h,label,value,opts={}) => {
       stream += rect(x,y-h,w,h,1.1);
