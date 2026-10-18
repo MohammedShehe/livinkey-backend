@@ -44,8 +44,9 @@ const toDateOrNull = (value) => {
 };
 
 // Keep the paid period, bill and payment ledger synchronized when an admin edits a tenant.
-// The INITIAL-RENT transaction marker makes this operation idempotent: repeated edits
-// update the same automatically-created payment instead of creating duplicates.
+// Auto-created initial rent is recorded as a verified cash payment (cash_payments +
+// bill_payments with CASH-{id} transaction_id) so the payments UI shows Type=Cash Payment,
+// Gateway/Method=cash, and Status=verified — not pending Online Payment.
 const syncInitialRentPayment = async (connection, tenantId, tenantData, fallbackCreatedBy) => {
     const paidFromValue = toDateOrNull(tenantData.paid_from);
     const paidTillValue = toDateOrNull(tenantData.paid_till);
@@ -63,29 +64,122 @@ const syncInitialRentPayment = async (connection, tenantId, tenantData, fallback
     }
 
     const billingMonth = `${fromDate.getUTCFullYear()}-${String(fromDate.getUTCMonth() + 1).padStart(2, '0')}`;
-    const [autoRows] = await connection.execute(
-        `SELECT b.id AS bill_id, bp.id AS payment_id
-         FROM bills b
-         LEFT JOIN bill_payments bp ON bp.bill_id = b.id
-             AND bp.transaction_id LIKE ?
-         WHERE b.tenant_id = ? AND b.deleted_at IS NULL
-           AND EXISTS (
-             SELECT 1 FROM bill_payments bp2
-             WHERE bp2.bill_id = b.id
-               AND bp2.transaction_id LIKE ?
-           )
-         ORDER BY b.id DESC LIMIT 1 FOR UPDATE`,
-        [`INITIAL-RENT-${tenantId}-%`, tenantId, `INITIAL-RENT-${tenantId}-%`]
-    );
 
-    if (autoRows.length) {
-        const billId = autoRows[0].bill_id;
-        const [paymentRows] = await connection.execute(
+    const [creatorRows] = await connection.execute('SELECT created_by FROM tenants WHERE id = ? LIMIT 1', [tenantId]);
+    const createdBy = tenantData.created_by || fallbackCreatedBy || creatorRows[0]?.created_by;
+    if (!createdBy) throw new Error('Unable to determine the admin who created this tenant for the rent bill.');
+
+    // Helper: create (or reuse) a verified cash payment + matching bill_payments ledger row.
+    // Uses notes='INITIAL-RENT' so we can find and update the same auto-payment on re-edit.
+    const ensureVerifiedCashPayment = async (billId, amount) => {
+        // Prefer an existing INITIAL-RENT cash row for this bill
+        const [existingCash] = await connection.execute(
+            `SELECT id FROM cash_payments
+             WHERE bill_id = ? AND notes = 'INITIAL-RENT'
+             ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+            [billId]
+        );
+
+        if (existingCash.length) {
+            const cashId = existingCash[0].id;
+            await connection.execute(
+                `UPDATE cash_payments
+                 SET amount = ?, paid_from = ?, paid_till = ?, status = 'verified', verified_by = ?
+                 WHERE id = ?`,
+                [amount, paidFrom, paidTill, createdBy, cashId]
+            );
+            // Keep bill_payments ledger in sync (CASH-{id} or legacy INITIAL-RENT-*)
+            const [ledgerRows] = await connection.execute(
+                `SELECT id FROM bill_payments
+                 WHERE bill_id = ?
+                   AND (transaction_id = ? OR transaction_id LIKE ?)
+                 ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+                [billId, `CASH-${cashId}`, `INITIAL-RENT-${tenantId}-%`]
+            );
+            if (ledgerRows.length) {
+                await connection.execute(
+                    `UPDATE bill_payments
+                     SET amount = ?, payment_method = 'cash', transaction_id = ?,
+                         paid_from = ?, paid_till = ?, is_partial = 0
+                     WHERE id = ?`,
+                    [amount, `CASH-${cashId}`, paidFrom, paidTill, ledgerRows[0].id]
+                );
+            } else {
+                await BillModel.createBillPayment(connection, {
+                    bill_id: billId,
+                    amount,
+                    payment_method: 'cash',
+                    transaction_id: `CASH-${cashId}`,
+                    is_partial: 0,
+                    paid_from: paidFrom,
+                    paid_till: paidTill
+                });
+            }
+            return cashId;
+        }
+
+        // Also handle legacy ledger-only INITIAL-RENT rows (no cash_payments yet)
+        const [legacyLedger] = await connection.execute(
             `SELECT id FROM bill_payments
              WHERE bill_id = ? AND transaction_id LIKE ?
              ORDER BY id DESC LIMIT 1 FOR UPDATE`,
             [billId, `INITIAL-RENT-${tenantId}-%`]
         );
+
+        const cashPaymentId = await BillModel.createCashPayment(connection, {
+            bill_id: billId,
+            tenant_id: tenantId,
+            amount,
+            paid_from: paidFrom,
+            paid_till: paidTill,
+            verified_by: createdBy,
+            otp: 'ADMIN',
+            notes: 'INITIAL-RENT'
+        });
+
+        if (legacyLedger.length) {
+            await connection.execute(
+                `UPDATE bill_payments
+                 SET amount = ?, payment_method = 'cash', transaction_id = ?,
+                     paid_from = ?, paid_till = ?, is_partial = 0
+                 WHERE id = ?`,
+                [amount, `CASH-${cashPaymentId}`, paidFrom, paidTill, legacyLedger[0].id]
+            );
+        } else {
+            await BillModel.createBillPayment(connection, {
+                bill_id: billId,
+                amount,
+                payment_method: 'cash',
+                transaction_id: `CASH-${cashPaymentId}`,
+                is_partial: 0,
+                paid_from: paidFrom,
+                paid_till: paidTill
+            });
+        }
+        return cashPaymentId;
+    };
+
+    // Find existing auto-created initial-rent bill (via cash notes or legacy INITIAL-RENT marker)
+    const [autoRows] = await connection.execute(
+        `SELECT b.id AS bill_id
+         FROM bills b
+         WHERE b.tenant_id = ? AND b.deleted_at IS NULL
+           AND (
+             EXISTS (
+               SELECT 1 FROM cash_payments cp
+               WHERE cp.bill_id = b.id AND cp.notes = 'INITIAL-RENT'
+             )
+             OR EXISTS (
+               SELECT 1 FROM bill_payments bp
+               WHERE bp.bill_id = b.id AND bp.transaction_id LIKE ?
+             )
+           )
+         ORDER BY b.id DESC LIMIT 1 FOR UPDATE`,
+        [tenantId, `INITIAL-RENT-${tenantId}-%`]
+    );
+
+    if (autoRows.length) {
+        const billId = autoRows[0].bill_id;
         await connection.execute(
             `UPDATE bills SET room_id = ?, billing_month = ?, period_from = ?, period_till = ?,
              rent_amount = ?, electricity_amount = 0, maintenance_amount = 0, other_charges = 0,
@@ -93,19 +187,7 @@ const syncInitialRentPayment = async (connection, tenantId, tenantData, fallback
              fine_amount = 0, max_fine = 0 WHERE id = ?`,
             [tenantData.room_id, billingMonth, paidFrom, paidTill, rentAmount, rentAmount, rentAmount, paidTill, paidTill, billId]
         );
-        if (paymentRows.length) {
-            await connection.execute(
-                `UPDATE bill_payments SET amount = ?, payment_method = 'cash', paid_from = ?, paid_till = ?, is_partial = 0
-                 WHERE id = ?`,
-                [rentAmount, paidFrom, paidTill, paymentRows[0].id]
-            );
-        } else {
-            await BillModel.createBillPayment(connection, {
-                bill_id: billId, amount: rentAmount, payment_method: 'cash',
-                transaction_id: `INITIAL-RENT-${tenantId}-${billId}`,
-                is_partial: 0, paid_from: paidFrom, paid_till: paidTill
-            });
-        }
+        await ensureVerifiedCashPayment(billId, rentAmount);
         return;
     }
 
@@ -124,28 +206,26 @@ const syncInitialRentPayment = async (connection, tenantId, tenantData, fallback
         const alreadyPaid = Number(bill.paid_amount || 0);
         const remaining = Math.max(0, rentAmount - alreadyPaid);
         if (remaining > 0) {
-            const transactionId = `INITIAL-RENT-${tenantId}-${bill.id}`;
+            // Avoid duplicate INITIAL-RENT cash for this bill
             const [existingMarker] = await connection.execute(
-                `SELECT id FROM bill_payments WHERE bill_id = ? AND transaction_id = ? LIMIT 1 FOR UPDATE`,
-                [bill.id, transactionId]
+                `SELECT id FROM cash_payments
+                 WHERE bill_id = ? AND notes = 'INITIAL-RENT' LIMIT 1 FOR UPDATE`,
+                [bill.id]
             );
             if (!existingMarker.length) {
-                await BillModel.createBillPayment(connection, {
-                    bill_id: bill.id, amount: remaining, payment_method: 'cash',
-                    transaction_id: transactionId, is_partial: 0, paid_from: paidFrom, paid_till: paidTill
-                });
+                await ensureVerifiedCashPayment(bill.id, remaining);
                 await connection.execute(
                     `UPDATE bills SET paid_amount = ?, status = ? WHERE id = ?`,
-                    [Math.min(rentAmount, alreadyPaid + remaining), alreadyPaid + remaining >= rentAmount ? 'paid' : 'partially_paid', bill.id]
+                    [
+                        Math.min(rentAmount, alreadyPaid + remaining),
+                        alreadyPaid + remaining >= rentAmount ? 'paid' : 'partially_paid',
+                        bill.id
+                    ]
                 );
             }
         }
         return;
     }
-
-    const [creatorRows] = await connection.execute('SELECT created_by FROM tenants WHERE id = ? LIMIT 1', [tenantId]);
-    const createdBy = tenantData.created_by || fallbackCreatedBy || creatorRows[0]?.created_by;
-    if (!createdBy) throw new Error('Unable to determine the admin who created this tenant for the rent bill.');
 
     const billId = await BillModel.createBill(connection, {
         tenant_id: tenantId, room_id: tenantData.room_id, billing_month: billingMonth,
@@ -155,11 +235,7 @@ const syncInitialRentPayment = async (connection, tenantId, tenantData, fallback
         created_by: createdBy, fine_applied_days: 0, initial_email_sent: 0,
         fine_start_date: paidTill, daily_fine_rate: 100, max_fine: 0
     });
-    await BillModel.createBillPayment(connection, {
-        bill_id: billId, amount: rentAmount, payment_method: 'cash',
-        transaction_id: `INITIAL-RENT-${tenantId}-${billId}`,
-        is_partial: 0, paid_from: paidFrom, paid_till: paidTill
-    });
+    await ensureVerifiedCashPayment(billId, rentAmount);
     await connection.execute(
         `UPDATE bills SET status = 'paid', paid_amount = ? WHERE id = ?`,
         [rentAmount, billId]
