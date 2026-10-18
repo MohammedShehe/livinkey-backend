@@ -160,6 +160,36 @@ adminRouter.post(
     }
 );
 
+// BROADCAST MESSAGE TO ALL GUESTS (in-app notification, optional link)
+adminRouter.post(
+    "/broadcast-message",
+    permissionMiddleware("guests", "edit"),
+    async (req, res) => {
+        const db = require("../config/db");
+        try {
+            const title = String(req.body.title || "Message from Livinkey Admin").trim();
+            const message = String(req.body.message || "").trim();
+            const link = String(req.body.link || "").trim();
+            if (!title || !message) {
+                return res.status(400).json({ success: false, message: "Title and message are required" });
+            }
+            if (link && !(String(link).startsWith("https://") || String(link).startsWith("http://"))) {
+                return res.status(400).json({ success: false, message: "Link must start with http:// or https://" });
+            }
+            const [result] = await db.execute(
+                `INSERT INTO guest_notifications (guest_id, type, title, message, entity_id, entity_type, link, icon, color, is_read)
+                 SELECT id, 'admin_message', ?, ?, NULL, 'admin_message', ?, '📢', '#3498db', 0
+                 FROM tenants WHERE role = 'guest' AND is_active = 1`,
+                [title, message, link || null]
+            );
+            return res.status(200).json({ success: true, message: "Message sent to all guests", data: { sent_count: result.affectedRows } });
+        } catch (error) {
+            console.error("Guest broadcast message error:", error);
+            return res.status(500).json({ success: false, message: "Failed to send message to guests" });
+        }
+    }
+);
+
 // Mount admin routes under /admin
 router.use("/admin", adminRouter);
 

@@ -18,8 +18,16 @@ exports.sendTenantNotification = async (req, res) => {
             title,
             message,
             send_push = true,
-            send_email = false
+            send_email = false,
+            link = ""
         } = req.body;
+
+        if (link && !(String(link).trim().startsWith("https://") || String(link).trim().startsWith("http://"))) {
+            return res.status(400).json({
+                success: false,
+                message: "Link must start with http:// or https://"
+            });
+        }
 
         // Validate required fields
         if (!recipient_type || !['individual', 'pg', 'all'].includes(recipient_type)) {
@@ -103,7 +111,7 @@ exports.sendTenantNotification = async (req, res) => {
             message: message.trim(),
             entity_id: null,
             entity_type: 'admin_message',
-            link: '/tenant-notifications',
+            link: link && String(link).trim() ? String(link).trim() : '/tenant-notifications',
             icon: '📢',
             color: '#3498db'
         };
