@@ -18,9 +18,10 @@ const tenantNotificationService = require("../services/tenant.notification.servi
 const getUser = (req) => {
     // authMiddleware attaches decoded JWT as req.admin for this router
     const u = req.admin || req.guest || req.tenant || {};
+    const id = parseInt(u.id, 10);
     return {
-        id: u.id,
-        role: String(u.role || '').toLowerCase()
+        id: Number.isFinite(id) ? id : u.id,
+        role: String(u.role || '').toLowerCase().trim()
     };
 };
 
@@ -38,10 +39,13 @@ const getUnreadNotifications = async (req, res) => {
 
         if (isGuest(role)) {
             const result = await guestNotificationService.getUnreadGuestNotifications(id, limit);
+            // Always 200 with explicit arrays so clients never treat an empty
+            // cached 304 as a hard failure.
             return res.status(200).json({
                 success: true,
-                data: result.notifications,
-                unreadCount: result.unreadCount
+                data: Array.isArray(result.notifications) ? result.notifications : [],
+                unreadCount: Number(result.unreadCount) || 0,
+                role: 'guest'
             });
         }
 
@@ -89,8 +93,9 @@ const getNotifications = async (req, res) => {
             const result = await guestNotificationService.getGuestNotifications(id, limit, offset);
             return res.status(200).json({
                 success: true,
-                data: result.notifications,
-                unreadCount: result.unreadCount,
+                data: Array.isArray(result.notifications) ? result.notifications : [],
+                unreadCount: Number(result.unreadCount) || 0,
+                role: 'guest',
                 pagination: {
                     limit,
                     offset,
@@ -142,7 +147,7 @@ const getUnreadCount = async (req, res) => {
 
         if (isGuest(role)) {
             const count = await guestNotificationService.getUnreadGuestCount(id);
-            return res.status(200).json({ success: true, unreadCount: count });
+            return res.status(200).json({ success: true, unreadCount: Number(count) || 0, role: 'guest' });
         }
 
         if (isTenant(role)) {
