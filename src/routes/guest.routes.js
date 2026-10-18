@@ -239,8 +239,8 @@ adminRouter.post(
 );
 
 // Guest notification history for admins (broadcast + individual).
-// Older sends only wrote guest_notifications and never admin_notification_logs.
-// On load we backfill missing logs from guest_notifications, then return history.
+// DB enum was ('individual','pg','all') — 'guest' must be added. Until migrated,
+// we still return synthetic history from guest_notifications so the admin UI works.
 adminRouter.get(
     "/notification-history",
     permissionMiddleware("guests", "view"),
@@ -253,7 +253,19 @@ adminRouter.get(
             if (limit > 500) limit = 500;
             if (offset < 0) offset = 0;
 
-            // Backfill history from existing in-app guest notifications
+            const [adminRows] = await db.execute(`SELECT id, name FROM admins ORDER BY id ASC LIMIT 1`);
+            const fallbackAdminId = (req.admin && req.admin.id) || (adminRows[0] && adminRows[0].id) || 1;
+            const fallbackAdminName = (req.admin && (req.admin.name || req.admin.email)) || (adminRows[0] && adminRows[0].name) || 'Admin';
+
+            // Best-effort: extend enum so future inserts with recipient_type='guest' work
+            try {
+                await db.execute(
+                    `ALTER TABLE admin_notification_logs
+                     MODIFY COLUMN recipient_type ENUM('individual','pg','all','guest') NOT NULL`
+                );
+            } catch (_) { /* already migrated or no privilege */ }
+
+            // Backfill real logs when enum allows 'guest'
             try {
                 const [groups] = await db.execute(
                     `
@@ -273,31 +285,30 @@ adminRouter.get(
                     `
                 );
 
-                const [adminRows] = await db.execute(`SELECT id FROM admins ORDER BY id ASC LIMIT 1`);
-                const fallbackAdminId = (req.admin && req.admin.id) || (adminRows[0] && adminRows[0].id) || 1;
-
                 for (const g of groups) {
                     const title = g.title || '';
                     const message = g.message || '';
                     const sentAt = g.sent_at;
-
-                    const [existing] = await db.execute(
-                        `
-                        SELECT id FROM admin_notification_logs
-                        WHERE recipient_type = 'guest'
-                          AND title = ?
-                          AND message = ?
-                          AND sent_at BETWEEN DATE_SUB(?, INTERVAL 2 MINUTE) AND DATE_ADD(?, INTERVAL 2 MINUTE)
-                        LIMIT 1
-                        `,
-                        [title, message, sentAt, sentAt]
-                    );
-                    if (existing.length) continue;
-
                     const ids = String(g.guest_ids || '')
                         .split(',')
                         .map(s => parseInt(s, 10))
                         .filter(n => Number.isFinite(n) && n > 0);
+
+                    let existing = [];
+                    try {
+                        const [ex] = await db.execute(
+                            `
+                            SELECT id FROM admin_notification_logs
+                            WHERE recipient_type = 'guest'
+                              AND title = ? AND message = ?
+                              AND sent_at BETWEEN DATE_SUB(?, INTERVAL 2 MINUTE) AND DATE_ADD(?, INTERVAL 2 MINUTE)
+                            LIMIT 1
+                            `,
+                            [title, message, sentAt, sentAt]
+                        );
+                        existing = ex;
+                    } catch (_) { existing = []; }
+                    if (existing.length) continue;
 
                     try {
                         await db.execute(
@@ -306,33 +317,27 @@ adminRouter.get(
                               (admin_id, recipient_type, recipient_count, recipient_ids, title, message, send_push, send_email, sent_at)
                             VALUES (?, 'guest', ?, ?, ?, ?, 1, 0, ?)
                             `,
-                            [
-                                fallbackAdminId,
-                                Number(g.recipient_count) || ids.length,
-                                JSON.stringify(ids),
-                                title,
-                                message,
-                                sentAt
-                            ]
+                            [fallbackAdminId, Number(g.recipient_count) || ids.length, JSON.stringify(ids), title, message, sentAt]
                         );
                     } catch (insErr) {
-                        if (insErr && (insErr.code === 'ER_BAD_FIELD_ERROR' || String(insErr.message || '').includes('recipient_ids'))) {
-                            await db.execute(
-                                `
-                                INSERT INTO admin_notification_logs
-                                  (admin_id, recipient_type, recipient_count, title, message, send_push, send_email, sent_at)
-                                VALUES (?, 'guest', ?, ?, ?, 1, 0, ?)
-                                `,
-                                [
-                                    fallbackAdminId,
-                                    Number(g.recipient_count) || ids.length,
-                                    title,
-                                    message,
-                                    sentAt
-                                ]
-                            );
-                        } else {
-                            console.error('Guest history backfill insert failed:', insErr.message);
+                        const msg = String(insErr && insErr.message || '');
+                        if (msg.includes('recipient_ids') || (insErr && insErr.code === 'ER_BAD_FIELD_ERROR')) {
+                            try {
+                                await db.execute(
+                                    `
+                                    INSERT INTO admin_notification_logs
+                                      (admin_id, recipient_type, recipient_count, title, message, send_push, send_email, sent_at)
+                                    VALUES (?, 'guest', ?, ?, ?, 1, 0, ?)
+                                    `,
+                                    [fallbackAdminId, Number(g.recipient_count) || ids.length, title, message, sentAt]
+                                );
+                            } catch (e2) {
+                                if (!String(e2.message || '').includes('Data truncated')) {
+                                    console.error('Guest history backfill insert failed:', e2.message);
+                                }
+                            }
+                        } else if (!msg.includes('Data truncated')) {
+                            console.error('Guest history backfill insert failed:', msg);
                         }
                     }
                 }
@@ -340,14 +345,63 @@ adminRouter.get(
                 console.error('Guest history backfill failed:', backfillErr.message);
             }
 
-            const [logs] = await db.execute(
-                `SELECT nl.*, a.name as admin_name
-                 FROM admin_notification_logs nl
-                 LEFT JOIN admins a ON nl.admin_id = a.id
-                 WHERE nl.recipient_type = 'guest'
-                 ORDER BY nl.sent_at DESC
-                 LIMIT ${limit} OFFSET ${offset}`
-            );
+            let logs = [];
+            try {
+                const [rows] = await db.execute(
+                    `SELECT nl.*, a.name as admin_name
+                     FROM admin_notification_logs nl
+                     LEFT JOIN admins a ON nl.admin_id = a.id
+                     WHERE nl.recipient_type = 'guest'
+                     ORDER BY nl.sent_at DESC
+                     LIMIT ${limit} OFFSET ${offset}`
+                );
+                logs = rows;
+            } catch (qErr) {
+                console.error('Guest history log query failed:', qErr.message);
+            }
+
+            // Synthetic history if logs still empty (enum not migrated yet)
+            if (!logs.length) {
+                const [groups] = await db.execute(
+                    `
+                    SELECT
+                        MIN(gn.id) AS id,
+                        gn.title,
+                        gn.message,
+                        COUNT(*) AS recipient_count,
+                        MIN(gn.created_at) AS sent_at,
+                        GROUP_CONCAT(DISTINCT gn.guest_id ORDER BY gn.guest_id) AS guest_ids
+                    FROM guest_notifications gn
+                    WHERE gn.type = 'admin_message'
+                       OR gn.entity_type = 'admin_message'
+                       OR gn.title LIKE 'Message from%'
+                    GROUP BY gn.title, gn.message, DATE_FORMAT(gn.created_at, '%Y-%m-%d %H:%i')
+                    ORDER BY sent_at DESC
+                    LIMIT ${limit} OFFSET ${offset}
+                    `
+                );
+                logs = groups.map(g => {
+                    const ids = String(g.guest_ids || '')
+                        .split(',')
+                        .map(s => parseInt(s, 10))
+                        .filter(n => Number.isFinite(n) && n > 0);
+                    return {
+                        id: g.id,
+                        admin_id: fallbackAdminId,
+                        admin_name: fallbackAdminName,
+                        recipient_type: 'guest',
+                        recipient_count: Number(g.recipient_count) || ids.length,
+                        recipient_ids: JSON.stringify(ids),
+                        title: g.title,
+                        message: g.message,
+                        send_push: 1,
+                        send_email: 0,
+                        sent_at: g.sent_at,
+                        _synthetic: true
+                    };
+                });
+            }
+
             return res.status(200).json({ success: true, count: logs.length, data: logs });
         } catch (error) {
             console.error("Guest notification history error:", error);
