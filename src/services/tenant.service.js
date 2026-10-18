@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const TenantModel = require("../models/tenant.model");
+const BillModel = require("../models/bill.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const messagingService = require("./messaging.service");
 const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
@@ -138,6 +139,52 @@ const createTenant = async (tenantData, files = {}) => {
                 document_public_id: documentPublicId,
                 document_resource_type: documentResourceType
             });
+
+            // Tenant creation records the rent period as already paid because
+            // the admin-entered paid_from/paid_till dates represent a payment
+            // received at registration. Keep the bill and payment ledger in the
+            // same transaction so the tenant cannot be left with an unpaid bill.
+            const paidFrom = toDateOrNull(tenantData.paid_from);
+            const paidTill = toDateOrNull(tenantData.paid_till);
+            const rentAmount = Number(tenantData.rent);
+            if (paidFrom && paidTill && Number.isFinite(rentAmount) && rentAmount > 0) {
+                const fromDate = new Date(`${String(paidFrom).slice(0, 10)}T00:00:00Z`);
+                const tillDate = new Date(`${String(paidTill).slice(0, 10)}T00:00:00Z`);
+                if (Number.isNaN(fromDate.getTime()) || Number.isNaN(tillDate.getTime()) || tillDate < fromDate) {
+                    throw new Error("Paid-till date must be on or after paid-from date");
+                }
+                const billingMonth = `${fromDate.getUTCFullYear()}-${String(fromDate.getUTCMonth() + 1).padStart(2, "0")}`;
+                const billId = await BillModel.createBill(connection, {
+                    tenant_id: tenantId,
+                    room_id: tenantData.room_id,
+                    billing_month: billingMonth,
+                    period_from: String(paidFrom).slice(0, 10),
+                    period_till: String(paidTill).slice(0, 10),
+                    rent_amount: rentAmount,
+                    electricity_amount: 0,
+                    maintenance_amount: 0,
+                    other_charges: 0,
+                    total_amount: rentAmount,
+                    sent_at: new Date(),
+                    valid_until: String(paidTill).slice(0, 10),
+                    created_by: tenantData.created_by,
+                    fine_applied_days: 0,
+                    initial_email_sent: 0,
+                    fine_start_date: String(paidTill).slice(0, 10),
+                    daily_fine_rate: 100,
+                    max_fine: 0
+                });
+                await BillModel.createBillPayment(connection, {
+                    bill_id: billId,
+                    amount: rentAmount,
+                    payment_method: "cash",
+                    transaction_id: `INITIAL-RENT-${tenantId}-${billId}`,
+                    is_partial: 0,
+                    paid_from: String(paidFrom).slice(0, 10),
+                    paid_till: String(paidTill).slice(0, 10)
+                });
+                await BillModel.updateBillStatus(connection, billId, "paid", rentAmount);
+            }
 
             try {
                 await incrementRoomOccupancy(connection, tenantData.room_id, numberOfTenants);
