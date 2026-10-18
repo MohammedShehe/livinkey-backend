@@ -754,33 +754,84 @@ const archiveTenant = async (connection, tenantId, {
 
 const restoreTenant = async (connection, tenantId) => {
     const [rows] = await connection.execute(
-        `SELECT original_email, original_phone, email, phone FROM tenants WHERE id = ? FOR UPDATE`,
+        `SELECT
+            original_email,
+            original_phone,
+            email,
+            phone,
+            country_code
+         FROM tenants
+         WHERE id = ?
+         FOR UPDATE`,
         [tenantId]
     );
-    if (!rows.length) return { ok: false, message: 'Tenant not found' };
-    const t = rows[0];
-    const restoreEmail = t.original_email || t.email.replace(new RegExp(`^archived_${tenantId}_`), '');
-    const restorePhone = t.original_phone || t.phone;
 
-    // Conflict checks
+    if (!rows.length) {
+        return {
+            ok: false,
+            message: 'Tenant not found'
+        };
+    }
+
+    const tenant = rows[0];
+
+    const restoreEmail =
+        tenant.original_email ||
+        tenant.email.replace(
+            new RegExp(`^archived_${tenantId}_`),
+            ''
+        );
+
+    const restorePhone =
+        tenant.original_phone || tenant.phone;
+
+    // Check whether another record already uses this email.
     const [emailConflict] = await connection.execute(
-        `SELECT id FROM tenants WHERE email = ? AND id != ? LIMIT 1`,
+        `SELECT id
+         FROM tenants
+         WHERE email = ?
+           AND id != ?
+         LIMIT 1`,
         [restoreEmail, tenantId]
     );
-    if (emailConflict.length) {
-        return { ok: false, message: `Cannot restore: email ${restoreEmail} is already in use by another tenant` };
-    }
-    const [phoneConflict] = await connection.execute(
-        `SELECT id FROM tenants WHERE phone = ? AND id != ? LIMIT 1`,
-        [restorePhone, tenantId]
-    );
-    if (phoneConflict.length) {
-        return { ok: false, message: `Cannot restore: phone ${restorePhone} is already in use by another tenant` };
+
+    if (emailConflict.length > 0) {
+        return {
+            ok: false,
+            message: `Cannot restore: email ${restoreEmail} is already in use by another record`
+        };
     }
 
+    // Only another active tenant can block phone restoration.
+    // Guest records and inactive tenants are excluded.
+    const [phoneConflict] = await connection.execute(
+        `SELECT id
+         FROM tenants
+         WHERE phone = ?
+           AND country_code = ?
+           AND role = 'tenant'
+           AND id != ?
+           AND (status IS NULL OR status = 'active')
+           AND (is_active IS NULL OR is_active = 1)
+         LIMIT 1`,
+        [
+            restorePhone,
+            tenant.country_code,
+            tenantId
+        ]
+    );
+
+    if (phoneConflict.length > 0) {
+        return {
+            ok: false,
+            message: `Cannot restore: phone ${restorePhone} is already in use by another active tenant`
+        };
+    }
+
+    // Restore the original contact details and active status.
     const [result] = await connection.execute(
-        `
-        UPDATE tenants SET
+        `UPDATE tenants
+         SET
             status = 'active',
             is_active = 1,
             checkout_date = NULL,
@@ -791,11 +842,18 @@ const restoreTenant = async (connection, tenantId) => {
             phone = ?,
             original_email = NULL,
             original_phone = NULL
-        WHERE id = ?
-        `,
-        [restoreEmail, restorePhone, tenantId]
+         WHERE id = ?`,
+        [
+            restoreEmail,
+            restorePhone,
+            tenantId
+        ]
     );
-    return { ok: result.affectedRows > 0, affected: result.affectedRows };
+
+    return {
+        ok: result.affectedRows > 0,
+        affected: result.affectedRows
+    };
 };
 
 const findArchived = async (filters = {}) => {
