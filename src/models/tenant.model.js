@@ -831,7 +831,7 @@ const findArchived = async (filters = {}) => {
             t.archived_at,
             t.archive_reason,
             t.archived_by,
-            a.full_name as archived_by_name,
+            a.name as archived_by_name,
             td.pg_id,
             td.room_id,
             td.residency,
