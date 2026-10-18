@@ -208,7 +208,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 'unpaid'
             ) as bill_status,
@@ -222,7 +222,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_total_amount,
@@ -236,7 +236,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_paid_amount,
@@ -250,7 +250,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_fine_amount
@@ -297,7 +297,7 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
                    INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                    WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                ))
-             ORDER BY b2.created_at DESC
+             ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC
              LIMIT 1),
             'unpaid'
         ) = ?`;
@@ -361,7 +361,7 @@ const findById = async (id) => {
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 'unpaid'
             ) as bill_status,
@@ -375,7 +375,7 @@ const findById = async (id) => {
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_total_amount,
@@ -389,7 +389,7 @@ const findById = async (id) => {
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_paid_amount,
@@ -403,7 +403,7 @@ const findById = async (id) => {
                        INNER JOIN bill_groups bg2 ON bg2.id = bgm2.bill_group_id
                        WHERE bg2.bill_id = b2.id AND bgm2.tenant_id = t.id
                    ))
-                 ORDER BY b2.created_at DESC 
+                 ORDER BY CASE WHEN b2.period_from = td.paid_from AND b2.period_till = td.paid_till THEN 0 ELSE 1 END, b2.created_at DESC, b2.id DESC 
                  LIMIT 1),
                 0
             ) as bill_fine_amount

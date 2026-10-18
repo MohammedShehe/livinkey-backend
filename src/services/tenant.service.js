@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const TenantModel = require("../models/tenant.model");
+const BillModel = require("../models/bill.model");
 const { uploadFile, deleteFile } = require("./upload.service");
 const messagingService = require("./messaging.service");
 const { sendWelcomeTenantEmail, sendEFRROExpiryTenantEmail, sendEFRROExpiryAdminEmail } = require("./mail.service");
@@ -40,6 +41,129 @@ const toDateOrNull = (value) => {
         return null;
     }
     return value;
+};
+
+// Keep the paid period, bill and payment ledger synchronized when an admin edits a tenant.
+// The INITIAL-RENT transaction marker makes this operation idempotent: repeated edits
+// update the same automatically-created payment instead of creating duplicates.
+const syncInitialRentPayment = async (connection, tenantId, tenantData, fallbackCreatedBy) => {
+    const paidFromValue = toDateOrNull(tenantData.paid_from);
+    const paidTillValue = toDateOrNull(tenantData.paid_till);
+    const rentAmount = Number(tenantData.rent);
+
+    // Clearing either date does not erase a historical payment automatically.
+    if (!paidFromValue || !paidTillValue || !Number.isFinite(rentAmount) || rentAmount <= 0) return;
+
+    const paidFrom = String(paidFromValue).slice(0, 10);
+    const paidTill = String(paidTillValue).slice(0, 10);
+    const fromDate = new Date(`${paidFrom}T00:00:00Z`);
+    const tillDate = new Date(`${paidTill}T00:00:00Z`);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(tillDate.getTime()) || tillDate < fromDate) {
+        throw new Error('Paid-till date must be on or after paid-from date');
+    }
+
+    const billingMonth = `${fromDate.getUTCFullYear()}-${String(fromDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const [autoRows] = await connection.execute(
+        `SELECT b.id AS bill_id, bp.id AS payment_id
+         FROM bills b
+         LEFT JOIN bill_payments bp ON bp.bill_id = b.id
+             AND bp.transaction_id LIKE ?
+         WHERE b.tenant_id = ? AND b.deleted_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM bill_payments bp2
+             WHERE bp2.bill_id = b.id
+               AND bp2.transaction_id LIKE ?
+           )
+         ORDER BY b.id DESC LIMIT 1 FOR UPDATE`,
+        [`INITIAL-RENT-${tenantId}-%`, tenantId, `INITIAL-RENT-${tenantId}-%`]
+    );
+
+    if (autoRows.length) {
+        const billId = autoRows[0].bill_id;
+        const [paymentRows] = await connection.execute(
+            `SELECT id FROM bill_payments
+             WHERE bill_id = ? AND transaction_id LIKE ?
+             ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+            [billId, `INITIAL-RENT-${tenantId}-%`]
+        );
+        await connection.execute(
+            `UPDATE bills SET room_id = ?, billing_month = ?, period_from = ?, period_till = ?,
+             rent_amount = ?, electricity_amount = 0, maintenance_amount = 0, other_charges = 0,
+             total_amount = ?, paid_amount = ?, status = 'paid', valid_until = ?, fine_start_date = ?,
+             fine_amount = 0, max_fine = 0 WHERE id = ?`,
+            [tenantData.room_id, billingMonth, paidFrom, paidTill, rentAmount, rentAmount, rentAmount, paidTill, paidTill, billId]
+        );
+        if (paymentRows.length) {
+            await connection.execute(
+                `UPDATE bill_payments SET amount = ?, payment_method = 'cash', paid_from = ?, paid_till = ?, is_partial = 0
+                 WHERE id = ?`,
+                [rentAmount, paidFrom, paidTill, paymentRows[0].id]
+            );
+        } else {
+            await BillModel.createBillPayment(connection, {
+                bill_id: billId, amount: rentAmount, payment_method: 'cash',
+                transaction_id: `INITIAL-RENT-${tenantId}-${billId}`,
+                is_partial: 0, paid_from: paidFrom, paid_till: paidTill
+            });
+        }
+        return;
+    }
+
+    // If a matching rent-only bill already exists, settle its remaining balance rather
+    // than creating a duplicate bill. Bills with additional charges are left untouched.
+    const [matchingBills] = await connection.execute(
+        `SELECT b.id, b.total_amount, b.paid_amount
+         FROM bills b
+         WHERE b.tenant_id = ? AND b.room_id = ? AND b.period_from = ? AND b.period_till = ?
+           AND b.deleted_at IS NULL AND ABS(b.total_amount - ?) < 0.01
+         ORDER BY b.id DESC LIMIT 1 FOR UPDATE`,
+        [tenantId, tenantData.room_id, paidFrom, paidTill, rentAmount]
+    );
+    if (matchingBills.length) {
+        const bill = matchingBills[0];
+        const alreadyPaid = Number(bill.paid_amount || 0);
+        const remaining = Math.max(0, rentAmount - alreadyPaid);
+        if (remaining > 0) {
+            const transactionId = `INITIAL-RENT-${tenantId}-${bill.id}`;
+            const [existingMarker] = await connection.execute(
+                `SELECT id FROM bill_payments WHERE bill_id = ? AND transaction_id = ? LIMIT 1 FOR UPDATE`,
+                [bill.id, transactionId]
+            );
+            if (!existingMarker.length) {
+                await BillModel.createBillPayment(connection, {
+                    bill_id: bill.id, amount: remaining, payment_method: 'cash',
+                    transaction_id: transactionId, is_partial: 0, paid_from: paidFrom, paid_till: paidTill
+                });
+                await connection.execute(
+                    `UPDATE bills SET paid_amount = ?, status = ? WHERE id = ?`,
+                    [Math.min(rentAmount, alreadyPaid + remaining), alreadyPaid + remaining >= rentAmount ? 'paid' : 'partially_paid', bill.id]
+                );
+            }
+        }
+        return;
+    }
+
+    const [creatorRows] = await connection.execute('SELECT created_by FROM tenants WHERE id = ? LIMIT 1', [tenantId]);
+    const createdBy = tenantData.created_by || fallbackCreatedBy || creatorRows[0]?.created_by;
+    if (!createdBy) throw new Error('Unable to determine the admin who created this tenant for the rent bill.');
+
+    const billId = await BillModel.createBill(connection, {
+        tenant_id: tenantId, room_id: tenantData.room_id, billing_month: billingMonth,
+        period_from: paidFrom, period_till: paidTill, rent_amount: rentAmount,
+        electricity_amount: 0, maintenance_amount: 0, other_charges: 0,
+        total_amount: rentAmount, sent_at: new Date(), valid_until: paidTill,
+        created_by: createdBy, fine_applied_days: 0, initial_email_sent: 0,
+        fine_start_date: paidTill, daily_fine_rate: 100, max_fine: 0
+    });
+    await BillModel.createBillPayment(connection, {
+        bill_id: billId, amount: rentAmount, payment_method: 'cash',
+        transaction_id: `INITIAL-RENT-${tenantId}-${billId}`,
+        is_partial: 0, paid_from: paidFrom, paid_till: paidTill
+    });
+    await connection.execute(
+        `UPDATE bills SET status = 'paid', paid_amount = ? WHERE id = ?`,
+        [rentAmount, billId]
+    );
 };
 
 const createTenant = async (tenantData, files = {}) => {
@@ -138,6 +262,9 @@ const createTenant = async (tenantData, files = {}) => {
                 document_public_id: documentPublicId,
                 document_resource_type: documentResourceType
             });
+
+            // Record the entered paid period in the bill and payment ledger.
+            await syncInitialRentPayment(connection, tenantId, tenantData, tenantData.created_by);
 
             try {
                 await incrementRoomOccupancy(connection, tenantData.room_id, numberOfTenants);
@@ -361,6 +488,10 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
                 arrival_date: toDateOrNull(tenantData.arrival_date),
                 period_of_stay: tenantData.period_of_stay
             });
+
+            // Editing paid_from/paid_till or rent updates the existing auto-payment
+            // in place; it never creates a duplicate on repeated edits.
+            await syncInitialRentPayment(connection, tenantId, tenantData, existingTenant.created_by);
 
             if (roomChanged) {
                 try {
