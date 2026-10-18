@@ -331,9 +331,62 @@ exports.getNotificationRecipients = async (req, res) => {
                 recipientIds = [];
             }
         }
+        if (!Array.isArray(recipientIds)) recipientIds = [];
+        recipientIds = recipientIds.map(id => parseInt(id)).filter(id => Number.isFinite(id) && id > 0);
+
+        // Older logs had no recipient_ids column. Reconstruct from in-app
+        // notification rows matched by title + message (near sent_at).
+        if (recipientIds.length === 0 && log.title && log.message) {
+            const isGuest = String(log.recipient_type || '').toLowerCase() === 'guest';
+            try {
+                if (isGuest) {
+                    const [rows] = await connection.execute(
+                        `SELECT DISTINCT gn.guest_id AS id
+                         FROM guest_notifications gn
+                         WHERE gn.title = ? AND gn.message = ?
+                           AND gn.created_at BETWEEN DATE_SUB(?, INTERVAL 2 HOUR)
+                                                AND DATE_ADD(?, INTERVAL 2 HOUR)`,
+                        [log.title, log.message, log.sent_at, log.sent_at]
+                    );
+                    recipientIds = rows.map(r => r.id);
+                    if (recipientIds.length === 0) {
+                        const [rows2] = await connection.execute(
+                            `SELECT DISTINCT gn.guest_id AS id
+                             FROM guest_notifications gn
+                             WHERE gn.title = ? AND gn.message = ?
+                             ORDER BY gn.created_at DESC LIMIT 500`,
+                            [log.title, log.message]
+                        );
+                        recipientIds = rows2.map(r => r.id);
+                    }
+                } else {
+                    const [rows] = await connection.execute(
+                        `SELECT DISTINCT tn.tenant_id AS id
+                         FROM tenant_notifications tn
+                         WHERE tn.title = ? AND tn.message = ?
+                           AND tn.created_at BETWEEN DATE_SUB(?, INTERVAL 2 HOUR)
+                                                AND DATE_ADD(?, INTERVAL 2 HOUR)`,
+                        [log.title, log.message, log.sent_at, log.sent_at]
+                    );
+                    recipientIds = rows.map(r => r.id);
+                    if (recipientIds.length === 0) {
+                        const [rows2] = await connection.execute(
+                            `SELECT DISTINCT tn.tenant_id AS id
+                             FROM tenant_notifications tn
+                             WHERE tn.title = ? AND tn.message = ?
+                             ORDER BY tn.created_at DESC LIMIT 500`,
+                            [log.title, log.message]
+                        );
+                        recipientIds = rows2.map(r => r.id);
+                    }
+                }
+            } catch (fallbackErr) {
+                console.error("Recipient fallback lookup failed:", fallbackErr.message);
+            }
+        }
 
         let recipients = [];
-        if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+        if (recipientIds.length > 0) {
             const placeholders = recipientIds.map(() => '?').join(',');
             const [rows] = await connection.execute(
                 `
@@ -347,7 +400,7 @@ exports.getNotificationRecipients = async (req, res) => {
                 WHERE t.id IN (${placeholders})
                 ORDER BY t.full_name ASC
                 `,
-                recipientIds.map(id => parseInt(id))
+                recipientIds
             );
             recipients = rows;
         }
@@ -369,7 +422,7 @@ exports.getNotificationRecipients = async (req, res) => {
                 },
                 recipients,
                 note: recipients.length === 0 && log.recipient_count > 0
-                    ? 'Recipient list was not stored for this older notification. Count is available only.'
+                    ? 'Could not reconstruct recipients for this older notification (no matching in-app records found).'
                     : null
             }
         });
