@@ -101,7 +101,9 @@ const getDocumentsAdmin = async (req, res) => {
             pg_id, 
             pg_name, 
             search, 
-            tenant_id 
+            tenant_id,
+            tenant_status,
+            status
         } = req.query;
 
         const documents = await tenantDocumentService.getDocumentsAdmin({
@@ -110,7 +112,8 @@ const getDocumentsAdmin = async (req, res) => {
             pg_id,
             pg_name,
             search,
-            tenant_id
+            tenant_id,
+            tenant_status: tenant_status || status || 'active'
         });
 
         return res.json({

@@ -136,6 +136,8 @@ const getDocumentsWithFilters = async (filters = {}) => {
             t.email as tenant_email,
             t.nationality,
             t.gender,
+            t.is_active,
+            COALESCE(t.status, 'active') AS tenant_status,
             p.name as pg_name,
             r.room_number,
             DATE(td.created_at) as upload_date
@@ -144,9 +146,23 @@ const getDocumentsWithFilters = async (filters = {}) => {
         LEFT JOIN tenant_details tdet ON t.id = tdet.tenant_id
         LEFT JOIN pgs p ON tdet.pg_id = p.id
         LEFT JOIN rooms r ON tdet.room_id = r.id
-        WHERE 1=1
+        WHERE t.role = 'tenant'
     `;
     const params = [];
+
+    // Tenant lifecycle filter:
+    //   active (default) | inactive | archived | checked_out | all
+    const statusFilter = (filters.tenant_status || filters.status || 'active').toLowerCase();
+    if (statusFilter === 'active') {
+        query += ` AND (t.status IS NULL OR t.status = 'active') AND (t.is_active IS NULL OR t.is_active = 1)`;
+    } else if (statusFilter === 'inactive') {
+        query += ` AND (t.status IN ('archived', 'checked_out') OR t.is_active = 0)`;
+    } else if (statusFilter === 'archived') {
+        query += ` AND t.status = 'archived'`;
+    } else if (statusFilter === 'checked_out') {
+        query += ` AND t.status = 'checked_out'`;
+    }
+    // 'all' → no status filter
 
     if (filters.document_type) {
         query += ` AND td.document_type = ?`;

@@ -160,7 +160,7 @@ adminRouter.post(
     }
 );
 
-// BROADCAST MESSAGE TO ALL GUESTS (in-app notification, optional link)
+// BROADCAST MESSAGE TO ALL GUESTS (in-app notification, optional link + history log)
 adminRouter.post(
     "/broadcast-message",
     permissionMiddleware("guests", "edit"),
@@ -176,16 +176,93 @@ adminRouter.post(
             if (link && !(String(link).startsWith("https://") || String(link).startsWith("http://"))) {
                 return res.status(400).json({ success: false, message: "Link must start with http:// or https://" });
             }
+
+            const [guests] = await db.execute(
+                `SELECT id FROM tenants WHERE role = 'guest' AND is_active = 1`
+            );
+            const guestIds = guests.map(g => g.id);
+
+            if (guestIds.length === 0) {
+                return res.status(404).json({ success: false, message: "No active guests found" });
+            }
+
             const [result] = await db.execute(
                 `INSERT INTO guest_notifications (guest_id, type, title, message, entity_id, entity_type, link, icon, color, is_read)
                  SELECT id, 'admin_message', ?, ?, NULL, 'admin_message', ?, '📢', '#3498db', 0
                  FROM tenants WHERE role = 'guest' AND is_active = 1`,
                 [title, message, link || null]
             );
-            return res.status(200).json({ success: true, message: "Message sent to all guests", data: { sent_count: result.affectedRows } });
+
+            // Best-effort push to each guest
+            try {
+                const firebase = require("../config/firebase");
+                if (firebase && typeof firebase.sendToUser === 'function') {
+                    for (const gid of guestIds) {
+                        try { await firebase.sendToUser(gid, { title, body: message }); } catch (_) {}
+                    }
+                }
+            } catch (pushErr) {
+                console.error("Guest broadcast push error:", pushErr.message);
+            }
+
+            // History log (recipient_type = guest)
+            try {
+                await db.execute(
+                    `INSERT INTO admin_notification_logs
+                     (admin_id, recipient_type, recipient_count, recipient_ids, title, message, send_push, send_email, sent_at)
+                     VALUES (?, 'guest', ?, ?, ?, ?, 1, 0, NOW())`,
+                    [req.admin.id, guestIds.length, JSON.stringify(guestIds), title, message]
+                );
+            } catch (logErr) {
+                if (logErr && (logErr.code === 'ER_BAD_FIELD_ERROR' || String(logErr.message || '').includes('recipient_ids'))) {
+                    await db.execute(
+                        `INSERT INTO admin_notification_logs
+                         (admin_id, recipient_type, recipient_count, title, message, send_push, send_email, sent_at)
+                         VALUES (?, 'guest', ?, ?, ?, 1, 0, NOW())`,
+                        [req.admin.id, guestIds.length, title, message]
+                    );
+                } else {
+                    console.error("Guest broadcast log error:", logErr.message);
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Message sent to all guests",
+                data: { sent_count: result.affectedRows || guestIds.length }
+            });
         } catch (error) {
             console.error("Guest broadcast message error:", error);
             return res.status(500).json({ success: false, message: "Failed to send message to guests" });
+        }
+    }
+);
+
+// Guest notification history for admins (broadcast + individual)
+adminRouter.get(
+    "/notification-history",
+    permissionMiddleware("guests", "view"),
+    async (req, res) => {
+        const db = require("../config/db");
+        try {
+            let limit = parseInt(req.query.limit) || 50;
+            let offset = parseInt(req.query.offset) || 0;
+            if (limit < 1) limit = 1;
+            if (limit > 500) limit = 500;
+            if (offset < 0) offset = 0;
+
+            const [logs] = await db.execute(
+                `SELECT nl.*, a.name as admin_name
+                 FROM admin_notification_logs nl
+                 LEFT JOIN admins a ON nl.admin_id = a.id
+                 WHERE nl.recipient_type = 'guest'
+                 ORDER BY nl.sent_at DESC
+                 LIMIT ${limit} OFFSET ${offset}`
+            );
+            return res.status(200).json({ success: true, count: logs.length, data: logs });
+        } catch (error) {
+            console.error("Guest notification history error:", error);
+            return res.status(500).json({ success: false, message: "Failed to load guest notification history" });
         }
     }
 );

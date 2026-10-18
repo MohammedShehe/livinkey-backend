@@ -161,31 +161,64 @@ exports.sendTenantNotification = async (req, res) => {
             }
         }
 
-        // Log the notification
+        // Log the notification (include recipient_ids JSON when column exists)
         const connection = await db.getConnection();
-        await connection.execute(
-            `
-            INSERT INTO admin_notification_logs (
-                admin_id,
-                recipient_type,
-                recipient_count,
-                title,
-                message,
-                send_push,
-                send_email,
-                sent_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-            `,
-            [
-                adminId,
-                recipient_type,
-                tenantIds.length,
-                title.trim(),
-                message.trim(),
-                send_push ? 1 : 0,
-                send_email ? 1 : 0
-            ]
-        );
+        try {
+            await connection.execute(
+                `
+                INSERT INTO admin_notification_logs (
+                    admin_id,
+                    recipient_type,
+                    recipient_count,
+                    recipient_ids,
+                    title,
+                    message,
+                    send_push,
+                    send_email,
+                    sent_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                `,
+                [
+                    adminId,
+                    recipient_type,
+                    tenantIds.length,
+                    JSON.stringify(tenantIds),
+                    title.trim(),
+                    message.trim(),
+                    send_push ? 1 : 0,
+                    send_email ? 1 : 0
+                ]
+            );
+        } catch (logErr) {
+            // Fallback if recipient_ids column is not yet migrated
+            if (logErr && (logErr.code === 'ER_BAD_FIELD_ERROR' || String(logErr.message || '').includes('recipient_ids'))) {
+                await connection.execute(
+                    `
+                    INSERT INTO admin_notification_logs (
+                        admin_id,
+                        recipient_type,
+                        recipient_count,
+                        title,
+                        message,
+                        send_push,
+                        send_email,
+                        sent_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                    `,
+                    [
+                        adminId,
+                        recipient_type,
+                        tenantIds.length,
+                        title.trim(),
+                        message.trim(),
+                        send_push ? 1 : 0,
+                        send_email ? 1 : 0
+                    ]
+                );
+            } else {
+                throw logErr;
+            }
+        }
         connection.release();
 
         return res.status(200).json({
@@ -260,6 +293,89 @@ exports.getNotificationHistory = async (req, res) => {
             success: false,
             message: "Internal server error"
         });
+    }
+};
+
+/**
+ * Get recipients for a notification history entry
+ * GET /api/admin-notifications/history/:id/recipients
+ */
+exports.getNotificationRecipients = async (req, res) => {
+    try {
+        const logId = parseInt(req.params.id);
+        if (isNaN(logId) || logId < 1) {
+            return res.status(400).json({ success: false, message: "Invalid notification ID" });
+        }
+
+        const connection = await db.getConnection();
+        const [logs] = await connection.execute(
+            `SELECT nl.*, a.name as admin_name
+             FROM admin_notification_logs nl
+             LEFT JOIN admins a ON nl.admin_id = a.id
+             WHERE nl.id = ?`,
+            [logId]
+        );
+        if (!logs.length) {
+            connection.release();
+            return res.status(404).json({ success: false, message: "Notification log not found" });
+        }
+        const log = logs[0];
+
+        let recipientIds = [];
+        if (log.recipient_ids) {
+            try {
+                recipientIds = typeof log.recipient_ids === 'string'
+                    ? JSON.parse(log.recipient_ids)
+                    : log.recipient_ids;
+            } catch (_) {
+                recipientIds = [];
+            }
+        }
+
+        let recipients = [];
+        if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+            const placeholders = recipientIds.map(() => '?').join(',');
+            const [rows] = await connection.execute(
+                `
+                SELECT t.id, t.full_name, t.email, t.phone, t.country_code, t.role,
+                       COALESCE(t.status, 'active') AS status, t.is_active,
+                       p.name AS pg_name, r.room_number
+                FROM tenants t
+                LEFT JOIN tenant_details td ON t.id = td.tenant_id
+                LEFT JOIN pgs p ON td.pg_id = p.id
+                LEFT JOIN rooms r ON td.room_id = r.id
+                WHERE t.id IN (${placeholders})
+                ORDER BY t.full_name ASC
+                `,
+                recipientIds.map(id => parseInt(id))
+            );
+            recipients = rows;
+        }
+
+        connection.release();
+        return res.status(200).json({
+            success: true,
+            data: {
+                log: {
+                    id: log.id,
+                    title: log.title,
+                    message: log.message,
+                    recipient_type: log.recipient_type,
+                    recipient_count: log.recipient_count,
+                    send_push: log.send_push,
+                    send_email: log.send_email,
+                    sent_at: log.sent_at,
+                    admin_name: log.admin_name
+                },
+                recipients,
+                note: recipients.length === 0 && log.recipient_count > 0
+                    ? 'Recipient list was not stored for this older notification. Count is available only.'
+                    : null
+            }
+        });
+    } catch (error) {
+        console.error("Get Notification Recipients Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 

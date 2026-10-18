@@ -26,6 +26,13 @@ router.get(
     adminNotificationController.getNotificationHistory
 );
 
+// Get recipients for a history entry (must be registered before /:id)
+router.get(
+    "/history/:id/recipients",
+    permissionMiddleware("tenants", "view"),
+    adminNotificationController.getNotificationRecipients
+);
+
 // ============================================================
 // NEW: Delete a notification log by ID
 // ============================================================

@@ -1,5 +1,6 @@
 const tenantService = require("../services/tenant.service");
 const { sendGuestMessageEmail } = require("../services/mail.service");
+const db = require("../config/db");
 
 const createTenant = async (req, res) => {
     try {
@@ -567,6 +568,30 @@ const sendMessage = async (req, res) => {
         }
 
         const adminName = req.admin.name || 'Livinkey Admin';
+        const notifTitle = (subject && String(subject).trim()) || 'Message from Livinkey Admin';
+
+        // In-app notification so guests see it in their app
+        try {
+            const guestNotificationService = require("../services/guest.notification.service");
+            await guestNotificationService.sendGuestNotification(tenant.id, 'ADMIN_MESSAGE', {
+                title: notifTitle,
+                message: message,
+                entity_type: 'admin_message',
+                link: '/guest-notifications'
+            });
+        } catch (inAppErr) {
+            console.error("Guest in-app notification failed:", inAppErr.message);
+        }
+
+        // Push (best-effort)
+        try {
+            const firebase = require("../config/firebase");
+            if (firebase && typeof firebase.sendToUser === 'function') {
+                await firebase.sendToUser(tenant.id, { title: notifTitle, body: message });
+            }
+        } catch (pushErr) {
+            console.error("Guest push failed:", pushErr.message);
+        }
 
         await sendGuestMessageEmail(
             tenant.email,
@@ -575,6 +600,31 @@ const sendMessage = async (req, res) => {
             message,
             subject || null
         );
+
+        // Log for admin history
+        try {
+            const connection = await db.getConnection();
+            try {
+                await connection.execute(
+                    `INSERT INTO admin_notification_logs
+                     (admin_id, recipient_type, recipient_count, recipient_ids, title, message, send_push, send_email, sent_at)
+                     VALUES (?, 'guest', 1, ?, ?, ?, 1, 1, NOW())`,
+                    [req.admin.id, JSON.stringify([parseInt(id)]), notifTitle, message]
+                );
+            } catch (e) {
+                if (e && (e.code === 'ER_BAD_FIELD_ERROR' || String(e.message || '').includes('recipient_ids'))) {
+                    await connection.execute(
+                        `INSERT INTO admin_notification_logs
+                         (admin_id, recipient_type, recipient_count, title, message, send_push, send_email, sent_at)
+                         VALUES (?, 'guest', 1, ?, ?, 1, 1, NOW())`,
+                        [req.admin.id, notifTitle, message]
+                    );
+                }
+            }
+            connection.release();
+        } catch (logErr) {
+            console.error("Guest message log failed:", logErr.message);
+        }
 
         return res.status(200).json({
             success: true,
