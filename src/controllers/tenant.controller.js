@@ -396,11 +396,13 @@ const updateTenant = async (req, res) => {
 const deleteTenant = async (req, res) => {
     try {
         const { id } = req.params;
-        await tenantService.deleteTenant(id);
+        const reason = (req.body && req.body.reason) || null;
+        const archivedBy = req.admin ? req.admin.id : null;
+        await tenantService.deleteTenant(id, { reason, archivedBy });
 
         return res.status(200).json({
             success: true,
-            message: "Tenant deleted successfully"
+            message: "Tenant moved to Archive successfully"
         });
 
     } catch (error) {
@@ -409,6 +411,131 @@ const deleteTenant = async (req, res) => {
             success: false,
             message: error.message || "Internal server error"
         });
+    }
+};
+
+const checkoutTenant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { checkout_date, reason } = req.body || {};
+        if (!checkout_date) {
+            return res.status(400).json({
+                success: false,
+                message: "Checkout date is required"
+            });
+        }
+        const archivedBy = req.admin ? req.admin.id : null;
+        await tenantService.checkoutTenant(id, checkout_date, archivedBy, reason || null);
+
+        return res.status(200).json({
+            success: true,
+            message: "Tenant checked out successfully"
+        });
+    } catch (error) {
+        console.error("Checkout Tenant Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const getArchivedTenants = async (req, res) => {
+    try {
+        const filters = {
+            search: req.query.search || null,
+            role: req.query.role || null,
+            gender: req.query.gender || null,
+            pg_id: req.query.pg_id || null,
+            status: req.query.status || null,
+            month: req.query.month || null,
+            year: req.query.year || null,
+            residency: req.query.residency || null
+        };
+        const data = await tenantService.getArchivedTenants(filters);
+        return res.status(200).json({ success: true, count: data.length, data });
+    } catch (error) {
+        console.error("Get Archived Tenants Error:", error);
+        return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    }
+};
+
+const getArchiveStats = async (req, res) => {
+    try {
+        const data = await tenantService.getArchiveStats();
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        console.error("Get Archive Stats Error:", error);
+        return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    }
+};
+
+const restoreTenant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await tenantService.restoreTenant(id);
+        return res.status(200).json({ success: true, message: "Tenant restored successfully" });
+    } catch (error) {
+        console.error("Restore Tenant Error:", error);
+        return res.status(400).json({ success: false, message: error.message || "Internal server error" });
+    }
+};
+
+const restoreTenantsBulk = async (req, res) => {
+    try {
+        const ids = (req.body && req.body.ids) || [];
+        if (!Array.isArray(ids) || !ids.length) {
+            return res.status(400).json({ success: false, message: "ids array is required" });
+        }
+        const results = [];
+        for (const id of ids) {
+            try {
+                await tenantService.restoreTenant(id);
+                results.push({ id, success: true });
+            } catch (e) {
+                results.push({ id, success: false, message: e.message });
+            }
+        }
+        return res.status(200).json({ success: true, results });
+    } catch (error) {
+        console.error("Bulk Restore Error:", error);
+        return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    }
+};
+
+const permanentDeleteTenant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await tenantService.permanentDeleteTenant(id);
+        return res.status(200).json({
+            success: true,
+            message: "Tenant permanently deleted"
+        });
+    } catch (error) {
+        console.error("Permanent Delete Error:", error);
+        return res.status(400).json({ success: false, message: error.message || "Internal server error" });
+    }
+};
+
+const permanentDeleteTenantsBulk = async (req, res) => {
+    try {
+        const ids = (req.body && req.body.ids) || [];
+        if (!Array.isArray(ids) || !ids.length) {
+            return res.status(400).json({ success: false, message: "ids array is required" });
+        }
+        const results = [];
+        for (const id of ids) {
+            try {
+                await tenantService.permanentDeleteTenant(id);
+                results.push({ id, success: true });
+            } catch (e) {
+                results.push({ id, success: false, message: e.message });
+            }
+        }
+        return res.status(200).json({ success: true, results });
+    } catch (error) {
+        console.error("Bulk Permanent Delete Error:", error);
+        return res.status(500).json({ success: false, message: error.message || "Internal server error" });
     }
 };
 
@@ -529,6 +656,13 @@ module.exports = {
     getTenantById,
     updateTenant,
     deleteTenant,
+    checkoutTenant,
+    getArchivedTenants,
+    getArchiveStats,
+    restoreTenant,
+    restoreTenantsBulk,
+    permanentDeleteTenant,
+    permanentDeleteTenantsBulk,
     sendMessage,
     getEFRROStats,
     getEFRROExpiringList

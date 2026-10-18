@@ -518,6 +518,71 @@ async function migrate() {
       `
     );
 
+
+    // ------------------------------------------------------------
+    // Tenant archive / soft-delete support
+    // ------------------------------------------------------------
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "status",
+      "ALTER TABLE tenants ADD COLUMN status ENUM('active','checked_out','archived') NOT NULL DEFAULT 'active' AFTER is_active"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "checkout_date",
+      "ALTER TABLE tenants ADD COLUMN checkout_date DATE NULL DEFAULT NULL AFTER status"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "archived_at",
+      "ALTER TABLE tenants ADD COLUMN archived_at DATETIME NULL DEFAULT NULL AFTER checkout_date"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "archive_reason",
+      "ALTER TABLE tenants ADD COLUMN archive_reason TEXT NULL DEFAULT NULL AFTER archived_at"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "archived_by",
+      "ALTER TABLE tenants ADD COLUMN archived_by INT NULL DEFAULT NULL AFTER archive_reason"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "original_email",
+      "ALTER TABLE tenants ADD COLUMN original_email VARCHAR(255) NULL DEFAULT NULL AFTER archived_by"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenants",
+      "original_phone",
+      "ALTER TABLE tenants ADD COLUMN original_phone VARCHAR(20) NULL DEFAULT NULL AFTER original_email"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenant_documents",
+      "deleted_at",
+      "ALTER TABLE tenant_documents ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenant_documents",
+      "deleted_by",
+      "ALTER TABLE tenant_documents ADD COLUMN deleted_by INT NULL DEFAULT NULL AFTER deleted_at"
+    );
+    await addColumnIfMissing(
+      connection,
+      "tenant_documents",
+      "delete_reason",
+      "ALTER TABLE tenant_documents ADD COLUMN delete_reason TEXT NULL DEFAULT NULL AFTER deleted_by"
+    );
+
     // ------------------------------------------------------------
     // Add missing admin permission rows only.
     // Never overwrite existing permission settings.
@@ -531,7 +596,8 @@ async function migrate() {
       for (const moduleName of [
         "ads",
         "about_livinkey",
-        "conversations"
+        "conversations",
+        "archive"
       ]) {
         await connection.execute(
           `

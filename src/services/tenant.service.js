@@ -442,7 +442,17 @@ const updateTenant = async (tenantId, tenantData, files = {}) => {
     }
 };
 
-const deleteTenant = async (tenantId) => {
+/**
+ * Soft-archive a tenant (replaces hard delete for business history).
+ * status: 'archived' | 'checked_out'
+ * Does NOT remove Cloudinary files — permanentDelete does that.
+ */
+const archiveTenant = async (tenantId, {
+    status = 'archived',
+    checkoutDate = null,
+    reason = null,
+    archivedBy = null
+} = {}) => {
     const connection = await db.getConnection();
 
     try {
@@ -453,26 +463,11 @@ const deleteTenant = async (tenantId) => {
             throw new Error("Tenant not found");
         }
 
-        if (tenant.document_public_id) {
-            try {
-                await deleteFile(
-                    tenant.document_public_id,
-                    tenant.document_resource_type
-                );
-            } catch (error) {
-                console.error("Failed to delete main document:", error);
-            }
+        if (tenant.status && tenant.status !== 'active' && tenant.is_active === 0) {
+            throw new Error("Tenant is already archived or checked out");
         }
 
-        const documents = await TenantModel.getTenantDocuments(tenantId);
-        for (const doc of documents) {
-            try {
-                await deleteFile(doc.document_public_id, doc.document_resource_type);
-            } catch (error) {
-                console.error("Failed to delete additional document:", error);
-            }
-        }
-
+        // Free room occupancy
         if (tenant.room_id) {
             try {
                 await decrementRoomOccupancy(connection, tenant.room_id, 1);
@@ -485,19 +480,156 @@ const deleteTenant = async (tenantId) => {
             }
         }
 
-        await TenantModel.deleteTenant(connection, tenantId);
+        await TenantModel.archiveTenant(connection, tenantId, {
+            status,
+            checkoutDate: checkoutDate || (status === 'checked_out' ? new Date().toISOString().slice(0, 10) : null),
+            reason,
+            archivedBy
+        });
+
+        // Soft-flag documents
+        await TenantModel.softDeleteTenantDocuments(connection, tenantId, archivedBy, reason);
 
         await connection.commit();
         return true;
-
     } catch (error) {
         await connection.rollback();
-        console.error("Tenant Delete Error:", error);
+        console.error("Tenant Archive Error:", error);
         throw error;
     } finally {
         connection.release();
     }
 };
+
+/** Backward-compatible name used by existing controller */
+const deleteTenant = async (tenantId, options = {}) => {
+    return archiveTenant(tenantId, {
+        status: 'archived',
+        reason: options.reason || null,
+        archivedBy: options.archivedBy || null
+    });
+};
+
+const checkoutTenant = async (tenantId, checkoutDate, archivedBy = null, reason = null) => {
+    if (!checkoutDate) {
+        throw new Error("Checkout date is required");
+    }
+    return archiveTenant(tenantId, {
+        status: 'checked_out',
+        checkoutDate,
+        reason: reason || 'Checked out',
+        archivedBy
+    });
+};
+
+const restoreTenant = async (tenantId) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [rows] = await connection.execute(
+            `SELECT t.*, td.room_id FROM tenants t
+             LEFT JOIN tenant_details td ON td.tenant_id = t.id
+             WHERE t.id = ? FOR UPDATE`,
+            [tenantId]
+        );
+        if (!rows.length) throw new Error("Tenant not found");
+        const tenant = rows[0];
+        if (tenant.status === 'active' && tenant.is_active === 1) {
+            throw new Error("Tenant is already active");
+        }
+
+        const result = await TenantModel.restoreTenant(connection, tenantId);
+        if (!result.ok) {
+            throw new Error(result.message || "Restore failed");
+        }
+
+        await TenantModel.restoreTenantDocuments(connection, tenantId);
+
+        // Re-occupy room if still valid
+        if (tenant.room_id) {
+            try {
+                const availability = await TenantModel.checkRoomAvailability(tenant.room_id, 1);
+                if (availability.available) {
+                    await incrementRoomOccupancy(connection, tenant.room_id, 1);
+                } else {
+                    console.warn(`Room ${tenant.room_id} full on restore; occupancy not increased.`);
+                }
+            } catch (e) {
+                if (e.code !== 'ER_NO_SUCH_TABLE') console.warn('Occupancy restore skip:', e.message);
+            }
+        }
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        await connection.rollback();
+        console.error("Tenant Restore Error:", error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
+/**
+ * Permanent delete — removes DB rows and Cloudinary assets.
+ */
+const permanentDeleteTenant = async (tenantId) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const tenant = await TenantModel.findById(tenantId);
+        if (!tenant) throw new Error("Tenant not found");
+
+        // Only allow permanent delete for already archived/checked-out
+        if (tenant.status === 'active' && tenant.is_active !== 0) {
+            throw new Error("Active tenants must be archived or checked out before permanent delete");
+        }
+
+        if (tenant.document_public_id) {
+            try {
+                await deleteFile(tenant.document_public_id, tenant.document_resource_type);
+            } catch (error) {
+                console.error("Failed to delete main document:", error);
+            }
+        }
+
+        // Include soft-deleted docs
+        const [docs] = await connection.execute(
+            `SELECT document_public_id, document_resource_type FROM tenant_documents WHERE tenant_id = ?`,
+            [tenantId]
+        );
+        for (const doc of docs) {
+            try {
+                await deleteFile(doc.document_public_id, doc.document_resource_type);
+            } catch (error) {
+                console.error("Failed to delete document:", error);
+            }
+        }
+
+        await TenantModel.deleteTenantDocuments(connection, tenantId);
+        await TenantModel.deleteTenant(connection, tenantId);
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        await connection.rollback();
+        console.error("Tenant Permanent Delete Error:", error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
+const getArchivedTenants = async (filters = {}) => {
+    return TenantModel.findArchived(filters);
+};
+
+const getArchiveStats = async () => {
+    return TenantModel.getArchiveStats();
+};
+
 
 const checkAndSendEFRROExpiryNotifications = async () => {
     try {
@@ -650,6 +782,12 @@ const getEFRROExpiringList = async (daysRange = null) => {
 };
 
 module.exports = {
+    archiveTenant,
+    checkoutTenant,
+    restoreTenant,
+    permanentDeleteTenant,
+    getArchivedTenants,
+    getArchiveStats,
     createTenant,
     getAllTenants,
     getTenantById,

@@ -174,6 +174,11 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
             t.gender,
             t.created_at,
             t.updated_at,
+            t.is_active,
+            COALESCE(t.status, 'active') as status,
+            t.checkout_date,
+            t.archived_at,
+            t.archive_reason,
             td.pg_id,
             td.room_id,
             td.residency,
@@ -254,6 +259,8 @@ const findAll = async (search = null, role = null, gender = null, bill_status = 
         LEFT JOIN pgs p ON td.pg_id = p.id
         LEFT JOIN rooms r ON td.room_id = r.id
         WHERE 1=1
+          AND (t.status IS NULL OR t.status = 'active')
+          AND (t.is_active IS NULL OR t.is_active = 1)
     `;
     const params = [];
 
@@ -424,6 +431,7 @@ const getTenantDocuments = async (tenantId) => {
             created_at
         FROM tenant_documents
         WHERE tenant_id = ?
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
         `,
         [tenantId]
@@ -444,31 +452,31 @@ const getTenantWithDocuments = async (tenantId) => {
 
 const getStats = async () => {
     const [totalResult] = await db.execute(
-        `SELECT COUNT(*) as total FROM tenants`
+        `SELECT COUNT(*) as total FROM tenants WHERE (status IS NULL OR status = 'active') AND (is_active IS NULL OR is_active = 1)`
     );
     const total = totalResult[0].total;
 
     const [nationalResult] = await db.execute(
         `SELECT COUNT(*) as national FROM tenants t 
          JOIN tenant_details td ON t.id = td.tenant_id 
-         WHERE td.residency = 'national'`
+         WHERE td.residency = 'national' AND (t.status IS NULL OR t.status = 'active') AND (t.is_active IS NULL OR t.is_active = 1)`
     );
     const national = nationalResult[0].national;
 
     const [internationalResult] = await db.execute(
         `SELECT COUNT(*) as international FROM tenants t 
          JOIN tenant_details td ON t.id = td.tenant_id 
-         WHERE td.residency = 'international'`
+         WHERE td.residency = 'international' AND (t.status IS NULL OR t.status = 'active') AND (t.is_active IS NULL OR t.is_active = 1)`
     );
     const international = internationalResult[0].international;
 
     const [maleResult] = await db.execute(
-        `SELECT COUNT(*) as male FROM tenants WHERE gender = 'male'`
+        `SELECT COUNT(*) as male FROM tenants WHERE gender = 'male' AND (status IS NULL OR status = 'active') AND (is_active IS NULL OR is_active = 1)`
     );
     const male = maleResult[0].male;
 
     const [femaleResult] = await db.execute(
-        `SELECT COUNT(*) as female FROM tenants WHERE gender = 'female'`
+        `SELECT COUNT(*) as female FROM tenants WHERE gender = 'female' AND (status IS NULL OR status = 'active') AND (is_active IS NULL OR is_active = 1)`
     );
     const female = femaleResult[0].female;
 
@@ -668,6 +676,24 @@ const deleteTenantDocuments = async (connection, tenantId) => {
     );
 };
 
+const softDeleteTenantDocuments = async (connection, tenantId, deletedBy = null, reason = null) => {
+    await connection.execute(
+        `UPDATE tenant_documents
+         SET deleted_at = NOW(), deleted_by = ?, delete_reason = ?
+         WHERE tenant_id = ? AND deleted_at IS NULL`,
+        [deletedBy, reason, tenantId]
+    );
+};
+
+const restoreTenantDocuments = async (connection, tenantId) => {
+    await connection.execute(
+        `UPDATE tenant_documents
+         SET deleted_at = NULL, deleted_by = NULL, delete_reason = NULL
+         WHERE tenant_id = ? AND deleted_at IS NOT NULL`,
+        [tenantId]
+    );
+};
+
 const deleteTenant = async (connection, tenantId) => {
     const [result] = await connection.execute(
         `DELETE FROM tenants WHERE id = ?`,
@@ -675,6 +701,223 @@ const deleteTenant = async (connection, tenantId) => {
     );
     return result.affectedRows;
 };
+
+/**
+ * Soft-archive a tenant (checkout or archive).
+ * Frees email/phone uniqueness by rewriting them while storing originals.
+ */
+const archiveTenant = async (connection, tenantId, {
+    status = 'archived', // 'checked_out' | 'archived'
+    checkoutDate = null,
+    reason = null,
+    archivedBy = null
+} = {}) => {
+    // Load current identity
+    const [rows] = await connection.execute(
+        `SELECT email, phone, country_code FROM tenants WHERE id = ? FOR UPDATE`,
+        [tenantId]
+    );
+    if (!rows.length) return 0;
+    const { email, phone, country_code } = rows[0];
+
+    const archivedEmail = `archived_${tenantId}_${email}`;
+    // Keep under unique constraints
+    const archivedPhone = (`a${tenantId}${phone}`).slice(0, 20);
+
+    const [result] = await connection.execute(
+        `
+        UPDATE tenants SET
+            status = ?,
+            is_active = 0,
+            checkout_date = ?,
+            archived_at = NOW(),
+            archive_reason = ?,
+            archived_by = ?,
+            original_email = COALESCE(original_email, email),
+            original_phone = COALESCE(original_phone, phone),
+            email = ?,
+            phone = ?
+        WHERE id = ?
+        `,
+        [
+            status,
+            checkoutDate,
+            reason,
+            archivedBy,
+            archivedEmail,
+            archivedPhone,
+            tenantId
+        ]
+    );
+    return result.affectedRows;
+};
+
+const restoreTenant = async (connection, tenantId) => {
+    const [rows] = await connection.execute(
+        `SELECT original_email, original_phone, email, phone FROM tenants WHERE id = ? FOR UPDATE`,
+        [tenantId]
+    );
+    if (!rows.length) return { ok: false, message: 'Tenant not found' };
+    const t = rows[0];
+    const restoreEmail = t.original_email || t.email.replace(new RegExp(`^archived_${tenantId}_`), '');
+    const restorePhone = t.original_phone || t.phone;
+
+    // Conflict checks
+    const [emailConflict] = await connection.execute(
+        `SELECT id FROM tenants WHERE email = ? AND id != ? LIMIT 1`,
+        [restoreEmail, tenantId]
+    );
+    if (emailConflict.length) {
+        return { ok: false, message: `Cannot restore: email ${restoreEmail} is already in use by another tenant` };
+    }
+    const [phoneConflict] = await connection.execute(
+        `SELECT id FROM tenants WHERE phone = ? AND id != ? LIMIT 1`,
+        [restorePhone, tenantId]
+    );
+    if (phoneConflict.length) {
+        return { ok: false, message: `Cannot restore: phone ${restorePhone} is already in use by another tenant` };
+    }
+
+    const [result] = await connection.execute(
+        `
+        UPDATE tenants SET
+            status = 'active',
+            is_active = 1,
+            checkout_date = NULL,
+            archived_at = NULL,
+            archive_reason = NULL,
+            archived_by = NULL,
+            email = ?,
+            phone = ?,
+            original_email = NULL,
+            original_phone = NULL
+        WHERE id = ?
+        `,
+        [restoreEmail, restorePhone, tenantId]
+    );
+    return { ok: result.affectedRows > 0, affected: result.affectedRows };
+};
+
+const findArchived = async (filters = {}) => {
+    const {
+        search = null,
+        role = null,
+        gender = null,
+        pg_id = null,
+        status = null, // checked_out | archived | all inactive
+        month = null,
+        year = null,
+        residency = null
+    } = filters;
+
+    let query = `
+        SELECT 
+            t.id,
+            t.role,
+            t.full_name,
+            COALESCE(t.original_email, t.email) as email,
+            t.email as archived_email,
+            t.nationality,
+            t.country_code,
+            COALESCE(t.original_phone, t.phone) as phone,
+            t.international_phone,
+            t.parent_phone,
+            t.gender,
+            t.created_at,
+            t.updated_at,
+            t.is_active,
+            COALESCE(t.status, 'active') as status,
+            t.checkout_date,
+            t.archived_at,
+            t.archive_reason,
+            t.archived_by,
+            a.full_name as archived_by_name,
+            td.pg_id,
+            td.room_id,
+            td.residency,
+            td.aadhaar_id,
+            td.father_aadhaar_id,
+            td.c_form_number,
+            td.efrro_from,
+            td.efrro_till,
+            td.rent,
+            td.security_fee,
+            td.payment_date,
+            td.paid_from,
+            td.paid_till,
+            td.arrival_date,
+            td.period_of_stay,
+            td.document_url,
+            p.name as pg_name,
+            r.room_number
+        FROM tenants t
+        LEFT JOIN tenant_details td ON t.id = td.tenant_id
+        LEFT JOIN pgs p ON td.pg_id = p.id
+        LEFT JOIN rooms r ON td.room_id = r.id
+        LEFT JOIN admins a ON t.archived_by = a.id
+        WHERE (t.status IN ('checked_out', 'archived') OR t.is_active = 0)
+    `;
+    const params = [];
+
+    if (status && status !== 'all') {
+        query += ` AND t.status = ?`;
+        params.push(status);
+    }
+    if (role) {
+        query += ` AND t.role = ?`;
+        params.push(role);
+    }
+    if (pg_id) {
+        query += ` AND td.pg_id = ?`;
+        params.push(parseInt(pg_id));
+    }
+    if (gender) {
+        query += ` AND t.gender = ?`;
+        params.push(gender);
+    }
+    if (residency) {
+        query += ` AND td.residency = ?`;
+        params.push(residency);
+    }
+    if (year) {
+        query += ` AND YEAR(COALESCE(t.archived_at, t.checkout_date, t.updated_at)) = ?`;
+        params.push(parseInt(year));
+    }
+    if (month) {
+        query += ` AND MONTH(COALESCE(t.archived_at, t.checkout_date, t.updated_at)) = ?`;
+        params.push(parseInt(month));
+    }
+    if (search) {
+        query += ` AND (
+            t.full_name LIKE ? OR
+            COALESCE(t.original_email, t.email) LIKE ? OR
+            COALESCE(t.original_phone, t.phone) LIKE ? OR
+            r.room_number LIKE ? OR
+            p.name LIKE ?
+        )`;
+        const s = `%${search}%`;
+        params.push(s, s, s, s, s);
+    }
+
+    query += ` ORDER BY COALESCE(t.archived_at, t.checkout_date, t.updated_at) DESC`;
+    const [rows] = await db.execute(query, params);
+    return rows;
+};
+
+const getArchiveStats = async () => {
+    const [rows] = await db.execute(`
+        SELECT
+            SUM(CASE WHEN (status IS NULL OR status = 'active') AND (is_active IS NULL OR is_active = 1) THEN 1 ELSE 0 END) as active_count,
+            SUM(CASE WHEN status = 'checked_out' THEN 1 ELSE 0 END) as checked_out_count,
+            SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) as archived_count,
+            SUM(CASE WHEN status IN ('checked_out','archived') OR is_active = 0 THEN 1 ELSE 0 END) as inactive_count,
+            COUNT(*) as all_count
+        FROM tenants
+        WHERE role = 'tenant'
+    `);
+    return rows[0] || { active_count: 0, checked_out_count: 0, archived_count: 0, inactive_count: 0, all_count: 0 };
+};
+
 
 const checkRoomAvailability = async (roomId, additionalOccupants = 1) => {
     try {
@@ -1081,7 +1324,13 @@ module.exports = {
     updateTenantPassword,
     updateTenantDetails,
     deleteTenantDocuments,
+    softDeleteTenantDocuments,
+    restoreTenantDocuments,
     deleteTenant,
+    archiveTenant,
+    restoreTenant,
+    findArchived,
+    getArchiveStats,
     checkRoomAvailability,
     getTenantsWithExpiringEFRRO,
     getSuperAdmins,

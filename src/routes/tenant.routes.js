@@ -175,6 +175,56 @@ router.get(
     tenantAgreementController.downloadAcceptedAgreement
 );
 
+// ============ ARCHIVE / CHECKOUT / RESTORE ============
+router.get(
+    "/archive/list",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "view"),
+    tenantController.getArchivedTenants
+);
+
+router.get(
+    "/archive/stats",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "view"),
+    tenantController.getArchiveStats
+);
+
+router.post(
+    "/:id/checkout",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("tenants", "delete"),
+    tenantController.checkoutTenant
+);
+
+router.post(
+    "/:id/restore",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "edit"),
+    tenantController.restoreTenant
+);
+
+router.post(
+    "/archive/restore-bulk",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "edit"),
+    tenantController.restoreTenantsBulk
+);
+
+router.delete(
+    "/:id/permanent",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "delete"),
+    tenantController.permanentDeleteTenant
+);
+
+router.post(
+    "/archive/permanent-bulk",
+    roleMiddleware("super_admin", "admin"),
+    permissionMiddleware("archive", "delete"),
+    tenantController.permanentDeleteTenantsBulk
+);
+
 // GET TENANT BY ID - Requires tenants.view permission
 router.get(
     "/:id",
