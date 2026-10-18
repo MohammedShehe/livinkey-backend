@@ -968,8 +968,8 @@ const getArchiveStats = async () => {
             SUM(CASE WHEN (status IS NULL OR status = 'active') AND (is_active IS NULL OR is_active = 1) THEN 1 ELSE 0 END) as active_count,
             SUM(CASE WHEN status = 'checked_out' THEN 1 ELSE 0 END) as checked_out_count,
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) as archived_count,
-            SUM(CASE WHEN status IN ('checked_out','archived') OR is_active = 0 THEN 1 ELSE 0 END) as inactive_count,
-            COUNT(*) as all_count
+            SUM(CASE WHEN status IN ('checked_out','archived') THEN 1 ELSE 0 END) as inactive_count,
+            SUM(CASE WHEN status IN ('checked_out','archived') THEN 1 ELSE 0 END) as all_count
         FROM tenants
         WHERE role = 'tenant'
     `);
