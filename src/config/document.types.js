@@ -7,7 +7,8 @@ const INTERNATIONAL_DOCUMENTS = [
     { key: 'arrival_stamp', label: 'Arrival Stamp', required: true },
     { key: 'c_form', label: 'C-Form', required: true },
     { key: 'efrro', label: 'E-FRRO', required: true },
-    { key: 'university_id', label: 'University ID', required: false }
+    { key: 'university_id', label: 'University ID', required: false },
+    { key: 'agreement', label: 'Agreement', required: true }
 ];
 
 // Document types for national tenants (Indians)
@@ -16,7 +17,8 @@ const NATIONAL_DOCUMENTS = [
     { key: 'signature', label: 'Signature', required: true },
     { key: 'tenant_aadhaar', label: 'Tenant Aadhaar Card', required: true },
     { key: 'parent_aadhaar', label: 'Parent Aadhaar Card', required: true },
-    { key: 'university_id', label: 'University ID', required: false }
+    { key: 'university_id', label: 'University ID', required: false },
+    { key: 'agreement', label: 'Agreement', required: true }
 ];
 
 // All document types mapping
@@ -30,7 +32,8 @@ const DOCUMENT_TYPES = {
     efrro: { label: 'E-FRRO', category: 'efrros' },
     tenant_aadhaar: { label: 'Tenant Aadhaar Card', category: 'aadhaars' },
     parent_aadhaar: { label: 'Parent Aadhaar Card', category: 'aadhaars' },
-    university_id: { label: 'University ID', category: 'university_ids' }
+    university_id: { label: 'University ID', category: 'university_ids' },
+    agreement: { label: 'Agreement', category: 'agreements' }
 };
 
 module.exports = {

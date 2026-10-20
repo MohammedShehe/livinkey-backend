@@ -168,3 +168,16 @@ exports.downloadAcceptedAgreement = async (req, res) => {
     return res.send(Buffer.from(pdf,'binary'));
   } catch (error) { console.error('Download accepted agreement error:', error); return res.status(500).json({ success:false, message:'Unable to generate agreement PDF.' }); }
 };
+
+
+// Tenant self-service: download own accepted agreement PDF
+exports.downloadMyAcceptedAgreement = async (req, res) => {
+  try {
+    req.params = req.params || {};
+    req.params.id = String(req.tenant.id);
+    return exports.downloadAcceptedAgreement(req, res);
+  } catch (error) {
+    console.error('Download My Agreement Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to download agreement PDF.' });
+  }
+};

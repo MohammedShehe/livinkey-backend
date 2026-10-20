@@ -9,6 +9,7 @@ const createBill = async (req, res) => {
             electricity_amount,
             maintenance_amount,
             other_charges,
+            other_charges_note,
             billing_month,
             payment_details_source,
             payment_bank_name,
@@ -43,6 +44,7 @@ const createBill = async (req, res) => {
             electricity_amount: parseFloat(electricity_amount || 0),
             maintenance_amount: parseFloat(maintenance_amount || 0),
             other_charges: parseFloat(other_charges || 0),
+            other_charges_note: other_charges_note || null,
             billing_month: billing_month || null,
             payment_details_source: payment_details_source || 'pg',
             payment_bank_name: payment_bank_name?.trim() || null,
@@ -455,6 +457,7 @@ const updateBill = async (req, res) => {
             electricity_amount,
             maintenance_amount,
             other_charges,
+            other_charges_note,
             clear_meter_1,
             clear_meter_2
         } = req.body;
@@ -464,6 +467,7 @@ const updateBill = async (req, res) => {
         if (electricity_amount !== undefined) billData.electricity_amount = parseFloat(electricity_amount);
         if (maintenance_amount !== undefined) billData.maintenance_amount = parseFloat(maintenance_amount);
         if (other_charges !== undefined) billData.other_charges = parseFloat(other_charges);
+        if (other_charges_note !== undefined) billData.other_charges_note = other_charges_note;
         if (clear_meter_1 !== undefined) billData.clear_meter_1 = clear_meter_1;
         if (clear_meter_2 !== undefined) billData.clear_meter_2 = clear_meter_2;
 

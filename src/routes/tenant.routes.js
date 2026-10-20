@@ -33,6 +33,8 @@ router.post("/auth/change-password", tenantAuthMiddleware, tenantAuthController.
 router.get("/home", tenantAuthMiddleware, tenantHomeController.getTenantHomeData);
 router.get("/agreement", tenantAuthMiddleware, tenantAgreementController.getAgreement);
 router.post("/agreement/accept", tenantAuthMiddleware, tenantAgreementController.acceptAgreement);
+// Tenant downloads their own currently accepted agreement as PDF
+router.get("/agreement/pdf", tenantAuthMiddleware, tenantAgreementController.downloadMyAcceptedAgreement);
 
 // ============ TENANT PROFILE ROUTES (Protected) ============
 router.get("/profile", tenantAuthMiddleware, tenantProfileController.getProfile);

@@ -424,6 +424,7 @@ const createBill = async (billData, files = {}) => {
             electricity_meter_resource_type_2: meterResourceType2,
             maintenance_amount: parseFloat(billData.maintenance_amount || 0),
             other_charges: parseFloat(billData.other_charges || 0),
+            other_charges_note: billData.other_charges_note || null,
             total_amount: totalAmount,
             payment_qr: paymentQr,
             payment_qr_public_id: paymentQrPublicId,
@@ -1598,6 +1599,7 @@ const updateBill = async (billId, billData, files = {}) => {
             electricity_amount: electricity,
             maintenance_amount: maintenance,
             other_charges: other,
+            other_charges_note: billData.other_charges_note !== undefined ? billData.other_charges_note : (existing.other_charges_note || null),
             total_amount: totalAmount
         });
 
