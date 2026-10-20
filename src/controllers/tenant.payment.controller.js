@@ -344,6 +344,7 @@ const getBillDetails = async (req, res) => {
                 electricity_meter_image_2: bill.electricity_meter_image_2 || null,
                 maintenance_amount: parseFloat(bill.maintenance_amount || 0),
                 other_charges: parseFloat(bill.other_charges || 0),
+                other_charges_note: bill.other_charges_note || null,
                 total_amount: parseFloat(bill.total_amount),
                 fine_amount: parseFloat(bill.fine_amount || 0),
                 paid_amount: parseFloat(bill.paid_amount || 0),
