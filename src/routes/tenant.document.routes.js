@@ -15,6 +15,8 @@ const upload = require("../middleware/upload.middleware");
 router.get("/types", tenantAuthMiddleware, userActivity, tenantDocumentController.getDocumentTypes);
 router.post("/upload", tenantAuthMiddleware, userActivity, upload.single('document'), tenantDocumentController.uploadDocument);
 router.get("/my-documents", tenantAuthMiddleware, userActivity, tenantDocumentController.getMyDocuments);
+// Bulk download (zip) — must be registered before /:documentId/download
+router.post("/my-documents/download", tenantAuthMiddleware, userActivity, tenantDocumentController.downloadMyDocumentsBulk);
 router.get("/:documentId/download", tenantAuthMiddleware, userActivity, tenantDocumentController.downloadMyDocument);
 
 // ============ ADMIN ROUTES (Protected) ============

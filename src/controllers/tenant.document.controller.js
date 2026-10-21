@@ -304,6 +304,60 @@ const downloadMyDocument = async (req, res) => {
     }
 };
 
+// Tenant bulk download: zip of the authenticated tenant's own documents only
+const downloadMyDocumentsBulk = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        let { documentIds } = req.body || {};
+
+        // If no IDs provided, download all of the tenant's documents
+        if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+            const result = await tenantDocumentService.getTenantDocuments(tenantId);
+            const docs = result?.uploaded_documents || result?.documents || [];
+            documentIds = docs.map((d) => d.id).filter(Boolean);
+        }
+
+        if (!documentIds || documentIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No documents available to download"
+            });
+        }
+
+        // Ownership check: only allow documents that belong to this tenant
+        const ownedIds = [];
+        for (const id of documentIds) {
+            const document = await require("../models/tenant.document.model").getDocumentById(id);
+            if (document && parseInt(document.tenant_id) === parseInt(tenantId)) {
+                ownedIds.push(id);
+            }
+        }
+
+        if (ownedIds.length === 0) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: no matching documents found for this tenant"
+            });
+        }
+
+        const zipBuffer = await tenantDocumentService.downloadDocumentsAsZipBuffer(ownedIds);
+
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="my_documents_${Date.now()}.zip"`
+        );
+        res.setHeader("Content-Length", zipBuffer.length);
+        return res.send(zipBuffer);
+    } catch (error) {
+        console.error("Download My Documents Bulk Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     uploadDocument,
     getMyDocuments,
@@ -314,5 +368,6 @@ module.exports = {
     downloadDocuments,
     downloadDocumentsAsFile, // Export both methods
     getTenantDocumentsAdmin,
-    downloadMyDocument
+    downloadMyDocument,
+    downloadMyDocumentsBulk
 };
