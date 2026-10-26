@@ -147,6 +147,8 @@ const sendPushNotification = async (fcmToken, notification, data = {}) => {
         entity_id: String(data.entity_id || ''),
         action: data.action || 'open',
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        title: String(notification.title || 'Livinkey'),
+        body: String(notification.body || 'You have a new notification'),
       },
       android: {
         priority: 'high',
@@ -214,6 +216,8 @@ const sendPushNotificationToMultiple = async (fcmTokens, notification, data = {}
           entity_id: String(data.entity_id || ''),
           action: data.action || 'open',
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          title: String(notification.title || 'Livinkey'),
+          body: String(notification.body || 'You have a new notification'),
         },
         android: {
           priority: 'high',
