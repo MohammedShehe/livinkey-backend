@@ -2,7 +2,7 @@ const db = require("../config/db");
 const TenantDocumentModel = require("../models/tenant.document.model");
 const TenantModel = require("../models/tenant.model");
 const { uploadFile, deleteFile } = require("./upload.service");
-const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS, DOCUMENT_TYPES } = require("../config/document.types");
+const { INTERNATIONAL_DOCUMENTS, NATIONAL_DOCUMENTS, VEHICLE_DOCUMENTS, VEHICLE_DOCUMENT_KEYS, DOCUMENT_TYPES } = require("../config/document.types");
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -31,12 +31,25 @@ const uploadDocument = async (tenantId, documentType, file) => {
             throw new Error("Tenant not found");
         }
 
-        // Validate the document type against the tenant's residency-specific document list.
-        // This keeps special fields such as Signature consistent between the tenant app and admin.
+        // Validate document type: residency docs OR vehicle docs
+        const isVehicleDoc = VEHICLE_DOCUMENT_KEYS.includes(documentType);
         const allowedDocuments = getRequiredDocuments(tenant.residency);
-        const documentDefinition = allowedDocuments.find(doc => doc.key === documentType);
+        const documentDefinition = isVehicleDoc
+            ? VEHICLE_DOCUMENTS.find(doc => doc.key === documentType)
+            : allowedDocuments.find(doc => doc.key === documentType);
         if (!documentDefinition || !DOCUMENT_TYPES[documentType]) {
             throw new Error("Invalid document type for this tenant");
+        }
+
+        // Vehicle docs only allowed when tenant has toggled has_vehicle
+        if (isVehicleDoc) {
+            const [rows] = await connection.execute(
+                `SELECT has_vehicle FROM tenant_details WHERE tenant_id = ? LIMIT 1`,
+                [tenantId]
+            );
+            if (!rows.length || !rows[0].has_vehicle) {
+                throw new Error("Enable 'Has Vehicle' in your profile before uploading vehicle documents");
+            }
         }
 
         // Check if document already exists
@@ -380,6 +393,91 @@ const downloadDocumentsAsZipBuffer = async (documentIds) => {
     }
 };
 
+/**
+ * Get vehicle status + documents for a tenant
+ */
+const getVehicleStatus = async (tenantId) => {
+    const connection = await db.getConnection();
+    try {
+        const [details] = await connection.execute(
+            `SELECT has_vehicle, vehicle_number FROM tenant_details WHERE tenant_id = ? LIMIT 1`,
+            [tenantId]
+        );
+        const hasVehicle = details.length ? !!details[0].has_vehicle : false;
+        const vehicleNumber = details.length ? (details[0].vehicle_number || null) : null;
+
+        const documents = await TenantDocumentModel.getDocumentsByTenant(tenantId);
+        const vehicleDocs = documents.filter(d => VEHICLE_DOCUMENT_KEYS.includes(d.document_type));
+        const uploadedTypes = vehicleDocs.map(d => d.document_type);
+
+        const documentStatus = VEHICLE_DOCUMENTS.map(doc => ({
+            ...doc,
+            uploaded: uploadedTypes.includes(doc.key),
+            document: vehicleDocs.find(d => d.document_type === doc.key) || null
+        }));
+
+        const allRequiredUploaded = documentStatus.every(d => d.uploaded) && !!vehicleNumber;
+
+        return {
+            has_vehicle: hasVehicle,
+            vehicle_number: vehicleNumber,
+            documents: documentStatus,
+            uploaded_documents: vehicleDocs,
+            complete: hasVehicle ? allRequiredUploaded : true
+        };
+    } finally {
+        connection.release();
+    }
+};
+
+/**
+ * Toggle has_vehicle and optionally set vehicle_number
+ */
+const updateVehicleInfo = async (tenantId, { has_vehicle, vehicle_number }) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Ensure tenant_details row exists
+        const [existing] = await connection.execute(
+            `SELECT tenant_id FROM tenant_details WHERE tenant_id = ? LIMIT 1`,
+            [tenantId]
+        );
+        if (!existing.length) {
+            await connection.execute(
+                `INSERT INTO tenant_details (tenant_id, has_vehicle, vehicle_number) VALUES (?, ?, ?)`,
+                [tenantId, has_vehicle ? 1 : 0, vehicle_number || null]
+            );
+        } else {
+            if (typeof has_vehicle !== 'undefined' && typeof vehicle_number !== 'undefined') {
+                await connection.execute(
+                    `UPDATE tenant_details SET has_vehicle = ?, vehicle_number = ? WHERE tenant_id = ?`,
+                    [has_vehicle ? 1 : 0, vehicle_number || null, tenantId]
+                );
+            } else if (typeof has_vehicle !== 'undefined') {
+                await connection.execute(
+                    `UPDATE tenant_details SET has_vehicle = ? WHERE tenant_id = ?`,
+                    [has_vehicle ? 1 : 0, tenantId]
+                );
+            } else if (typeof vehicle_number !== 'undefined') {
+                await connection.execute(
+                    `UPDATE tenant_details SET vehicle_number = ? WHERE tenant_id = ?`,
+                    [vehicle_number || null, tenantId]
+                );
+            }
+        }
+
+        // If turning OFF vehicle, do NOT auto-delete docs (admin must delete)
+        await connection.commit();
+        return await getVehicleStatus(tenantId);
+    } catch (err) {
+        await connection.rollback();
+        throw err;
+    } finally {
+        connection.release();
+    }
+};
+
 module.exports = {
     uploadDocument,
     getTenantDocuments,
@@ -391,5 +489,9 @@ module.exports = {
     getDocumentTypesByResidency,
     getRequiredDocuments,
     downloadDocumentsAsZip,
-    downloadDocumentsAsZipBuffer
+    downloadDocumentsAsZipBuffer,
+    getVehicleStatus,
+    updateVehicleInfo,
+    VEHICLE_DOCUMENTS,
+    VEHICLE_DOCUMENT_KEYS
 };

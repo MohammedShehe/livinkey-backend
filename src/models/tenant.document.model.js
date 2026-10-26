@@ -140,7 +140,9 @@ const getDocumentsWithFilters = async (filters = {}) => {
             COALESCE(t.status, 'active') AS tenant_status,
             p.name as pg_name,
             r.room_number,
-            DATE(td.created_at) as upload_date
+            DATE(td.created_at) as upload_date,
+            COALESCE(tdet.has_vehicle, 0) AS has_vehicle,
+            tdet.vehicle_number
         FROM tenant_documents td
         INNER JOIN tenants t ON td.tenant_id = t.id
         LEFT JOIN tenant_details tdet ON t.id = tdet.tenant_id
@@ -163,6 +165,12 @@ const getDocumentsWithFilters = async (filters = {}) => {
         query += ` AND t.status = 'checked_out'`;
     }
     // 'all' → no status filter
+
+    if (filters.has_vehicle === '1' || filters.has_vehicle === 'true' || filters.has_vehicle === true) {
+        query += ` AND tdet.has_vehicle = 1`;
+    } else if (filters.has_vehicle === '0' || filters.has_vehicle === 'false' || filters.has_vehicle === false) {
+        query += ` AND (tdet.has_vehicle IS NULL OR tdet.has_vehicle = 0)`;
+    }
 
     if (filters.document_type) {
         query += ` AND td.document_type = ?`;

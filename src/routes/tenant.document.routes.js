@@ -17,6 +17,12 @@ router.post("/upload", tenantAuthMiddleware, userActivity, upload.single('docume
 router.get("/my-documents", tenantAuthMiddleware, userActivity, tenantDocumentController.getMyDocuments);
 // Bulk download (zip) — must be registered before /:documentId/download
 router.post("/my-documents/download", tenantAuthMiddleware, userActivity, tenantDocumentController.downloadMyDocumentsBulk);
+
+// Vehicle (must be before /:documentId routes)
+router.get("/vehicle", tenantAuthMiddleware, userActivity, tenantDocumentController.getMyVehicle);
+router.put("/vehicle", tenantAuthMiddleware, userActivity, tenantDocumentController.updateMyVehicle);
+router.patch("/vehicle", tenantAuthMiddleware, userActivity, tenantDocumentController.updateMyVehicle);
+
 router.get("/:documentId/download", tenantAuthMiddleware, userActivity, tenantDocumentController.downloadMyDocument);
 
 // ============ ADMIN ROUTES (Protected) ============
@@ -38,6 +44,13 @@ adminRouter.get(
     "/tenant/:tenantId",
     permissionMiddleware("documents", "view"),
     tenantDocumentController.getTenantDocumentsAdmin
+);
+
+// Vehicle status for a tenant
+adminRouter.get(
+    "/tenant/:tenantId/vehicle",
+    permissionMiddleware("documents", "view"),
+    tenantDocumentController.getTenantVehicleAdmin
 );
 
 // DELETE DOCUMENT - Requires documents.delete permission

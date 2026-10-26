@@ -103,7 +103,8 @@ const getDocumentsAdmin = async (req, res) => {
             search, 
             tenant_id,
             tenant_status,
-            status
+            status,
+            has_vehicle
         } = req.query;
 
         const documents = await tenantDocumentService.getDocumentsAdmin({
@@ -113,7 +114,8 @@ const getDocumentsAdmin = async (req, res) => {
             pg_name,
             search,
             tenant_id,
-            tenant_status: tenant_status || status || 'active'
+            tenant_status: tenant_status || status || 'active',
+            has_vehicle
         });
 
         return res.json({
@@ -358,6 +360,81 @@ const downloadMyDocumentsBulk = async (req, res) => {
     }
 };
 
+// ============ VEHICLE ENDPOINTS ============
+
+const getMyVehicle = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const result = await tenantDocumentService.getVehicleStatus(tenantId);
+        return res.json({ success: true, data: result });
+    } catch (error) {
+        console.error("Get My Vehicle Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+const updateMyVehicle = async (req, res) => {
+    try {
+        const tenantId = req.tenant.id;
+        const { has_vehicle, vehicle_number } = req.body;
+
+        if (typeof has_vehicle === 'undefined' && typeof vehicle_number === 'undefined') {
+            return res.status(400).json({
+                success: false,
+                message: "Provide has_vehicle and/or vehicle_number"
+            });
+        }
+
+        // Basic plate validation when provided
+        if (vehicle_number !== undefined && vehicle_number !== null && String(vehicle_number).trim()) {
+            const plate = String(vehicle_number).trim().toUpperCase();
+            if (plate.length < 4 || plate.length > 20) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Vehicle number must be between 4 and 20 characters"
+                });
+            }
+        }
+
+        const result = await tenantDocumentService.updateVehicleInfo(tenantId, {
+            has_vehicle: typeof has_vehicle !== 'undefined' ? !!has_vehicle : undefined,
+            vehicle_number: vehicle_number !== undefined
+                ? (vehicle_number ? String(vehicle_number).trim().toUpperCase() : null)
+                : undefined
+        });
+
+        return res.json({
+            success: true,
+            message: "Vehicle info updated",
+            data: result
+        });
+    } catch (error) {
+        console.error("Update My Vehicle Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
+/** Admin: get vehicle status for a specific tenant */
+const getTenantVehicleAdmin = async (req, res) => {
+    try {
+        const { tenantId } = req.params;
+        const result = await tenantDocumentService.getVehicleStatus(tenantId);
+        return res.json({ success: true, data: result });
+    } catch (error) {
+        console.error("Get Tenant Vehicle Admin Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
+};
+
 module.exports = {
     uploadDocument,
     getMyDocuments,
@@ -366,8 +443,11 @@ module.exports = {
     deleteDocumentAdmin,
     deleteAllDocumentsAdmin,
     downloadDocuments,
-    downloadDocumentsAsFile, // Export both methods
+    downloadDocumentsAsFile,
     getTenantDocumentsAdmin,
     downloadMyDocument,
-    downloadMyDocumentsBulk
+    downloadMyDocumentsBulk,
+    getMyVehicle,
+    updateMyVehicle,
+    getTenantVehicleAdmin
 };
