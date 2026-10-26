@@ -555,6 +555,29 @@ exports.getPGStats = async (req, res) => {
         );
         const total = totalResult[0].total;
 
+        // Live happy tenants count
+        let liveTenants = 0;
+        try {
+            const [tenantResult] = await connection.execute(
+                `SELECT COUNT(*) as total FROM tenants
+                 WHERE role = 'tenant'
+                   AND (is_active IS NULL OR is_active = 1)
+                   AND (status IS NULL OR status = 'active')`
+            );
+            liveTenants = tenantResult[0]?.total || 0;
+        } catch (e) {
+            try {
+                const [occ] = await connection.execute(
+                    `SELECT COALESCE(SUM(ro.occupied_count), 0) as total
+                     FROM room_occupancy ro
+                     INNER JOIN rooms r ON ro.room_id = r.id AND r.is_active = 1
+                     INNER JOIN floors f ON r.floor_id = f.id
+                     INNER JOIN pgs p ON f.pg_id = p.id AND p.is_active = 1`
+                );
+                liveTenants = occ[0]?.total || 0;
+            } catch (_) {}
+        }
+
         const [statusResult] = await connection.execute(
             `
             SELECT 
@@ -599,16 +622,44 @@ exports.getPGStats = async (req, res) => {
 
         connection.release();
 
+        // Manual boost numbers (starting phase) — additive when enabled
+        let manual = {
+            manual_stats_enabled: false,
+            manual_properties_count: 0,
+            manual_happy_tenants_count: 0,
+        };
+        try {
+            const SiteSettingsModel = require("../models/site.settings.model");
+            manual = await SiteSettingsModel.getAllSettings();
+        } catch (e) {
+            // table may not exist yet — ignore
+        }
+
+        const displayPgs = manual.manual_stats_enabled
+            ? total + (manual.manual_properties_count || 0)
+            : total;
+        const displayTenants = manual.manual_stats_enabled
+            ? liveTenants + (manual.manual_happy_tenants_count || 0)
+            : liveTenants;
+
         return res.json({
             success: true,
             data: {
                 total_pgs: total,
+                total_tenants: liveTenants,
                 vacant_pgs: vacant,
                 full_pgs: full,
                 partial_pgs: partial,
                 has_pgs: total > 0,
                 vacancy_percentage: total > 0 ? Math.round((vacant / total) * 100) : 0,
-                total_reviews: reviewCount[0]?.total_reviews || 0
+                total_reviews: reviewCount[0]?.total_reviews || 0,
+                // Manual overlay
+                manual_stats_enabled: !!manual.manual_stats_enabled,
+                manual_properties_count: manual.manual_properties_count || 0,
+                manual_happy_tenants_count: manual.manual_happy_tenants_count || 0,
+                // What the public website should show
+                display_properties: displayPgs,
+                display_happy_tenants: displayTenants,
             }
         });
 

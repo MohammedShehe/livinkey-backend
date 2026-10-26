@@ -31,6 +31,7 @@ const webhookRoutes = require("./routes/webhook.routes");
 const conversationRoutes = require("./routes/conversation.routes");
 const livinkeyNoticeRoutes = require("./routes/livinkey.notice.routes");
 const livinkeyAdRoutes = require("./routes/livinkey.ad.routes");
+const siteSettingsRoutes = require("./routes/site.settings.routes");
 
 const app = express();
 
@@ -101,6 +102,7 @@ app.use("/api/webhooks", webhookRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/livinkey-notices", livinkeyNoticeRoutes);
 app.use("/api/livinkey-ads", livinkeyAdRoutes);
+app.use("/api/site-settings", siteSettingsRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {
