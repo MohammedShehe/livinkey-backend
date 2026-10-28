@@ -27,6 +27,7 @@ const guestNotificationRoutes = require("./routes/guest.notification.routes");
 const adminNotificationRoutes = require("./routes/admin.notification.routes");
 const activityLogRoutes = require("./routes/activity.log.routes");
 const ensureActivitySchema = require("./config/activity.schema");
+const ensureAdminConsoleSchema = require("./config/schema.bootstrap");
 const webhookRoutes = require("./routes/webhook.routes");
 const conversationRoutes = require("./routes/conversation.routes");
 const livinkeyNoticeRoutes = require("./routes/livinkey.notice.routes");
@@ -122,5 +123,6 @@ app.use((err, req, res, next) => {
 });
 
 ensureActivitySchema().catch(err => console.error("Activity schema init error:", err));
+ensureAdminConsoleSchema().catch(err => console.error("Admin console schema init error:", err));
 
 module.exports = app;

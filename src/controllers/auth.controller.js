@@ -117,6 +117,17 @@ exports.verifyOTP = async (req, res) => {
 
         await Admin.clearOTP(admin.id);
 
+        // Remember the PREVIOUS sign-in so the console can show "last sign-in"
+        // before it is overwritten by this one.
+        const previousLogin = {
+            at: admin.last_login_at || null,
+            ip: admin.last_login_ip || null,
+            device: admin.last_login_device || null
+        };
+        const fwd = req.headers["x-forwarded-for"];
+        const clientIp = (fwd ? fwd.split(",")[0].trim() : req.ip || "").replace("::ffff:", "");
+        await Admin.recordLogin(admin.id, clientIp, req.get("user-agent"));
+
         await ActivityService.log(req, {
             actorType: "admin", actorName: admin.name,
             actorPosition: admin.role === "super_admin" ? "Super Admin" : "Admin",
@@ -135,6 +146,7 @@ exports.verifyOTP = async (req, res) => {
         // Admins page does, via getAdminById, so the session the client
         // stores actually reflects granted view/add/edit/delete access.
         const fullAdmin = await Admin.getAdminById(admin.id);
+        if (fullAdmin) fullAdmin.previous_login = previousLogin;
 
         return res.json({
             success: true,

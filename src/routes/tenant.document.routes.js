@@ -9,6 +9,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
 const upload = require("../middleware/upload.middleware");
+const overviewController = require("../controllers/admin.overview.controller");
 
 // ============ TENANT ROUTES (Protected) ============
 // Tenants can upload, view, and download their own documents - NO DELETE
@@ -31,6 +32,9 @@ router.get("/:documentId/download", tenantAuthMiddleware, userActivity, tenantDo
 const adminRouter = express.Router();
 adminRouter.use(authMiddleware);
 adminRouter.use(roleMiddleware("super_admin", "admin"));
+
+// ONE-CALL document completeness for every active tenant (replaces N requests)
+adminRouter.get("/status-summary", overviewController.getDocumentStatusSummary);
 
 // GET ALL DOCUMENTS - Requires documents.view permission
 adminRouter.get(

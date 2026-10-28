@@ -24,6 +24,30 @@ const updateOTP = async (id, otp, otpExpiry) => {
     );
 };
 
+const describeDevice = (ua = "") => {
+    const u = String(ua);
+    const browser = /Edg\//.test(u) ? "Edge" : /OPR\//.test(u) ? "Opera" : /Chrome\//.test(u) ? "Chrome"
+        : /Firefox\//.test(u) ? "Firefox" : /Safari\//.test(u) ? "Safari" : "Browser";
+    const os = /Windows/.test(u) ? "Windows" : /Android/.test(u) ? "Android" : /iPhone|iPad|iOS/.test(u) ? "iOS"
+        : /Mac OS X/.test(u) ? "macOS" : /Linux/.test(u) ? "Linux" : "Unknown OS";
+    return `${browser} on ${os}`.slice(0, 255);
+};
+
+// Records a successful sign-in. Never throws: a failure here must not block login.
+const recordLogin = async (id, ip, userAgent) => {
+    if (!id) return;
+    try {
+        await db.execute(
+            `UPDATE admins
+             SET last_login_at = NOW(), last_login_ip = ?, last_login_device = ?, login_count = COALESCE(login_count, 0) + 1
+             WHERE id = ?`,
+            [ip || null, describeDevice(userAgent), id]
+        );
+    } catch (e) {
+        console.error("recordLogin failed:", e.message);
+    }
+};
+
 const clearOTP = async (id) => {
     if (!id) return;
     await db.execute(
@@ -188,6 +212,10 @@ const getAllAdmins = async (search = null) => {
             a.is_active,
             a.must_change_password,
             a.created_at,
+            a.last_login_at,
+            a.last_login_ip,
+            a.last_login_device,
+            a.login_count,
             ap.module_name,
             ap.can_view,
             ap.can_add,
@@ -232,6 +260,10 @@ const getAllAdmins = async (search = null) => {
                 is_active: Boolean(row.is_active),
                 must_change_password: Boolean(row.must_change_password),
                 created_at: row.created_at,
+                last_login_at: row.last_login_at || null,
+                last_login_ip: row.last_login_ip || null,
+                last_login_device: row.last_login_device || null,
+                login_count: Number(row.login_count || 0),
                 permissions: {}
             };
         }
@@ -341,6 +373,10 @@ const getAdminById = async (adminId) => {
             a.is_active,
             a.must_change_password,
             a.created_at,
+            a.last_login_at,
+            a.last_login_ip,
+            a.last_login_device,
+            a.login_count,
             ap.module_name,
             ap.can_view,
             ap.can_add,
@@ -372,6 +408,10 @@ const getAdminById = async (adminId) => {
         is_active: Boolean(rows[0].is_active),
         must_change_password: Boolean(rows[0].must_change_password),
         created_at: rows[0].created_at,
+        last_login_at: rows[0].last_login_at || null,
+        last_login_ip: rows[0].last_login_ip || null,
+        last_login_device: rows[0].last_login_device || null,
+        login_count: Number(rows[0].login_count || 0),
         permissions: {}
     };
 
@@ -448,5 +488,6 @@ module.exports = {
     updatePermission,
     getAdminById,
     updateAdmin,
-    deleteAdmin
+    deleteAdmin,
+    recordLogin
 };
