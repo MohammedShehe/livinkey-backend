@@ -71,7 +71,7 @@ const handleWebhook = async (req, res) => {
         const { gateway } = req.params;
         const payload = req.body;
         
-        const result = await paymentService.processWebhook(gateway, payload);
+        const result = await paymentService.processWebhook(gateway, payload, { headers: req.headers, rawBody: req.rawBody });
         
         return res.status(200).json({
             success: true,
@@ -80,10 +80,14 @@ const handleWebhook = async (req, res) => {
         });
         
     } catch (error) {
-        console.error("Webhook Handler Error:", error);
-        return res.status(500).json({
+        // 200 = intentionally ignored event (do not make the gateway retry)
+        if (error.status === 200) {
+            return res.status(200).json({ success: true, message: "Event ignored" });
+        }
+        console.error("Webhook Handler Error:", error.message);
+        return res.status(error.status || 500).json({
             success: false,
-            message: error.message || "Internal server error"
+            message: error.status && error.status < 500 ? error.message : "Webhook could not be processed"
         });
     }
 };

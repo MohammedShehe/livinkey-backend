@@ -1,3 +1,5 @@
+const attemptGuard = require("../utils/attempt.guard");
+const { validatePassword } = require("../utils/password.policy");
 const ActivityService = require("../services/activity.log.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
@@ -9,6 +11,7 @@ const agreementService = require("../services/agreement.service");
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (attemptGuard.guard(res, "tenant-login", email, { max: 8 })) return;
 
         if (!email || !password) {
             return res.status(400).json({
@@ -99,7 +102,8 @@ exports.login = async (req, res) => {
             const token = generateToken({
                 id: tenant.id,
                 email: tenant.email,
-                role: 'tenant'
+                role: 'tenant',
+                must_change_password: true
             });
 
             // Remove sensitive data
@@ -180,11 +184,9 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        if (new_password.length < 8) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 8 characters long."
-            });
+        const pwErr = validatePassword(new_password);
+        if (pwErr) {
+            return res.status(400).json({ success: false, message: pwErr });
         }
 
         const connection = await db.getConnection();
@@ -260,10 +262,7 @@ exports.forgotPassword = async (req, res) => {
         connection.release();
 
         if (tenants.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Email not found."
-            });
+            return res.json({ success: true, message: "If this email is registered, a verification code has been sent." });
         }
 
         const tenant = tenants[0];
@@ -303,6 +302,7 @@ exports.forgotPassword = async (req, res) => {
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
+        if (attemptGuard.guard(res, "tenant-otp", email, { max: 5, onLock: attemptGuard.clearOtpFor("tenants", email) })) return;
 
         if (!email || !otp) {
             return res.status(400).json({
@@ -394,11 +394,9 @@ exports.resetPassword = async (req, res) => {
             });
         }
 
-        if (new_password.length < 8) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 8 characters long."
-            });
+        const pwErr = validatePassword(new_password);
+        if (pwErr) {
+            return res.status(400).json({ success: false, message: pwErr });
         }
 
         const connection = await db.getConnection();

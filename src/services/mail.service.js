@@ -1,3 +1,4 @@
+const { WEBSITE_URL, APP_STORE_URL } = require("../utils/links");
 const transporter = require("../config/mail");
 const { 
     buildEmailTemplate, 
@@ -512,19 +513,14 @@ const sendPaymentLinkEmail = async (email, tenantName, billData, paymentOptions,
                 <tr>
                     <td style="padding: 10px; text-align: center;">
                         <p style="color: #4a5568; font-size: 14px; margin: 0 0 10px 0;">
-                            <strong>📱 Quick Pay Options</strong>
+                            <strong>📱 Pay in the Livinkey app</strong>
                         </p>
-                        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-                            <a href="${paymentOptions.app_links.phonepe}" target="_blank" style="display: inline-block; background: #5F259F; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
-                                PhonePe
-                            </a>
-                            <a href="${paymentOptions.app_links.paytm}" target="_blank" style="display: inline-block; background: #00BAF2; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
-                                Paytm
-                            </a>
-                            <a href="${paymentOptions.app_links.googlepay}" target="_blank" style="display: inline-block; background: #4285F4; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 4px;">
-                                Google Pay
-                            </a>
-                        </div>
+                        <p style="color: #4a5568; font-size: 13px; margin: 0 0 14px 0;">
+                            Open the app, go to <strong>Payments</strong> and tap <strong>Pay now</strong> to pay with PhonePe, Google Pay, Paytm or any UPI app.
+                        </p>
+                        <a href="${APP_STORE_URL}" target="_blank" style="display: inline-block; background: #92C24A; color: #000000; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px;">
+                            Open Livinkey
+                        </a>
                     </td>
                 </tr>
             </table>
@@ -731,7 +727,7 @@ const sendMaintenanceCompletionReminder = async (email, tenantName, requestData)
     </tr>
     <tr>
         <td style="padding: 10px 0; text-align: center;">
-            <a href="${process.env.APP_URL}/tenant-maintenance" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+            <a href="${WEBSITE_URL}" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
                 Open Maintenance
             </a>
         </td>
@@ -872,7 +868,7 @@ const sendCustomAdminNotificationEmail = async (email, tenantName, title, messag
     </tr>
     <tr>
         <td style="padding: 10px 0; text-align: center;">
-            <a href="${process.env.APP_URL || 'https://livinkey.com'}/tenant-notifications" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
+            <a href="${WEBSITE_URL}" target="_blank" style="display: inline-block; background-color: #92C24A; color: #000000; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px;">
                 View in App
             </a>
         </td>

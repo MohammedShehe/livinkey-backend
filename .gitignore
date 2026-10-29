@@ -124,3 +124,5 @@ $RECYCLE.BIN/
 # ============================================================
 # pubspec.lock  # Uncomment if you want to ignore lock file
 node_modules
+
+!.env.example

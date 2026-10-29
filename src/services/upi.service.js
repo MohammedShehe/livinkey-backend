@@ -7,7 +7,7 @@ const crypto = require("crypto");
 // UPI Payment Configuration
 const UPI_CONFIG = {
     // Merchant UPI ID - Get this from your payment provider
-    merchant_upi_id: process.env.MERCHANT_UPI_ID || "merchant@upi",
+    merchant_upi_id: process.env.MERCHANT_UPI_ID || "",
     // Merchant Name
     merchant_name: process.env.MERCHANT_NAME || "Livinkey",
     // Merchant Code
@@ -90,7 +90,6 @@ const getAppPaymentLinks = (upiLink) => {
         paytm: query ? `paytmmp://pay?${query}` : upiLink,
         googlepay: query ? `tez://upi/pay?${query}` : upiLink,
         upi: upiLink,
-        web: upiLink.replace("upi://pay", "https://pay.upi.in/upi"),
     };
 };
 

@@ -1,16 +1,17 @@
 /**
  * Webhook Routes (Twilio)
- * These should be public (no auth) but you can add signature validation
+ * Public endpoints, authenticated by the Twilio request signature
  */
 
 const express = require("express");
 const router = express.Router();
+const verifyTwilio = require("../middleware/twilio.signature");
 const webhookController = require("../controllers/whatsapp.webhook.controller");
 
 // Incoming WhatsApp messages
-router.post("/twilio/whatsapp", webhookController.handleIncomingMessage);
+router.post("/twilio/whatsapp", verifyTwilio, webhookController.handleIncomingMessage);
 
 // Delivery status callbacks
-router.post("/twilio/status", webhookController.handleStatusCallback);
+router.post("/twilio/status", verifyTwilio, webhookController.handleStatusCallback);
 
 module.exports = router;

@@ -13,7 +13,7 @@ const { deleteFile } = require("../services/upload.service");
  */
 const generateQRCode = async (data, folder) => {
     const tempDir = os.tmpdir();
-    const fileName = `qr_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
+    const fileName = `qr_${Date.now()}_${require('crypto').randomBytes(5).toString('hex')}.png`;
     const filePath = path.join(tempDir, fileName);
     
     try {
@@ -64,7 +64,7 @@ const cleanupUploadedFiles = async (uploadedFiles) => {
 const generateOTP = (length = 4) => {
     const min = Math.pow(10, length - 1);
     const max = Math.pow(10, length) - 1;
-    return Math.floor(min + Math.random() * (max - min + 1)).toString();
+    return require('crypto').randomInt(min, max + 1).toString();
 };
 
 /**
@@ -101,23 +101,23 @@ const getQRExpiryTime = (existingExpiry = null) => {
  * @returns {string} - Generated password
  */
 const generatePassword = (length = 12) => {
-    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const lowercase = "abcdefghijklmnopqrstuvwxyz";
-    const numbers = "0123456789";
-    const specials = "!@#$%^&*";
+    const crypto = require("crypto");
+    const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lowercase = "abcdefghijkmnopqrstuvwxyz";
+    const numbers = "23456789";
+    const specials = "!@#$%&*";
     const all = uppercase + lowercase + numbers + specials;
-    
-    let password = "";
-    password += uppercase[Math.floor(Math.random() * uppercase.length)];
-    password += lowercase[Math.floor(Math.random() * lowercase.length)];
-    password += numbers[Math.floor(Math.random() * numbers.length)];
-    password += specials[Math.floor(Math.random() * specials.length)];
-    
-    for (let i = 4; i < length; i++) {
-        password += all[Math.floor(Math.random() * all.length)];
+    const pick = (set) => set[crypto.randomInt(0, set.length)];
+
+    const chars = [pick(uppercase), pick(lowercase), pick(numbers), pick(specials)];
+    for (let i = chars.length; i < length; i++) chars.push(pick(all));
+
+    // Fisher-Yates shuffle with a secure RNG
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        [chars[i], chars[j]] = [chars[j], chars[i]];
     }
-    
-    return password.split('').sort(() => Math.random() - 0.5).join('');
+    return chars.join("");
 };
 
 /**

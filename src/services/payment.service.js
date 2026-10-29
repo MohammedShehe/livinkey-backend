@@ -7,6 +7,7 @@ const fs = require("fs");
 const os = require("os");
 const axios = require("axios");
 const crypto = require("crypto");
+const { API_URL, WEBSITE_URL } = require("../utils/links");
 
 const PAYMENT_CONFIG = {
     razorpay_key_id: process.env.RAZORPAY_KEY_ID,
@@ -316,8 +317,8 @@ const createPaymentOrder = async (billData, tenantData) => {
                 customerEmail: tenantData.email,
                 customerPhone: tenantData.phone,
                 customerName: tenantData.full_name,
-                returnUrl: `${process.env.APP_URL}/payment/cashfree/return`,
-                notifyUrl: `${process.env.APP_URL}/api/webhooks/cashfree`,
+                returnUrl: `${WEBSITE_URL}`,
+                notifyUrl: `${API_URL}/api/payments/webhook/cashfree`,
             });
             
             return {
@@ -393,41 +394,96 @@ const updateTransactionStatus = async (connection, orderId, status, responseData
     return result.affectedRows > 0;
 };
 
-const processWebhook = async (gateway, payload) => {
+const safeEqual = (a, b) => {
+    const A = Buffer.from(String(a || ""));
+    const B = Buffer.from(String(b || ""));
+    return A.length === B.length && crypto.timingSafeEqual(A, B);
+};
+
+const webhookError = (status, message) => Object.assign(new Error(message), { status });
+
+/**
+ * Verify the gateway signature and normalise the payload.
+ * Returns { orderId, paymentId, status, amount }.
+ */
+const parseVerifiedWebhook = (gateway, payload, ctx = {}) => {
+    const headers = ctx.headers || {};
+    const rawBody = ctx.rawBody;
+
+    if (gateway === 'razorpay') {
+        const headerSig = headers['x-razorpay-signature'];
+        if (headerSig) {
+            // Real webhook: HMAC of the raw body with the webhook secret
+            const secret = PAYMENT_CONFIG.razorpay_webhook_secret;
+            if (!secret || !rawBody) throw webhookError(401, 'Webhook secret is not configured');
+            const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+            if (!safeEqual(expected, headerSig)) throw webhookError(401, 'Invalid webhook signature');
+
+            const entity = payload?.payload?.payment?.entity;
+            if (!entity?.order_id) throw webhookError(200, 'Ignored event');
+            const event = payload.event;
+            if (event === 'payment.failed') {
+                return { orderId: entity.order_id, paymentId: entity.id, status: 'failed', amount: entity.amount / 100 };
+            }
+            if (event !== 'payment.captured' && event !== 'order.paid') throw webhookError(200, 'Ignored event');
+            return { orderId: entity.order_id, paymentId: entity.id, status: 'success', amount: entity.amount / 100 };
+        }
+        // Client-side checkout callback: signature made with the key secret
+        if (!verifyRazorpaySignature(payload || {})) throw webhookError(401, 'Invalid Razorpay signature');
+        return { orderId: payload.razorpay_order_id, paymentId: payload.razorpay_payment_id, status: 'success', amount: undefined };
+    }
+
+    if (gateway === 'cashfree') {
+        const signature = headers['x-webhook-signature'];
+        const timestamp = headers['x-webhook-timestamp'];
+        const secret = PAYMENT_CONFIG.cashfree_secret_key;
+        if (!secret || !rawBody || !signature || !timestamp) throw webhookError(401, 'Missing webhook signature');
+        const ageMs = Math.abs(Date.now() - Number(timestamp) * (String(timestamp).length <= 10 ? 1000 : 1));
+        if (!Number.isFinite(ageMs) || ageMs > 10 * 60 * 1000) throw webhookError(401, 'Webhook timestamp is too old');
+        const expected = crypto.createHmac('sha256', secret).update(String(timestamp) + rawBody.toString('utf8')).digest('base64');
+        if (!safeEqual(expected, signature)) throw webhookError(401, 'Invalid webhook signature');
+
+        const data = payload?.data || {};
+        const orderId = data.order?.order_id || payload.order_id;
+        const paymentStatus = data.payment?.payment_status || payload.payment_status;
+        const orderStatus = payload.order_status;
+        if (!orderId) throw webhookError(200, 'Ignored event');
+        const paid = paymentStatus === 'SUCCESS' || orderStatus === 'PAID' || payload.type === 'PAYMENT_SUCCESS_WEBHOOK';
+        const failed = paymentStatus === 'FAILED' || payload.type === 'PAYMENT_FAILED_WEBHOOK';
+        if (!paid && !failed) throw webhookError(200, 'Ignored event');
+        return {
+            orderId,
+            paymentId: data.payment?.cf_payment_id ? String(data.payment.cf_payment_id) : (payload.payment_id || payload.transaction_id),
+            status: paid ? 'success' : 'failed',
+            amount: Number(data.payment?.payment_amount ?? data.order?.order_amount ?? payload.order_amount)
+        };
+    }
+
+    throw webhookError(400, `Unsupported gateway: ${gateway}`);
+};
+
+const processWebhook = async (gateway, payload, ctx = {}) => {
+    // Verify BEFORE touching the database or opening a transaction.
+    const parsed = parseVerifiedWebhook(gateway, payload, ctx);
+    const { orderId, paymentId, status } = parsed;
+    const amount = parsed.amount;
+
     const connection = await db.getConnection();
-    
+
     try {
         await connection.beginTransaction();
-        
-        let orderId, status, paymentId, amount;
-        
-        switch (gateway) {
-            case 'razorpay':
-                if (!verifyRazorpaySignature(payload)) {
-                    throw new Error('Invalid Razorpay signature');
-                }
-                orderId = payload.razorpay_order_id;
-                paymentId = payload.razorpay_payment_id;
-                status = 'success';
-                break;
-                
-            case 'cashfree':
-                orderId = payload.order_id;
-                paymentId = payload.payment_id || payload.transaction_id;
-                status = payload.order_status === 'PAID' ? 'success' : 'failed';
-                amount = payload.order_amount;
-                break;
-                
-            default:
-                throw new Error(`Unsupported gateway: ${gateway}`);
-        }
-        
+
         const [txRows] = await connection.execute(
             `SELECT * FROM payment_transactions WHERE gateway_order_id = ? FOR UPDATE`,
             [orderId]
         );
         if (!txRows.length) throw new Error("Payment transaction not found for webhook");
         const transaction = txRows[0];
+
+        // The gateway-reported amount must match what we asked it to collect.
+        if (amount !== undefined && Number.isFinite(Number(amount)) && Math.abs(Number(amount) - Number(transaction.amount)) > 0.01) {
+            throw webhookError(400, "Gateway amount does not match the transaction");
+        }
 
         // Idempotency: a replayed successful webhook must never add money twice.
         if (transaction.status === 'success') {

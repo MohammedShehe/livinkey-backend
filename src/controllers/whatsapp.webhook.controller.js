@@ -24,7 +24,7 @@ exports.handleIncomingMessage = async (req, res) => {
       ProfileName,
     } = req.body;
 
-    console.log("Incoming WhatsApp:", { From, Body, MessageSid });
+    console.log("Incoming WhatsApp message", { MessageSid });
 
     // Normalize phone (remove whatsapp: prefix)
     const phone = From ? From.replace("whatsapp:", "") : null;
@@ -68,7 +68,8 @@ exports.handleIncomingMessage = async (req, res) => {
       external_id: MessageSid,
       metadata: {
         profileName: ProfileName,
-        raw: req.body,
+        to: To,
+        numMedia: NumMedia || "0",
       },
     });
 

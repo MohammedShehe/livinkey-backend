@@ -1,54 +1,20 @@
 // middleware/tenant.auth.middleware.js
-const jwt = require("jsonwebtoken");
+const {
+    sendAuthError, verifyRequestToken, assertAccountActive, enforcePasswordChangeScope, AuthError
+} = require("../utils/auth.core");
 
-const tenantAuthMiddleware = (req, res, next) => {
+const tenantAuthMiddleware = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
-        let token = null;
-
-        // Check both headers AND query params (for downloads opened in new tab)
-        if (authHeader && authHeader.startsWith("Bearer ")) {
-            token = authHeader.split(" ")[1];
-        } else if (req.query && req.query.token) {
-            // Fallback for requests that can't set headers (e.g., window.open/download)
-            token = req.query.token;
+        const decoded = verifyRequestToken(req);
+        if (decoded.role !== "tenant") {
+            throw new AuthError(403, "FORBIDDEN", "You don't have access to this area.");
         }
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: "Access denied. No token provided."
-            });
-        }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        if (decoded.role !== 'tenant') {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. Invalid user role."
-            });
-        }
-
+        enforcePasswordChangeScope(decoded, req);
+        await assertAccountActive(decoded);
         req.tenant = decoded;
         next();
-
     } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({
-                success: false,
-                message: "Token expired. Please login again."
-            });
-        } else if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid token. Please login again."
-            });
-        }
-        return res.status(401).json({
-            success: false,
-            message: "Invalid or expired token."
-        });
+        return sendAuthError(res, error);
     }
 };
 

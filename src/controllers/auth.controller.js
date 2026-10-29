@@ -1,3 +1,5 @@
+const attemptGuard = require("../utils/attempt.guard");
+const { validatePassword } = require("../utils/password.policy");
 const ActivityService = require("../services/activity.log.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
@@ -10,6 +12,7 @@ const { generateToken } = require("../services/token.service");
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (attemptGuard.guard(res, "admin-login", email, { max: 8 })) return;
 
         if (!email || !password) {
             return res.status(400).json(
@@ -86,13 +89,12 @@ exports.login = async (req, res) => {
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
+        if (attemptGuard.guard(res, "admin-otp", email, { max: 5, onLock: attemptGuard.clearOtpFor("admins", email) })) return;
 
         const admin = await Admin.findByEmail(email);
 
         if (!admin) {
-            return res.status(404).json(
-                new ApiResponse(false, "Admin not found.")
-            );
+            return res.status(400).json(new ApiResponse(false, "Invalid or expired code. Please request a new one."));
         }
 
         if (!admin.otp) {
@@ -177,10 +179,7 @@ exports.resendOTP = async (req, res) => {
         const admin = await Admin.findByEmail(email);
 
         if (!admin) {
-            return res.status(404).json({
-                success: false,
-                message: "Admin not found."
-            });
+            return res.json({ success: true, message: "If this email is registered, a verification code has been sent." });
         }
 
         const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Resend");
@@ -213,10 +212,7 @@ exports.forgotPassword = async (req, res) => {
         const admin = await Admin.findByEmail(email);
 
         if (!admin) {
-            return res.status(404).json({
-                success: false,
-                message: "Email not found."
-            });
+            return res.json({ success: true, message: "If this email is registered, a verification code has been sent." });
         }
 
         const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Forgot Password");
@@ -247,14 +243,12 @@ exports.resendForgotPasswordOTP = exports.forgotPassword;
 exports.verifyForgotPasswordOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
+        if (attemptGuard.guard(res, "admin-otp", email, { max: 5, onLock: attemptGuard.clearOtpFor("admins", email) })) return;
 
         const admin = await Admin.findByEmail(email);
 
         if (!admin) {
-            return res.status(404).json({
-                success: false,
-                message: "Admin not found."
-            });
+            return res.status(400).json({ success: false, message: "Invalid or expired code. Please request a new one." });
         }
 
         if (!admin.otp) {
@@ -324,11 +318,9 @@ exports.resetPassword = async (req, res) => {
             });
         }
 
-        if (password.length < 6) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 6 characters long."
-            });
+        const pwErr = validatePassword(password);
+        if (pwErr) {
+            return res.status(400).json({ success: false, message: pwErr });
         }
 
         const admin = await Admin.findByResetToken(resetToken);
@@ -384,11 +376,9 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        if (new_password.length < 6) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 6 characters long."
-            });
+        const pwErr = validatePassword(new_password);
+        if (pwErr) {
+            return res.status(400).json({ success: false, message: pwErr });
         }
 
         const admin = await Admin.findById(adminId);

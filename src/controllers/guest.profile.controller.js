@@ -1,3 +1,4 @@
+const { validatePassword } = require("../utils/password.policy");
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 
@@ -386,11 +387,9 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        if (new_password.length < 8) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 8 characters long"
-            });
+        const pwErr = validatePassword(new_password);
+        if (pwErr) {
+            return res.status(400).json({ success: false, message: pwErr });
         }
 
         const connection = await db.getConnection();
