@@ -115,7 +115,11 @@ const getDocumentsAdmin = async (req, res) => {
             search,
             tenant_id,
             tenant_status: tenant_status || status || 'active',
-            has_vehicle
+            has_vehicle,
+            review_status: req.query.review_status,
+            only_new: req.query.only_new,
+            uploaded_from: req.query.uploaded_from,
+            uploaded_to: req.query.uploaded_to
         });
 
         return res.json({
@@ -435,7 +439,50 @@ const getTenantVehicleAdmin = async (req, res) => {
     }
 };
 
+const reviewDocumentAdmin = async (req, res) => {
+    try {
+        const result = await tenantDocumentService.reviewDocument(req.params.documentId, req.body.action, req.body.note, req.admin);
+        return res.json({ success: true, message: result.review_status === 'approved' ? 'Document approved.' : 'Document rejected. The tenant has been notified.', data: result });
+    } catch (error) {
+        return res.status(400).json({ success: false, message: error.message || 'Could not review the document.' });
+    }
+};
+
+const reviewDocumentsBulk = async (req, res) => {
+    try {
+        const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Boolean).slice(0, 200) : [];
+        if (!ids.length) return res.status(400).json({ success: false, message: 'Select at least one document.' });
+        let ok = 0; const failed = [];
+        for (const id of ids) {
+            try { await tenantDocumentService.reviewDocument(id, req.body.action, req.body.note, req.admin); ok++; }
+            catch (e) { failed.push({ id, message: e.message }); }
+        }
+        return res.json({ success: ok > 0, message: `${ok} document${ok === 1 ? '' : 's'} ${req.body.action === 'approve' ? 'approved' : 'rejected'}${failed.length ? `, ${failed.length} skipped` : ''}.`, data: { ok, failed } });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Could not review the documents.' });
+    }
+};
+
+const markDocumentsSeen = async (req, res) => {
+    try {
+        const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+        const n = await require('../models/tenant.document.model').markSeen(ids);
+        return res.json({ success: true, data: { updated: n } });
+    } catch (error) { return res.status(500).json({ success: false, message: 'Could not update.' }); }
+};
+
+const getReviewSummary = async (req, res) => {
+    try {
+        const pgId = parseInt(req.query.pg_id, 10) || null;
+        return res.json({ success: true, data: await require('../models/tenant.document.model').reviewCounts(pgId) });
+    } catch (error) { return res.status(500).json({ success: false, message: 'Could not load the summary.' }); }
+};
+
 module.exports = {
+    reviewDocumentAdmin,
+    reviewDocumentsBulk,
+    markDocumentsSeen,
+    getReviewSummary,
     uploadDocument,
     getMyDocuments,
     getDocumentTypes,

@@ -18,6 +18,40 @@ const getRequiredDocuments = (residency) => {
     }
 };
 
+// Tell admins a document needs review (in-app bell; shows as NEW in the Documents page)
+const notifyAdminsOfUpload = async (tenant, label, document, isReupload) => {
+    try {
+        const NotificationService = require("./notification.service");
+        await NotificationService.sendNotificationToAllAdmins('DOCUMENT_UPLOADED', {
+            title: isReupload ? 'Document re-uploaded' : 'New document to review',
+            message: `${tenant.full_name} uploaded ${label}${tenant.pg_name ? ' (' + tenant.pg_name + ')' : ''}. Please review it.`,
+            entity_id: document ? document.id : null,
+            entity_type: 'document',
+            link: '/documents'
+        });
+    } catch (e) { console.error('Document upload notification failed:', e.message); }
+};
+
+const reviewDocument = async (documentId, action, note, admin) => {
+    if (!['approve', 'reject'].includes(action)) throw new Error('Choose approve or reject.');
+    const doc = await TenantDocumentModel.getDocumentById(documentId);
+    if (!doc) throw new Error('Document not found');
+    const cleanNote = note ? String(note).trim().slice(0, 500) : null;
+    if (action === 'reject' && !cleanNote) throw new Error('Please tell the tenant why the document was rejected.');
+    const status = action === 'approve' ? 'approved' : 'rejected';
+    await TenantDocumentModel.setReview(documentId, status, cleanNote, admin.id);
+    const label = (DOCUMENT_TYPES[doc.document_type] || {}).label || doc.document_type;
+    try {
+        const tenantNotifs = require('./tenant.notification.service');
+        await tenantNotifs.sendTenantNotification(doc.tenant_id, action === 'approve' ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED', {
+            title: action === 'approve' ? 'Document approved' : 'Document needs attention',
+            message: action === 'approve' ? `Your ${label} has been approved.` : `Your ${label} was rejected: ${cleanNote} Please upload it again.`,
+            entity_id: doc.id, entity_type: 'document', link: '/documents'
+        });
+    } catch (e) { console.error('Document review notification failed:', e.message); }
+    return { id: doc.id, review_status: status, review_note: cleanNote, tenant_id: doc.tenant_id, label };
+};
+
 // Upload document
 const uploadDocument = async (tenantId, documentType, file) => {
     const connection = await db.getConnection();
@@ -54,8 +88,15 @@ const uploadDocument = async (tenantId, documentType, file) => {
 
         // Check if document already exists
         const existing = await TenantDocumentModel.getDocumentsByTenantAndType(tenantId, documentType);
+        let replacedOld = null;
         if (existing) {
-            throw new Error(`Document "${documentType}" already uploaded. Delete existing to re-upload.`);
+            if (existing.review_status === 'rejected') {
+                replacedOld = existing; // tenant is re-uploading a rejected document
+            } else if (existing.review_status === 'approved') {
+                throw new Error(`"${documentDefinition.label}" is already approved. Contact the office if it needs to change.`);
+            } else {
+                throw new Error(`"${documentDefinition.label}" is already uploaded and waiting for review.`);
+            }
         }
 
         // Upload to Cloudinary
@@ -69,7 +110,12 @@ const uploadDocument = async (tenantId, documentType, file) => {
         }
 
         // Create document record
+        if (replacedOld) {
+            await TenantDocumentModel.deleteDocument(connection, replacedOld.id, tenantId);
+        }
         const documentId = await TenantDocumentModel.createDocument(connection, {
+            review_status: 'pending',
+            uploaded_by_type: 'tenant',
             tenant_id: tenantId,
             document_type: documentType,
             document_url: uploadResult.secure_url,
@@ -81,7 +127,11 @@ const uploadDocument = async (tenantId, documentType, file) => {
 
         await connection.commit();
 
+        if (replacedOld && replacedOld.document_public_id) {
+            deleteFile(replacedOld.document_public_id, replacedOld.document_resource_type).catch(() => {});
+        }
         const document = await TenantDocumentModel.getDocumentById(documentId);
+        notifyAdminsOfUpload(tenant, documentDefinition.label, document, !!replacedOld).catch(() => {});
         return document;
 
     } catch (error) {
@@ -479,6 +529,7 @@ const updateVehicleInfo = async (tenantId, { has_vehicle, vehicle_number }) => {
 };
 
 module.exports = {
+    reviewDocument,
     uploadDocument,
     getTenantDocuments,
     getDocumentById,

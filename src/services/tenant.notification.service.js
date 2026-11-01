@@ -70,6 +70,18 @@ const TENANT_NOTIFICATION_TYPES = {
         color: '#2ecc71',
         linkPrefix: '/maintenance/'
     },
+    DOCUMENT_APPROVED: {
+        type: 'document_approved',
+        icon: '✅',
+        color: '#2ecc71',
+        linkPrefix: '/documents/'
+    },
+    DOCUMENT_REJECTED: {
+        type: 'document_rejected',
+        icon: '⚠️',
+        color: '#e74c3c',
+        linkPrefix: '/documents/'
+    },
     DOCUMENT_REMINDER: {
         type: 'document_reminder',
         icon: '📋',

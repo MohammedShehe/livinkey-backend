@@ -10,8 +10,10 @@ const createDocument = async (connection, documentData) => {
             document_public_id,
             document_resource_type,
             original_name,
-            file_size
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            file_size,
+            review_status,
+            uploaded_by_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             documentData.tenant_id,
@@ -20,7 +22,9 @@ const createDocument = async (connection, documentData) => {
             documentData.document_public_id,
             documentData.document_resource_type || 'image',
             documentData.original_name || null,
-            documentData.file_size || null
+            documentData.file_size || null,
+            documentData.review_status || 'pending',
+            documentData.uploaded_by_type || 'tenant'
         ]
     );
     return result.insertId;
@@ -39,7 +43,10 @@ const getDocumentsByTenant = async (tenantId) => {
             original_name,
             file_size,
             created_at,
-            updated_at
+            updated_at,
+            review_status,
+            review_note,
+            reviewed_at
         FROM tenant_documents
         WHERE tenant_id = ?
         ORDER BY created_at DESC
@@ -142,8 +149,10 @@ const getDocumentsWithFilters = async (filters = {}) => {
             r.room_number,
             DATE(td.created_at) as upload_date,
             COALESCE(tdet.has_vehicle, 0) AS has_vehicle,
-            tdet.vehicle_number
+            tdet.vehicle_number,
+            ra.name AS reviewed_by_name
         FROM tenant_documents td
+        LEFT JOIN admins ra ON ra.id = td.reviewed_by
         INNER JOIN tenants t ON td.tenant_id = t.id
         LEFT JOIN tenant_details tdet ON t.id = tdet.tenant_id
         LEFT JOIN pgs p ON tdet.pg_id = p.id
@@ -189,6 +198,16 @@ const getDocumentsWithFilters = async (filters = {}) => {
             params.push(...types);
         }
     }
+
+    if (filters.review_status && ['pending','approved','rejected'].includes(filters.review_status)) {
+        query += ` AND td.review_status = ?`;
+        params.push(filters.review_status);
+    }
+    if (filters.only_new === '1' || filters.only_new === true) {
+        query += ` AND td.admin_seen_at IS NULL AND td.review_status = 'pending'`;
+    }
+    if (filters.uploaded_from) { query += ` AND DATE(td.created_at) >= ?`; params.push(filters.uploaded_from); }
+    if (filters.uploaded_to) { query += ` AND DATE(td.created_at) <= ?`; params.push(filters.uploaded_to); }
 
     if (filters.pg_id) {
         query += ` AND tdet.pg_id = ?`;
@@ -245,3 +264,30 @@ module.exports = {
     hasDocument,
     getDocumentCount
 };
+
+// ---------------- Review workflow ----------------
+const setReview = async (documentId, status, note, adminId) => {
+    await db.execute(
+        `UPDATE tenant_documents SET review_status = ?, review_note = ?, reviewed_by = ?, reviewed_at = NOW(), admin_seen_at = COALESCE(admin_seen_at, NOW())
+         WHERE id = ?`,
+        [status, note || null, adminId, documentId]
+    );
+};
+const markSeen = async (ids) => {
+    if (!ids || !ids.length) return 0;
+    const [r] = await db.query(`UPDATE tenant_documents SET admin_seen_at = NOW() WHERE id IN (?) AND admin_seen_at IS NULL`, [ids]);
+    return r.affectedRows;
+};
+const reviewCounts = async (pgId) => {
+    const [rows] = await db.query(
+        `SELECT d.review_status AS s, COUNT(*) AS c, SUM(d.admin_seen_at IS NULL AND d.review_status='pending') AS fresh
+         FROM tenant_documents d JOIN tenants t ON t.id = d.tenant_id LEFT JOIN tenant_details td ON td.tenant_id = d.tenant_id
+         WHERE t.role='tenant' AND (t.status IS NULL OR t.status='active') ${pgId ? 'AND td.pg_id = ?' : ''}
+         GROUP BY d.review_status`, pgId ? [pgId] : []);
+    const out = { pending: 0, approved: 0, rejected: 0, fresh: 0 };
+    rows.forEach(r => { out[r.s] = Number(r.c); out.fresh += Number(r.fresh || 0); });
+    return out;
+};
+module.exports.setReview = setReview;
+module.exports.markSeen = markSeen;
+module.exports.reviewCounts = reviewCounts;

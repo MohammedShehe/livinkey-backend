@@ -1,4 +1,5 @@
 const billService = require("../services/bill.service");
+const Electricity = require("../services/electricity.service");
 
 const createBill = async (req, res) => {
     try {
@@ -19,7 +20,9 @@ const createBill = async (req, res) => {
             payment_upi_id,
             bill_mode,
             pg_id,
-            room_id
+            room_id,
+            previous_reading,
+            current_reading
         } = req.body;
 
         let selectedTenantIds = [];
@@ -58,6 +61,24 @@ const createBill = async (req, res) => {
             room_id: room_id ? Number(room_id) : null,
             bill_mode: ['group','full','full_bill'].includes(String(bill_mode || '').toLowerCase()) ? 'group' : 'individual'
         };
+
+        // Meter readings -> amount. The server recomputes the amount from the PG's
+        // electricity formula so the figure can never be tampered with by a client.
+        const hasReadings = previous_reading !== undefined && previous_reading !== '' && current_reading !== undefined && current_reading !== '';
+        if (hasReadings) {
+            const resolvedPg = await Electricity.resolvePgId({ pgId: billData.pg_id, roomId: billData.room_id, tenantIds: selectedTenantIds });
+            const tariff = resolvedPg ? await Electricity.getSettings(resolvedPg) : null;
+            if (!tariff || !tariff.configured || !tariff.is_active) {
+                return res.status(400).json({ success: false, message: "No electricity formula is set for this PG yet. Ask a Super Admin to set it, or enter the amount manually." });
+            }
+            const calc = Electricity.calculate(tariff, previous_reading, current_reading);
+            billData.electricity_amount = calc.total;
+            billData.previous_reading = calc.previous;
+            billData.current_reading = calc.current;
+            billData.units_consumed = calc.units;
+            billData.electricity_rate = calc.effective_rate;
+            billData.electricity_breakdown = JSON.stringify({ ...calc, tariff_mode: tariff.billing_mode });
+        }
 
         const files = {
             meterImage: req.files?.meterImage || [],

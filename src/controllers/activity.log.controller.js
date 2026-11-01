@@ -99,11 +99,10 @@ const sendMessage = async (req,res) => {
             inAppSent = await TenantNotificationService.sendTenantNotification(id, "ADMIN_MESSAGE", data, {title:data.title, body:data.message});
         }
 
-        // Guests use the same tenants table/device infrastructure, so FCM works for both roles.
-        const tokens = await Firebase.getTenantFCMTokens(id);
-        if (tokens.length && process.env.ENABLE_PUSH_NOTIFICATIONS === "true") {
-            const result = await Firebase.sendPushNotificationToMultiple(tokens, {title:data.title, body:data.message}, {type:"admin_message",action:"open"});
-            if (Array.isArray(result)) pushSent = result.reduce((n,r)=>n+(r.successCount||0),0);
+        // Both notification services already deliver a real device push (guests and
+        // tenants share the same device table). Report how many devices were reachable.
+        if (process.env.ENABLE_PUSH_NOTIFICATIONS === "true") {
+            pushSent = (await Firebase.getTenantFCMTokens(id)).length;
         }
 
         let adminName = req.admin.name || null;

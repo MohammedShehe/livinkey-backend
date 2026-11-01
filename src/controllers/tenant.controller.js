@@ -583,15 +583,7 @@ const sendMessage = async (req, res) => {
             console.error("Guest in-app notification failed:", inAppErr.message);
         }
 
-        // Push (best-effort)
-        try {
-            const firebase = require("../config/firebase");
-            if (firebase && typeof firebase.sendToUser === 'function') {
-                await firebase.sendToUser(tenant.id, { title: notifTitle, body: message });
-            }
-        } catch (pushErr) {
-            console.error("Guest push failed:", pushErr.message);
-        }
+        // Device push is sent by guestNotificationService.sendGuestNotification above.
 
         await sendGuestMessageEmail(
             tenant.email,

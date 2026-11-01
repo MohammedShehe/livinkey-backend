@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const GuestNotificationModel = require("../models/guest.notification.model");
+const firebase = require("../config/firebase");
 
 /**
  * Notification Types for Guests
@@ -29,6 +30,12 @@ const GUEST_NOTIFICATION_TYPES = {
         color: '#3498db',
         linkPrefix: '/guest-notifications'
     },
+    PG_OFFER: {
+        type: 'pg_offer',
+        icon: '🎉',
+        color: '#e67e22',
+        linkPrefix: '/pgs/'
+    },
     ROOM_AVAILABLE: {
         type: 'room_available',
         icon: '🛏️',
@@ -57,6 +64,14 @@ const sendGuestNotification = async (guestId, type, data) => {
             icon: data.icon || config.icon,
             color: data.color || config.color
         });
+
+        // Real device push (shows in the phone's notification panel even when
+        // the app is closed). Never blocks or fails the in-app notification.
+        firebase.sendPushToUser(
+            guestId,
+            { title: data.pushTitle || data.title, body: data.pushBody || data.message },
+            { type: config.type, entity_id: data.entity_id || '', link: data.link || (config.linkPrefix + (data.entity_id || '')), action: 'open' }
+        ).catch(() => {});
 
         return notificationId;
     } catch (error) {
@@ -89,6 +104,13 @@ const sendNotificationsToGuests = async (guestIds, type, data) => {
         };
 
         await GuestNotificationModel.createNotificationsForGuests(guestIds, notificationData);
+
+        firebase.sendPushToUsers(
+            guestIds,
+            { title: data.pushTitle || data.title, body: data.pushBody || data.message },
+            { type: config.type, entity_id: data.entity_id || '', link: notificationData.link || '', action: 'open' }
+        ).catch(() => {});
+
         return guestIds.length;
     } catch (error) {
         console.error('Error sending notifications to guests:', error);

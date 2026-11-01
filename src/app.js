@@ -35,6 +35,8 @@ const conversationRoutes = require("./routes/conversation.routes");
 const livinkeyNoticeRoutes = require("./routes/livinkey.notice.routes");
 const livinkeyAdRoutes = require("./routes/livinkey.ad.routes");
 const siteSettingsRoutes = require("./routes/site.settings.routes");
+const expenseRoutes = require("./routes/expense.routes");
+const electricityRoutes = require("./routes/electricity.routes");
 
 const app = express();
 
@@ -145,6 +147,8 @@ app.use("/api/conversations", conversationRoutes);
 app.use("/api/livinkey-notices", livinkeyNoticeRoutes);
 app.use("/api/livinkey-ads", livinkeyAdRoutes);
 app.use("/api/site-settings", siteSettingsRoutes);
+app.use("/api/expenses", expenseRoutes);
+app.use("/api/electricity", electricityRoutes);
 app.use("/api/download-token", downloadTokenRoutes);
 
 // 404 handler for undefined routes

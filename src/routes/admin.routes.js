@@ -7,6 +7,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const upload = require("../middleware/upload.middleware");
 const overviewController = require("../controllers/admin.overview.controller");
+const dashboardController = require("../controllers/admin.dashboard.controller");
 
 // Admin dashboard with greeting (Protected)
 router.get(
@@ -18,6 +19,13 @@ router.get(
 );
 
 // Monitoring endpoints (must stay above "/:id")
+router.get(
+    "/analytics",
+    authMiddleware,
+    roleMiddleware("super_admin", "admin"),
+    dashboardController.getDashboard
+);
+
 router.get(
     "/overview",
     authMiddleware,

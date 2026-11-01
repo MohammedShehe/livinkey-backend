@@ -1,3 +1,4 @@
+const PgOfferModel = require("../models/pg.offer.model");
 const db = require("../config/db");
 
 // ============================================================
@@ -243,7 +244,11 @@ exports.getAllPGs = async (req, res) => {
         const [rows] = await connection.execute(query, params);
 
         let vacantCount = 0;
+        const offersByPg = await PgOfferModel.liveForPgs(rows.map(r => r.id)).catch(() => ({}));
         for (const pg of rows) {
+            pg.offers = offersByPg[pg.id] || [];
+            pg.has_offer = pg.offers.length > 0;
+            pg.best_offer = pg.offers[0] || null;
             const [images] = await connection.execute(
                 `
                 SELECT image_url, display_order 
@@ -429,6 +434,9 @@ exports.getPGDetails = async (req, res) => {
             [id]
         );
         pg.images = images.map(img => img.image_url);
+        pg.offers = await PgOfferModel.liveForPg(id).catch(() => []);
+        pg.has_offer = pg.offers.length > 0;
+        pg.best_offer = pg.offers[0] || null;
 
         const [floors] = await connection.execute(
             `

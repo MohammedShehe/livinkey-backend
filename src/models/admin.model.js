@@ -171,7 +171,8 @@ const createDefaultPermissions = async (connection, adminId) => {
         "activity_logs",
         "conversations",
         "ads",
-        "about_livinkey"
+        "about_livinkey",
+        "expenses"
     ];
 
     const values = modules.map(module => [

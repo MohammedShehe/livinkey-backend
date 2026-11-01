@@ -157,7 +157,8 @@ const sendPushNotification = async (fcmToken, notification, data = {}) => {
           channelId: 'livinkey_channel',
           priority: 'high',
           visibility: 'public',
-          icon: '@mipmap/ic_launcher',
+          icon: 'ic_stat_notification',
+          color: '#92C24A',
         },
       },
       apns: {
@@ -212,19 +213,24 @@ const sendPushNotificationToMultiple = async (fcmTokens, notification, data = {}
           body: notification.body || 'You have a new notification',
         },
         data: {
-          type: data.type || 'general',
+          type: String(data.type || 'general'),
           entity_id: String(data.entity_id || ''),
-          action: data.action || 'open',
+          action: String(data.action || 'open'),
+          link: String(data.link || ''),
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
           title: String(notification.title || 'Livinkey'),
           body: String(notification.body || 'You have a new notification'),
         },
         android: {
           priority: 'high',
+          ttl: 24 * 60 * 60 * 1000,
           notification: {
             sound: 'default',
             channelId: 'livinkey_channel',
             priority: 'high',
+            visibility: 'public',
+            icon: 'ic_stat_notification',
+            color: '#92C24A',
           },
         },
         apns: {
@@ -234,10 +240,14 @@ const sendPushNotificationToMultiple = async (fcmTokens, notification, data = {}
               badge: 1,
             },
           },
+          headers: {
+            'apns-priority': '10',
+          },
         },
       };
 
       const response = await messaging.sendEachForMulticast(message);
+      await deactivateDeadTokens(chunk, response.responses);
       results.push({
         successCount: response.successCount,
         failureCount: response.failureCount,
@@ -289,6 +299,72 @@ const removeAllFCMTokens = async (tenantId) => {
   }
 };
 
+/**
+ * Deactivate tokens FCM reports as dead (uninstalled app / rotated token) so
+ * we stop sending to them and the "push sent" numbers stay honest.
+ */
+const deactivateDeadTokens = async (tokens, responses) => {
+  try {
+    const dead = [];
+    (responses || []).forEach((r, i) => {
+      const code = r && r.error && r.error.code;
+      if (code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token' ||
+          code === 'messaging/invalid-argument') {
+        dead.push(tokens[i]);
+      }
+    });
+    if (!dead.length) return;
+    const db = require('./db');
+    await db.query(
+      `UPDATE tenant_devices SET is_active = 0, updated_at = NOW() WHERE fcm_token IN (?)`,
+      [dead]
+    );
+  } catch (e) {
+    console.error('Failed to deactivate dead FCM tokens:', e.message);
+  }
+};
+
+/**
+ * One call that does everything for "push this to a person" – looks up the
+ * person's active devices (tenants AND guests share tenant_devices) and sends.
+ * Never throws; returns the number of devices that accepted the message.
+ */
+const sendPushToUser = async (userId, notification, data = {}) => {
+  try {
+    if (String(process.env.ENABLE_PUSH_NOTIFICATIONS).toLowerCase() !== 'true') return 0;
+    const tokens = await getTenantFCMTokens(userId);
+    if (!tokens.length) return 0;
+    const results = await sendPushNotificationToMultiple(tokens, notification, data);
+    if (!Array.isArray(results)) return 0;
+    return results.reduce((n, r) => n + (r.successCount || 0), 0);
+  } catch (e) {
+    console.error('sendPushToUser failed:', e.message);
+    return 0;
+  }
+};
+
+/** Push to many people at once (one token lookup for everybody). */
+const sendPushToUsers = async (userIds, notification, data = {}) => {
+  try {
+    if (String(process.env.ENABLE_PUSH_NOTIFICATIONS).toLowerCase() !== 'true') return 0;
+    if (!userIds || !userIds.length) return 0;
+    const db = require('./db');
+    const [rows] = await db.query(
+      `SELECT DISTINCT fcm_token FROM tenant_devices WHERE tenant_id IN (?) AND is_active = 1`,
+      [userIds]
+    );
+    const tokens = rows.map(r => r.fcm_token).filter(Boolean);
+    if (!tokens.length) return 0;
+    const results = await sendPushNotificationToMultiple(tokens, notification, data);
+    if (!Array.isArray(results)) return 0;
+    return results.reduce((n, r) => n + (r.successCount || 0), 0);
+  } catch (e) {
+    console.error('sendPushToUsers failed:', e.message);
+    return 0;
+  }
+};
+
 module.exports = {
   getTenantFCMTokens,
   saveFCMToken,
@@ -296,5 +372,8 @@ module.exports = {
   sendPushNotificationToMultiple,
   removeFCMToken,
   removeAllFCMTokens,
+  sendPushToUser,
+  sendPushToUsers,
+  sendToUser: (userId, n, d) => sendPushToUser(userId, { title: n.title, body: n.body }, d || {}),
   isFirebaseEnabled,  // Export this so other modules can check
 };

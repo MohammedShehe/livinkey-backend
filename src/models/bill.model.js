@@ -146,6 +146,14 @@ const createBill = async (connection, billData) => {
             billData.max_fine || 0
         ]
     );
+    // Meter readings (optional) – stored with the bill so tenants and admins can
+    // see exactly how the electricity amount was worked out.
+    if (billData.current_reading !== undefined && billData.current_reading !== null) {
+        await connection.execute(
+            `UPDATE bills SET previous_reading = ?, current_reading = ?, units_consumed = ?, electricity_rate = ?, electricity_breakdown = ? WHERE id = ?`,
+            [billData.previous_reading ?? null, billData.current_reading, billData.units_consumed ?? null, billData.electricity_rate ?? null, billData.electricity_breakdown ?? null, result.insertId]
+        );
+    }
     return result.insertId;
 };
 

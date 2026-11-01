@@ -36,6 +36,12 @@ adminRouter.use(roleMiddleware("super_admin", "admin"));
 // ONE-CALL document completeness for every active tenant (replaces N requests)
 adminRouter.get("/status-summary", overviewController.getDocumentStatusSummary);
 
+// REVIEW WORKFLOW (approve / reject) - Requires documents.edit permission
+adminRouter.get("/review-summary", permissionMiddleware("documents", "view"), tenantDocumentController.getReviewSummary);
+adminRouter.post("/review/bulk", permissionMiddleware("documents", "edit"), tenantDocumentController.reviewDocumentsBulk);
+adminRouter.post("/mark-seen", permissionMiddleware("documents", "view"), tenantDocumentController.markDocumentsSeen);
+adminRouter.post("/:documentId/review", permissionMiddleware("documents", "edit"), tenantDocumentController.reviewDocumentAdmin);
+
 // GET ALL DOCUMENTS - Requires documents.view permission
 adminRouter.get(
     "/all",

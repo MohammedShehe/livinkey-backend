@@ -2,6 +2,8 @@ const ActivityService = require("../services/activity.log.service");
 
 const moduleFromPath = path => {
     const p = path.toLowerCase();
+    if (p.includes("expense")) return "expenses";
+    if (p.includes("electricity")) return "pgs";
     if (p.includes("tenant")) return "tenants";
     if (p.includes("guest")) return "guests";
     if (p.includes("bill") || p.includes("payment")) return "payments";

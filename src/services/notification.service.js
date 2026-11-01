@@ -92,6 +92,12 @@ const NOTIFICATION_TYPES = {
     // ============================================================
     // FIXED: Added PAYMENT_PROOF_SUBMITTED type
     // ============================================================
+    DOCUMENT_UPLOADED: {
+        type: 'document_uploaded',
+        icon: '📎',
+        color: '#e67e22',
+        linkPrefix: '/documents/'
+    },
     PAYMENT_PROOF_SUBMITTED: {
         type: 'payment_proof_submitted',
         icon: '📥',
