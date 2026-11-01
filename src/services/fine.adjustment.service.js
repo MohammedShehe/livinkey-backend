@@ -20,7 +20,7 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
         // Lock the bill inside this transaction so two fine adjustments cannot
         // overwrite one another.
         const [billRows] = await connection.execute(
-            `SELECT b.*, t.full_name AS tenant_name, t.email AS tenant_email
+            `SELECT b.*, t.full_name AS tenant_name, t.email AS tenant_email, t.phone AS tenant_phone
              FROM bills b INNER JOIN tenants t ON t.id=b.tenant_id
              WHERE b.id=? AND b.deleted_at IS NULL FOR UPDATE`,
             [billId]
@@ -160,21 +160,35 @@ const adjustFine = async (billId, adminId, adjustmentData) => {
                 email: bill.tenant_email
             };
 
-            // Send email to tenant
+            const newTotalDue = Math.max(
+                (parseFloat(updatedBill.total_amount) || 0) +
+                (parseFloat(updatedBill.fine_amount) || 0) -
+                (parseFloat(updatedBill.paid_amount) || 0),
+                0
+            );
+
+            // WhatsApp (best effort). skipEmail: the dedicated "Late Fee Adjusted"
+            // email below is the one tenants should get - never a second, generic one.
             try {
-            await messagingService.sendFine(
-                { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
-                { amount: adjustmentData.new_fine_amount || adjustmentData.amount, reason: "Fine adjusted" }
-            );
-        } catch (waErr) { console.error("WhatsApp fine adjust failed:", waErr.message); }
-        await sendFineAdjustedEmail(
-                bill.tenant_email,
-                bill.tenant_name,
-                updatedBill,
-                currentFine,
-                newFine,
-                adjustmentData.reason.trim()
-            );
+                await messagingService.sendCustom(
+                    { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
+                    "Late Fee Adjusted",
+                    `Your late fee has been reduced from ₹${currentFine.toFixed(2)} to ₹${newFine.toFixed(2)}.\nNew total due: ₹${newTotalDue.toFixed(2)}.\nReason: ${adjustmentData.reason.trim()}`,
+                    { skipEmail: true }
+                );
+            } catch (waErr) { console.error("WhatsApp fine adjust failed:", waErr.message); }
+
+            // Email: independent try so a mail failure can never block push / in-app alerts.
+            try {
+                await sendFineAdjustedEmail(
+                    bill.tenant_email,
+                    bill.tenant_name,
+                    updatedBill,
+                    currentFine,
+                    newFine,
+                    adjustmentData.reason.trim()
+                );
+            } catch (mailErr) { console.error("Fine adjusted email failed:", mailErr.message); }
 
             // Send push notification
             const fcmTokens = await firebase.getTenantFCMTokens(bill.tenant_id);

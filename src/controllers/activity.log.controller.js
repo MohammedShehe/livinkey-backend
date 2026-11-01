@@ -117,7 +117,8 @@ const sendMessage = async (req,res) => {
                         await messagingService.sendCustom(
                             { id: person.id, phone: person.phone, email: person.email, full_name: person.full_name, role: person.role || "tenant" },
                             subject.trim() || title.trim(),
-                            message.trim()
+                            message.trim(),
+                            { skipEmail: true }
                         );
                     } catch (waErr) { console.error("WA activity msg failed:", waErr.message); }
                     await MailService.sendCustomAdminNotificationEmail(person.email, person.full_name, subject.trim() || title.trim(), message.trim(), adminName);

@@ -141,19 +141,57 @@ const sendMessage = async ({
           await mailService.sendOTPEmail(email, templateData.otp, templateData.purpose || "Login");
           break;
         case "bill":
-          // Adjust according to your existing function signature
-          if (mailService.sendBillEmail) {
-            await mailService.sendBillEmail(email, name, templateData);
+          // sendBillEmail needs a full bill row (total_amount, fine_amount, ...).
+          // Only send when the caller supplied one; otherwise a half-empty email
+          // (₹0.00 / NaN) would reach the tenant.
+          if (templateData.billData) {
+            await mailService.sendBillEmail(
+              email,
+              name,
+              templateData.billData,
+              templateData.billData.payment_qr,
+              templateData.billData.partial_payment_qr,
+              templateData.billData.electricity_meter_image || null,
+              templateData.billData.admin_qr || null,
+              templateData.billData.electricity_meter_image_2 || null
+            );
+          } else {
+            throw new Error("Bill email needs billData (not supplied)");
           }
           break;
         case "fine":
-          if (mailService.sendFineNotificationEmail) {
-            await mailService.sendFineNotificationEmail(email, name, templateData);
+          // Same protection: the fine emails need real bill figures.
+          if (templateData.billData && templateData.kind === "adjusted") {
+            await mailService.sendFineAdjustedEmail(
+              email,
+              name,
+              templateData.billData,
+              Number(templateData.oldFine) || 0,
+              Number(templateData.newFine) || 0,
+              templateData.reason || ""
+            );
+          } else if (templateData.billData) {
+            await mailService.sendFineNotificationEmail(
+              email,
+              name,
+              templateData.billData,
+              Number(templateData.fineAmount ?? templateData.amount) || 0,
+              Number(templateData.daysOverdue) || 0,
+              Number(templateData.billData.paid_amount || 0) > 0,
+              templateData.billData.payment_qr,
+              templateData.billData.partial_payment_qr,
+              templateData.previousFine
+            );
+          } else {
+            throw new Error("Fine email needs billData (not supplied)");
           }
           break;
         case "efrro":
           if (mailService.sendEFRROExpiryTenantEmail) {
-            await mailService.sendEFRROExpiryTenantEmail(email, name, templateData);
+            await mailService.sendEFRROExpiryTenantEmail(email, name, {
+              ...templateData,
+              days_until_expiry: templateData.days_until_expiry ?? templateData.daysLeft,
+            });
           }
           break;
         case "custom":
@@ -251,7 +289,7 @@ const sendOTP = async (user, otp, purpose = "Login") => {
   });
 };
 
-const sendBill = async (user, billData) => {
+const sendBill = async (user, billData, opts = {}) => {
   return sendMessage({
     userId: user.id,
     userType: user.role || "tenant",
@@ -260,10 +298,11 @@ const sendBill = async (user, billData) => {
     name: user.full_name || user.name,
     type: "bill",
     templateData: billData,
+    ...opts,
   });
 };
 
-const sendFine = async (user, fineData) => {
+const sendFine = async (user, fineData, opts = {}) => {
   return sendMessage({
     userId: user.id,
     userType: user.role || "tenant",
@@ -272,10 +311,11 @@ const sendFine = async (user, fineData) => {
     name: user.full_name || user.name,
     type: "fine",
     templateData: fineData,
+    ...opts,
   });
 };
 
-const sendCustom = async (user, title, message) => {
+const sendCustom = async (user, title, message, opts = {}) => {
   return sendMessage({
     userId: user.id,
     userType: user.role || "tenant",
@@ -285,6 +325,7 @@ const sendCustom = async (user, title, message) => {
     type: "custom",
     title,
     body: message,
+    ...opts,
   });
 };
 

@@ -252,13 +252,23 @@ const sendBillEmail = async (email, tenantName, billData, qrCodeUrl, partialQrUr
 };
 
 // ============ FINE NOTIFICATION EMAIL ============
-const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount, daysDelayed, hasPartialPayment, fullQrUrl, partialQrUrl) => {
-    const totalAmount = parseFloat(billData.total_amount) || 0;
-    const previousFine = parseFloat(billData.fine_amount) || 0;
-    const newTotal = totalAmount + fineAmount;
-    const fineAdded = fineAmount - previousFine;
+const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount, daysDelayed, hasPartialPayment, fullQrUrl, partialQrUrl, previousFineArg) => {
+    const money = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const totalAmount = money(billData.total_amount);
+    const paidAmount = money(billData.paid_amount);
+    // The fine that is on the bill NOW. Never trust a missing value.
+    const currentFine = money(fineAmount !== undefined && fineAmount !== null ? fineAmount : billData.fine_amount);
+    // billData is normally re-read AFTER the fine was saved, so its fine_amount is the
+    // new fine. The fine before this run must therefore be passed in explicitly.
+    const previousFine = Math.min(
+        money(previousFineArg !== undefined && previousFineArg !== null ? previousFineArg : 0),
+        currentFine
+    );
+    const fineAdded = Math.max(currentFine - previousFine, 0);
+    const newTotal = Math.max(totalAmount + currentFine - paidAmount, 0); // outstanding, after any payments
     const partialAmount = newTotal * 0.5;
-    const daysOverdue = daysDelayed;
+    const daysOverdue = Math.max(parseInt(daysDelayed, 10) || 0, 0);
+    const showPartial = !hasPartialPayment && partialQrUrl && newTotal > 0;
 
     const content = `
     <tr>
@@ -298,13 +308,14 @@ const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount
                             </table>
                         </div>
                         <p style="color: #4a5568; font-size: 13px; margin-top: 12px; margin-bottom: 0; text-align: center;">
-                            ${hasPartialPayment ? '⚠️ You have made a partial payment. Additional fees apply after 14 days.' : '⚠️ ₹100 late fee added for each day beyond the 7-day grace period.'}
+                            ${hasPartialPayment ? '⚠️ A partial payment has been received. The remaining balance must now be paid in full.' : '⚠️ A late fee is added for each day beyond the 7-day grace period.'}
                         </p>
                     </td>
                 </tr>
             </table>
         </td>
     </tr>
+    ${fullQrUrl && newTotal > 0 ? `
     <tr>
         <td style="padding: 0 40px 20px;">
             <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
@@ -315,13 +326,15 @@ const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount
                             <img src="${fullQrUrl}" alt="Payment QR Code" style="width: 200px; height: 200px; display: block; margin: 0 auto;">
                         </div>
                         <p style="color: #4a5568; font-size: 14px; margin-top: 12px; margin-bottom: 0;">
-                            Scan this QR code to pay the full amount of <strong>₹${newTotal.toFixed(2)}</strong>
+                            Scan this QR code to pay the outstanding amount of <strong>₹${newTotal.toFixed(2)}</strong>
                         </p>
                     </td>
                 </tr>
             </table>
         </td>
     </tr>
+    ` : ''}
+    ${showPartial ? `
     <tr>
         <td style="padding: 0 40px 20px;">
             <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: #f8faf5; border-radius: 12px; border: 1px solid #e8ecf1;">
@@ -339,6 +352,7 @@ const sendFineNotificationEmail = async (email, tenantName, billData, fineAmount
             </table>
         </td>
     </tr>
+    ` : ''}
     `;
 
     const html = buildEmailTemplate({
@@ -383,6 +397,7 @@ const sendCustomBillMessageEmail = async (email, tenantName, adminName, subject,
 
 // ============ CASH PAYMENT OTP EMAIL ============
 const sendCashPaymentOTPEmail = async (email, tenantName, otp, amount, pgName, roomNumber) => {
+    amount = Number(amount) || 0;
     const content = `
     <tr>
         <td style="color: #000000; font-size: 24px; font-weight: 600; padding-bottom: 8px; text-align: center;">
@@ -757,10 +772,15 @@ const sendMaintenanceCompletionReminder = async (email, tenantName, requestData)
  * Send fine adjusted email to tenant
  */
 const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFine, reason) => {
-    const totalAmount = parseFloat(billData.total_amount) || 0;
-    const paidAmount = parseFloat(billData.paid_amount) || 0;
-    const newTotalDue = totalAmount + newFine - paidAmount;
-    const reductionAmount = oldFine - newFine;
+    const money = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const totalAmount = money(billData.total_amount);
+    const paidAmount = money(billData.paid_amount);
+    oldFine = money(oldFine);
+    newFine = money(newFine);
+    const rawDue = totalAmount + newFine - paidAmount;
+    const newTotalDue = Math.max(rawDue, 0);
+    const reductionAmount = Math.max(oldFine - newFine, 0);
+    const safeReason = reason ? String(reason).replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
 
     const content = `
     <tr>
@@ -782,6 +802,14 @@ const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFi
                         <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #e8ecf1;">
                             <table width="100%" style="border-collapse: collapse;">
                                 <tr>
+                                    <td style="padding: 6px 0; color: #4a5568;">Original Bill Amount</td>
+                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${totalAmount.toFixed(2)}</td>
+                                </tr>
+                                ${paidAmount > 0 ? `<tr>
+                                    <td style="padding: 6px 0; color: #2ecc71;">Already Paid</td>
+                                    <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #2ecc71;">- ₹${paidAmount.toFixed(2)}</td>
+                                </tr>` : ''}
+                                <tr>
                                     <td style="padding: 6px 0; color: #4a5568;">Previous Late Fee</td>
                                     <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #e74c3c;">₹${oldFine.toFixed(2)}</td>
                                 </tr>
@@ -794,15 +822,15 @@ const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFi
                                     <td style="padding: 6px 0; text-align: right; font-weight: 500; color: ${newFine === 0 ? '#2ecc71' : '#e67e22'};">₹${newFine.toFixed(2)}</td>
                                 </tr>
                                 <tr>
-                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #000000;">New Total Due</td>
+                                    <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #000000;">${newTotalDue === 0 ? 'Balance Due' : 'New Total Due'}</td>
                                     <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A; font-size: 18px;">₹${newTotalDue.toFixed(2)}</td>
                                 </tr>
                             </table>
                         </div>
-                        ${reason ? `
+                        ${safeReason ? `
                         <div style="background: #f8faf5; border-radius: 8px; padding: 12px 16px; margin-top: 12px;">
                             <span style="font-size: 13px; color: #666; font-weight: 500;">Reason for adjustment:</span>
-                            <p style="font-size: 13px; color: #555; margin-top: 4px;">${reason}</p>
+                            <p style="font-size: 13px; color: #555; margin-top: 4px;">${safeReason}</p>
                         </div>` : ''}
                     </td>
                 </tr>
@@ -817,7 +845,7 @@ const sendFineAdjustedEmail = async (email, tenantName, billData, oldFine, newFi
         headerIcon: '💰',
         headerLabel: 'Livinkey',
         headerColor: '#92C24A',
-        alertMessage: 'Please check your updated bill in the Livinkey app. Your QR codes have been regenerated with the new total amount.',
+        alertMessage: 'Please check your updated bill in the Livinkey app. Your QR codes have been regenerated with the new outstanding amount.',
         alertColor: '#92C24A',
         footerText: 'This is an automated message, please do not reply.'
     });
@@ -922,6 +950,7 @@ module.exports = {
     sendPasswordResetEmail,
     sendBillEmail,
     sendFineNotificationEmail,
+    sendFineAdjustedEmail,
     sendCustomBillMessageEmail,
     sendCashPaymentOTPEmail,
     sendPaymentLinkEmail,

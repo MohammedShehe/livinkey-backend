@@ -67,7 +67,7 @@ const generatePaymentReceipt = (paymentData, type) => {
         </tr>` : ''}
         <tr>
             <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; font-weight: 600; color: #333;">Total Bill</td>
-            <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A;">₹${parseFloat(paymentData.bill_total || 0).toFixed(2)}</td>
+            <td style="padding: 10px 0 0 0; border-top: 2px solid #e8ecf1; text-align: right; font-weight: 700; color: #92C24A;">₹${billGrandTotal.toFixed(2)}</td>
         </tr>
         <tr>
             <td style="padding: 8px 0; color: #555;">Bill Month</td>

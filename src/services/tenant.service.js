@@ -399,6 +399,7 @@ const createTenant = async (tenantData, files = {}) => {
                     email: tenantData.email,
                     name: tenantData.full_name,
                     type: "custom",
+                    skipEmail: true, // welcome email with credentials is sent below
                     title: "Welcome to Livinkey",
                     body: `Hello ${tenantData.full_name}, your account has been created successfully. Please login to continue.`
                 });
@@ -857,10 +858,11 @@ const checkAndSendEFRROExpiryNotifications = async () => {
                     await messagingService.sendMessage({
                         userId: tenant.id,
                         userType: "tenant",
-                        phone: tenant.phone || tenant.email,
+                        phone: tenant.phone,
                         email: tenant.email,
                         name: tenant.full_name,
                         type: "efrro",
+                        skipEmail: true, // dedicated e-FRRO email is sent right below
                         templateData: { daysLeft: tenant.days_until_expiry }
                     });
                 } catch (waErr) { console.error("WhatsApp eFRRO failed:", waErr.message); }

@@ -130,7 +130,7 @@ exports.sendTenantNotification = async (req, res) => {
             const connection = await db.getConnection();
             const [tenants] = await connection.execute(
                 `
-                SELECT id, full_name, email 
+                SELECT id, full_name, email, phone 
                 FROM tenants 
                 WHERE id IN (${tenantIds.map(() => '?').join(',')})
                 `,
@@ -144,7 +144,8 @@ exports.sendTenantNotification = async (req, res) => {
                         await messagingService.sendCustom(
                             { id: tenant.id, phone: tenant.phone, email: tenant.email, full_name: tenant.full_name, role: "tenant" },
                             title.trim(),
-                            message.trim()
+                            message.trim(),
+                            { skipEmail: true }
                         );
                     } catch (waErr) { console.error("WA admin notif failed:", waErr.message); }
                     await mailService.sendCustomAdminNotificationEmail(

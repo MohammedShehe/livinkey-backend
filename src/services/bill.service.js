@@ -1003,6 +1003,7 @@ const processDelayedPayments = async () => {
                 b.*,
                 t.full_name as tenant_name,
                 t.email as tenant_email,
+                t.phone as tenant_phone,
                 td.payment_date as tenant_payment_date,
                 DATEDIFF(NOW(), b.sent_at) as days_since_sent
             FROM bills b
@@ -1073,7 +1074,11 @@ const processDelayedPayments = async () => {
                 const shouldSendEmail = !lastEmailSent || new Date(lastEmailSent).toDateString() !== todayDate;
                 
                 const totalAmount = parseFloat(bill.total_amount) || 0;
-                const totalWithFine = totalAmount + fineAmount;
+                const paidSoFar = parseFloat(bill.paid_amount) || 0;
+                const previousFine = parseFloat(bill.fine_amount) || 0; // fine BEFORE this run
+                const hasPartialPayment = paidSoFar > 0;
+                // QR codes must carry what is still owed (bill + fine - already paid).
+                const totalWithFine = Math.max(totalAmount + fineAmount - paidSoFar, 0);
                 
                 let fullQrUrl = bill.payment_qr;
                 let partialQrUrl = bill.partial_payment_qr;
@@ -1159,7 +1164,10 @@ const processDelayedPayments = async () => {
                         tryWhatsApp(
                             { id: bill.tenant_id, phone: bill.tenant_phone, email: bill.tenant_email, full_name: bill.tenant_name, role: "tenant" },
                             "fine",
-                            { amount: fineAmount, reason: "Fine applied" }
+                            {
+                                amount: fineAmount,
+                                reason: `Bill is ${fineAppliedDays} day${fineAppliedDays === 1 ? '' : 's'} overdue. Total due now ₹${totalWithFine.toFixed(2)}`
+                            }
                         );
                         await sendFineNotificationEmail(
                             bill.tenant_email,
@@ -1169,7 +1177,8 @@ const processDelayedPayments = async () => {
                             fineAppliedDays,
                             hasPartialPayment,
                             fullQrUrl,
-                            partialQrUrl
+                            partialQrUrl,
+                            previousFine
                         );
                     } catch (emailError) {
                         console.error(`Failed to send fine email for bill ${bill.id}:`, emailError);
