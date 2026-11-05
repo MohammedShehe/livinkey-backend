@@ -236,6 +236,24 @@ const buildWelcomeContent = (name, email, password, extraFields = {}) => {
  * @param {string} adminQrUrl - Admin QR code URL
  * @returns {string} - Bill HTML content
  */
+/**
+ * Meter-reading lines shown under the Electricity row of a bill.
+ * One line for a normal PG, main + inverter + total for a two-meter PG.
+ */
+const meterReadingsHtml = (b) => {
+    if (!b || b.current_reading === null || b.current_reading === undefined || b.current_reading === "") return "";
+    const n = (v) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    const line = (label, prev, cur, units) =>
+        `<tr><td colspan="2" style="padding: 2px 0 2px 12px; color: #718096; font-size: 12px;">${label}: ${n(prev)} → ${n(cur)} = <strong style="color:#4a5568;">${n(units)} units</strong></td></tr>`;
+    const dual = b.meter_mode === "dual" && b.inverter_current_reading !== null && b.inverter_current_reading !== undefined;
+    if (!dual) return line("Meter", b.previous_reading, b.current_reading, b.units_consumed != null ? b.units_consumed : (Number(b.current_reading) - Number(b.previous_reading || 0)));
+    const mainUnits = b.main_units != null ? b.main_units : (Number(b.current_reading) - Number(b.previous_reading || 0));
+    const invUnits = b.inverter_units != null ? b.inverter_units : (Number(b.inverter_current_reading) - Number(b.inverter_previous_reading || 0));
+    return line("Main meter", b.previous_reading, b.current_reading, mainUnits)
+        + line("Inverter meter", b.inverter_previous_reading, b.inverter_current_reading, invUnits)
+        + `<tr><td colspan="2" style="padding: 2px 0 6px 12px; color: #718096; font-size: 12px;">Total used: <strong style="color:#4a5568;">${n(b.units_consumed != null ? b.units_consumed : Number(mainUnits) + Number(invUnits))} units</strong></td></tr>`;
+};
+
 const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQrUrl, meterImageUrl, adminQrUrl, meterImageUrl2 = null) => {
     const fineAmount = parseFloat(billData.fine_amount) || 0;
     
@@ -381,7 +399,7 @@ const buildBillContent = (billData, totalDue, partialAmount, qrCodeUrl, partialQ
                                 <tr>
                                     <td style="padding: 6px 0; color: #4a5568;">Electricity</td>
                                     <td style="padding: 6px 0; text-align: right; font-weight: 500; color: #000000;">₹${parseFloat(billData.electricity_amount).toFixed(2)}</td>
-                                </tr>` : ''}
+                                </tr>${meterReadingsHtml(billData)}` : ''}
                                 ${parseFloat(billData.maintenance_amount || 0) > 0 ? `
                                 <tr>
                                     <td style="padding: 6px 0; color: #4a5568;">Maintenance</td>

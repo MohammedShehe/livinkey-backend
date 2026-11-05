@@ -106,16 +106,17 @@ const getMyStats = async (req, res) => {
 
 // ============ ADMIN MAINTENANCE ENDPOINTS ============
 
+// Query params shared by the list and the stats: status, issue_type, pg_id, month,
+// date_field, from, to, overdue, has_image, search (+ sort for the list)
+const adminFilters = (q) => ({
+    status: q.status, issue_type: q.issue_type, pg_id: q.pg_id, search: q.search,
+    month: q.month, date_field: q.date_field === "service" ? "service" : "created",
+    from: q.from, to: q.to, overdue: q.overdue, has_image: q.has_image, sort: q.sort
+});
+
 const getAllRequestsAdmin = async (req, res) => {
     try {
-        const { status, issue_type, pg_id, search } = req.query;
-
-        const requests = await maintenanceService.getAllRequests({
-            status,
-            issue_type,
-            pg_id,
-            search
-        });
+        const requests = await maintenanceService.getAllRequests(adminFilters(req.query));
 
         return res.json({
             success: true,
@@ -134,8 +135,7 @@ const getAllRequestsAdmin = async (req, res) => {
 
 const getAdminStats = async (req, res) => {
     try {
-        const { pg_id } = req.query;
-        const stats = await maintenanceService.getAdminStats({ pg_id });
+        const stats = await maintenanceService.getAdminStats(adminFilters(req.query));
 
         return res.json({
             success: true,

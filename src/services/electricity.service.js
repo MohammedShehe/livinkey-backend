@@ -10,6 +10,9 @@
  *   min_charge    the bill never goes below this (applied before tax)
  *   tax_percent   electricity duty / GST etc. on top
  *   round_to_rupee  round the final amount to a whole rupee
+ *   meter_mode    single -> one meter (main). dual -> the PG has a MAIN meter and an
+ *                 INVERTER meter; bills need previous + current readings for both and
+ *                 the units of both meters are added together.
  *
  * An admin only types the previous and current meter readings.
  */
@@ -49,28 +52,46 @@ function validateSettings(b) {
         const uptos = slabs.filter(s => s.upto !== null).map(s => s.upto);
         if (new Set(uptos).size !== uptos.length) errors.push("Two slabs cannot end at the same unit.");
     } else if (!(rate_per_unit > 0)) errors.push("Enter the cost per unit (₹ per unit).");
+    const meter_mode = b.meter_mode === "dual" ? "dual" : "single";
     return {
         errors,
         data: {
-            billing_mode, rate_per_unit, slabs, fixed_charge, min_charge, multiplier, tax_percent,
+            meter_mode, billing_mode, rate_per_unit, slabs, fixed_charge, min_charge, multiplier, tax_percent,
             round_to_rupee: b.round_to_rupee === undefined ? 1 : (b.round_to_rupee === true || b.round_to_rupee === 1 || b.round_to_rupee === "1" || b.round_to_rupee === "true" ? 1 : 0),
             is_active: b.is_active === undefined ? 1 : (b.is_active === true || b.is_active === 1 || b.is_active === "1" || b.is_active === "true" ? 1 : 0)
         }
     };
 }
 
-/** Pure calculation – used by the API, the bill creator and unit tests. */
-function calculate(settings, previous, current, { splitCount = 1 } = {}) {
+/** One meter's usage: validates the pair of readings and applies the multiplier. */
+function meterUsage(label, key, previous, current, multiplier) {
     const prev = Number(previous), cur = Number(current);
-    if (!isFinite(prev) || !isFinite(cur) || prev < 0 || cur < 0) throw new Error("Meter readings must be valid numbers.");
-    if (cur < prev) throw new Error("The current reading cannot be lower than the previous reading.");
+    if (previous === "" || current === "" || previous === null || current === null || previous === undefined || current === undefined
+        || !isFinite(prev) || !isFinite(cur) || prev < 0 || cur < 0) throw new Error(label === "Meter" ? "Meter readings must be valid numbers." : `${label}: readings must be valid numbers.`);
+    if (cur < prev) throw new Error(label === "Meter" ? "The current reading cannot be lower than the previous reading." : `${label}: the current reading cannot be lower than the previous reading.`);
+    const raw = cur - prev;
+    return { key, label, previous: prev, current: cur, raw_units: r2(raw), units: r2(raw * multiplier) };
+}
+
+/**
+ * Pure calculation – used by the API, the bill creator and unit tests.
+ * For a dual-meter PG (settings.meter_mode === "dual") pass the inverter meter
+ * readings in opts.inverterPrevious / opts.inverterCurrent.
+ */
+function calculate(settings, previous, current, { splitCount = 1, inverterPrevious, inverterCurrent } = {}) {
     const multiplier = Number(settings.multiplier || 1);
-    const rawUnits = cur - prev;
-    const units = r2(rawUnits * multiplier);
+    const dual = settings.meter_mode === "dual";
+    const meters = [meterUsage(dual ? "Main meter" : "Meter", "main", previous, current, multiplier)];
+    if (dual) meters.push(meterUsage("Inverter meter", "inverter", inverterPrevious, inverterCurrent, multiplier));
+
+    const main = meters[0];
+    const rawUnits = meters.reduce((t, m) => t + m.raw_units, 0);
+    const units = r2(meters.reduce((t, m) => t + m.units, 0));
 
     let energy = 0;
     const lines = [];
     if (settings.billing_mode === "slab") {
+        // Slabs apply to the combined usage of both meters.
         const slabs = normaliseSlabs(settings.slabs);
         let from = 0, left = units;
         for (const s of slabs) {
@@ -81,8 +102,10 @@ function calculate(settings, previous, current, { splitCount = 1 } = {}) {
             left -= used; from = s.upto === null ? from : s.upto;
         }
     } else {
-        energy = units * Number(settings.rate_per_unit || 0);
-        lines.push({ label: "Energy charge", units, rate: Number(settings.rate_per_unit || 0), amount: r2(energy) });
+        const rate = Number(settings.rate_per_unit || 0);
+        // One line per meter so the bill shows where every unit came from.
+        meters.forEach(m => { lines.push({ label: dual ? `${m.label} energy` : "Energy charge", units: m.units, rate, amount: r2(m.units * rate) }); });
+        energy = units * rate;
     }
     energy = r2(energy);
 
@@ -96,24 +119,33 @@ function calculate(settings, previous, current, { splitCount = 1 } = {}) {
     if (Number(settings.round_to_rupee)) total = Math.round(total);
 
     const split = Math.max(1, parseInt(splitCount, 10) || 1);
-    return {
-        previous: prev, current: cur, raw_units: r2(rawUnits), multiplier, units,
+    const out = {
+        meter_mode: dual ? "dual" : "single",
+        previous: main.previous, current: main.current, raw_units: r2(rawUnits), multiplier, units,
+        main_units: main.units,
+        meters,
         energy_charge: energy, fixed_charge: fixed, min_charge_applied: minApplied, min_charge: min,
         subtotal, tax_percent: Number(settings.tax_percent || 0), tax, total,
         split_count: split, per_person: split > 1 ? r2(total / split) : total,
         effective_rate: units > 0 ? r2(total / units) : 0,
         lines
     };
+    if (dual) {
+        out.inverter_previous = meters[1].previous;
+        out.inverter_current = meters[1].current;
+        out.inverter_units = meters[1].units;
+    }
+    return out;
 }
 
-const DEFAULTS = { billing_mode: "flat", rate_per_unit: 0, slabs: [], fixed_charge: 0, min_charge: 0, multiplier: 1, tax_percent: 0, round_to_rupee: 1, is_active: 1 };
+const DEFAULTS = { meter_mode: "single", billing_mode: "flat", rate_per_unit: 0, slabs: [], fixed_charge: 0, min_charge: 0, multiplier: 1, tax_percent: 0, round_to_rupee: 1, is_active: 1 };
 
 async function getSettings(pgId) {
     const [rows] = await db.execute("SELECT * FROM pg_electricity_settings WHERE pg_id = ? LIMIT 1", [pgId]);
     if (!rows.length) return { ...DEFAULTS, pg_id: Number(pgId), configured: false };
     const r = rows[0];
     return {
-        pg_id: r.pg_id, configured: true, billing_mode: r.billing_mode,
+        pg_id: r.pg_id, configured: true, meter_mode: r.meter_mode === "dual" ? "dual" : "single", billing_mode: r.billing_mode,
         rate_per_unit: Number(r.rate_per_unit), slabs: normaliseSlabs(r.slabs),
         fixed_charge: Number(r.fixed_charge), min_charge: Number(r.min_charge), multiplier: Number(r.multiplier),
         tax_percent: Number(r.tax_percent), round_to_rupee: Number(r.round_to_rupee), is_active: Number(r.is_active),
@@ -128,7 +160,7 @@ async function getAllSettings() {
     return pgs.map(p => {
         const r = map.get(p.id);
         const base = r ? {
-            configured: true, billing_mode: r.billing_mode, rate_per_unit: Number(r.rate_per_unit), slabs: normaliseSlabs(r.slabs),
+            configured: true, meter_mode: r.meter_mode === "dual" ? "dual" : "single", billing_mode: r.billing_mode, rate_per_unit: Number(r.rate_per_unit), slabs: normaliseSlabs(r.slabs),
             fixed_charge: Number(r.fixed_charge), min_charge: Number(r.min_charge), multiplier: Number(r.multiplier),
             tax_percent: Number(r.tax_percent), round_to_rupee: Number(r.round_to_rupee), is_active: Number(r.is_active), updated_at: r.updated_at
         } : { ...DEFAULTS, configured: false };
@@ -139,12 +171,12 @@ async function getAllSettings() {
 async function saveSettings(pgId, data, adminId) {
     await db.execute(
         `INSERT INTO pg_electricity_settings
-           (pg_id, billing_mode, rate_per_unit, slabs, fixed_charge, min_charge, multiplier, tax_percent, round_to_rupee, is_active, updated_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)
-         ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode), rate_per_unit=VALUES(rate_per_unit), slabs=VALUES(slabs),
+           (pg_id, meter_mode, billing_mode, rate_per_unit, slabs, fixed_charge, min_charge, multiplier, tax_percent, round_to_rupee, is_active, updated_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE meter_mode=VALUES(meter_mode), billing_mode=VALUES(billing_mode), rate_per_unit=VALUES(rate_per_unit), slabs=VALUES(slabs),
            fixed_charge=VALUES(fixed_charge), min_charge=VALUES(min_charge), multiplier=VALUES(multiplier), tax_percent=VALUES(tax_percent),
            round_to_rupee=VALUES(round_to_rupee), is_active=VALUES(is_active), updated_by=VALUES(updated_by)`,
-        [pgId, data.billing_mode, data.rate_per_unit, JSON.stringify(data.slabs || []), data.fixed_charge, data.min_charge,
+        [pgId, data.meter_mode === "dual" ? "dual" : "single", data.billing_mode, data.rate_per_unit, JSON.stringify(data.slabs || []), data.fixed_charge, data.min_charge,
          data.multiplier, data.tax_percent, data.round_to_rupee, data.is_active, adminId || null]
     );
 }
@@ -155,16 +187,21 @@ async function saveSettings(pgId, data, adminId) {
  */
 async function lastReading({ tenantId, roomId }) {
     let rows;
+    const cols = "current_reading, inverter_current_reading, billing_month";
     if (roomId) {
         [rows] = await db.execute(
-            `SELECT current_reading, billing_month FROM bills WHERE room_id = ? AND current_reading IS NOT NULL AND deleted_at IS NULL
+            `SELECT ${cols} FROM bills WHERE room_id = ? AND current_reading IS NOT NULL AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1`, [roomId]);
     } else if (tenantId) {
         [rows] = await db.execute(
-            `SELECT current_reading, billing_month FROM bills WHERE tenant_id = ? AND current_reading IS NOT NULL AND deleted_at IS NULL
+            `SELECT ${cols} FROM bills WHERE tenant_id = ? AND current_reading IS NOT NULL AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1`, [tenantId]);
     } else rows = [];
-    return rows[0] ? { reading: Number(rows[0].current_reading), billing_month: rows[0].billing_month } : null;
+    return rows[0] ? {
+        reading: Number(rows[0].current_reading),
+        inverter_reading: rows[0].inverter_current_reading === null || rows[0].inverter_current_reading === undefined ? null : Number(rows[0].inverter_current_reading),
+        billing_month: rows[0].billing_month
+    } : null;
 }
 
 /** Resolve the PG a bill is being created for. */

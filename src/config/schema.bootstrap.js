@@ -147,6 +147,18 @@ async function ensureSchema() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
 
+        // ---- v3: offer end-time (countdown), manual room counts, dual-meter electricity ----
+        await addColumnIfMissing(conn, "pg_offers", "valid_until_time", "valid_until_time TIME NULL");
+        await addColumnIfMissing(conn, "pgs", "manual_rooms_enabled", "manual_rooms_enabled TINYINT(1) NOT NULL DEFAULT 0");
+        await addColumnIfMissing(conn, "pgs", "manual_total_rooms", "manual_total_rooms INT NULL");
+        await addColumnIfMissing(conn, "pgs", "manual_vacant_rooms", "manual_vacant_rooms INT NULL");
+        await addColumnIfMissing(conn, "pg_electricity_settings", "meter_mode", "meter_mode ENUM('single','dual') NOT NULL DEFAULT 'single'");
+        await addColumnIfMissing(conn, "bills", "meter_mode", "meter_mode ENUM('single','dual') NULL");
+        await addColumnIfMissing(conn, "bills", "inverter_previous_reading", "inverter_previous_reading DECIMAL(12,2) NULL");
+        await addColumnIfMissing(conn, "bills", "inverter_current_reading", "inverter_current_reading DECIMAL(12,2) NULL");
+        await addColumnIfMissing(conn, "bills", "inverter_units", "inverter_units DECIMAL(12,2) NULL");
+        await addColumnIfMissing(conn, "bills", "main_units", "main_units DECIMAL(12,2) NULL");
+
         await addColumnIfMissing(conn, "bills", "previous_reading", "previous_reading DECIMAL(12,2) NULL");
         await addColumnIfMissing(conn, "bills", "current_reading", "current_reading DECIMAL(12,2) NULL");
         await addColumnIfMissing(conn, "bills", "units_consumed", "units_consumed DECIMAL(12,2) NULL");

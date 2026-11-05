@@ -23,6 +23,8 @@ function parseBody(b) {
     }
     const valid_from = asDate(b.valid_from);
     const valid_until = asDate(b.valid_until);
+    // Optional end time (HH:MM, 24h). Only meaningful together with an end date.
+    const valid_until_time = valid_until && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(b.valid_until_time || "")) ? String(b.valid_until_time) + ":00" : null;
     if (valid_from && valid_until && valid_until < valid_from) errors.push("The end date cannot be before the start date.");
     return {
         errors,
@@ -34,7 +36,7 @@ function parseBody(b) {
             badge_text: clean(b.badge_text, 40),
             coupon_code: clean(b.coupon_code, 40) ? clean(b.coupon_code, 40).toUpperCase() : null,
             terms: clean(b.terms, 1000),
-            valid_from, valid_until,
+            valid_from, valid_until, valid_until_time,
             is_active: b.is_active === undefined ? true : (b.is_active === true || b.is_active === 1 || b.is_active === "1" || b.is_active === "true"),
             sort_order: parseInt(b.sort_order, 10) || 0
         }
@@ -54,7 +56,8 @@ async function announce(pg, offer) {
         const guestSvc = require("../services/guest.notification.service");
         await guestSvc.sendNotificationsToGuests(guests.map(g => g.id), "PG_OFFER", {
             title: `${offer.headline} at ${pg.name}`,
-            message: offer.title + (offer.valid_until ? ` · valid till ${offer.valid_until}` : ""),
+            message: (offer.has_price_cut ? `Now ₹${offer.offer_price.toLocaleString("en-IN")}/mo (was ₹${offer.original_price.toLocaleString("en-IN")}) · ` : "") +
+                offer.title + (offer.valid_until ? ` · ends ${offer.valid_until}${offer.valid_until_time ? " " + offer.valid_until_time : ""}` : ""),
             entity_id: pg.id, entity_type: "pg", link: `/public/pgs/${pg.id}`
         });
     } catch (e) { console.error("Offer announce failed:", e.message); }
@@ -64,7 +67,8 @@ exports.list = async (req, res) => {
     try {
         const pg = await pgExists(req.params.id);
         if (!pg) return res.status(404).json({ success: false, message: "PG not found." });
-        res.json({ success: true, data: await OfferModel.listForPg(pg.id) });
+        const [rr] = await db.execute("SELECT rent FROM pgs WHERE id = ? LIMIT 1", [pg.id]);
+        res.json({ success: true, data: await OfferModel.listForPg(pg.id), pg_rent: Number(rr[0] && rr[0].rent) || 0 });
     } catch (e) { console.error("List offers:", e); res.status(500).json({ success: false, message: "Could not load offers." }); }
 };
 

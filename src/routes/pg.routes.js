@@ -8,6 +8,7 @@ const roleMiddleware = require("../middleware/role.middleware");
 const permissionMiddleware = require("../middleware/permission.middleware");
 const upload = require("../middleware/upload.middleware");
 const offerController = require("../controllers/pg.offer.controller");
+const roomsDisplayController = require("../controllers/pg.rooms.display.controller");
 
 // Configure multer for multiple files
 const uploadFields = upload.fields([
@@ -51,6 +52,10 @@ router.post("/:id/offers", roleMiddleware("super_admin", "admin"), permissionMid
 router.put("/:id/offers/:offerId", roleMiddleware("super_admin", "admin"), permissionMiddleware("pgs", "edit"), offerController.update);
 router.patch("/:id/offers/:offerId/toggle", roleMiddleware("super_admin", "admin"), permissionMiddleware("pgs", "edit"), offerController.toggle);
 router.delete("/:id/offers/:offerId", roleMiddleware("super_admin", "admin"), permissionMiddleware("pgs", "edit"), offerController.remove);
+
+// ---------------- MANUAL ROOM COUNTS shown on the website & guest app ----------------
+router.get("/:id/room-display", roleMiddleware("super_admin", "admin"), permissionMiddleware("pgs", "view"), roomsDisplayController.get);
+router.put("/:id/room-display", roleMiddleware("super_admin", "admin"), permissionMiddleware("pgs", "edit"), roomsDisplayController.save);
 
 // GET PG BY ID - Requires pgs.view permission
 router.get(

@@ -1,6 +1,54 @@
 const PgOfferModel = require("../models/pg.offer.model");
 const db = require("../config/db");
 
+// ------------------------------------------------------------------
+// Room counts shown to visitors / guests.
+// Admins can switch on "manual room counts" for a PG (PGs -> rooms button);
+// then the numbers they typed are shown instead of the live data.
+// ------------------------------------------------------------------
+const REAL_VACANT_SQL = `COALESCE((
+    SELECT COUNT(*)
+    FROM floors f
+    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1
+    LEFT JOIN room_occupancy ro ON r.id = ro.room_id
+    WHERE f.pg_id = p.id AND COALESCE(ro.occupied_count, 0) = 0
+), 0)`;
+
+function applyRoomDisplay(pg) {
+    const manual = Number(pg.manual_rooms_enabled) === 1 && pg.manual_total_rooms !== null && pg.manual_total_rooms !== undefined
+        && pg.manual_vacant_rooms !== null && pg.manual_vacant_rooms !== undefined;
+    const realTotal = parseInt(pg.total_rooms) || 0;
+    const realVacant = parseInt(pg.real_vacant_rooms) || 0;
+    pg.real_total_rooms = realTotal;
+    pg.rooms_manual = manual;
+    if (manual) {
+        pg.total_rooms = Math.max(0, parseInt(pg.manual_total_rooms) || 0);
+        pg.vacant_rooms = Math.min(pg.total_rooms, Math.max(0, parseInt(pg.manual_vacant_rooms) || 0));
+    } else {
+        pg.total_rooms = realTotal;
+        pg.vacant_rooms = realVacant;
+    }
+    delete pg.manual_rooms_enabled; delete pg.manual_total_rooms; delete pg.manual_vacant_rooms; delete pg.real_vacant_rooms;
+    return manual;
+}
+
+function statusFor(pg, totalCapacity, totalOccupied, manual) {
+    if (manual) {
+        if (pg.total_rooms > 0) {
+            if (pg.vacant_rooms <= 0) return 'Full Occupied';
+            if (pg.vacant_rooms >= pg.total_rooms) return 'Vacant';
+            return 'Partially Occupied';
+        }
+        return 'Vacant';
+    }
+    if (totalCapacity > 0) {
+        if (totalOccupied === 0) return 'Vacant';
+        if (totalOccupied >= totalCapacity) return 'Full Occupied';
+        return 'Partially Occupied';
+    }
+    return 'Vacant';
+}
+
 // ============================================================
 // FIXED: Get all PGs with combined feedbacks (public + tenant)
 // ============================================================
@@ -31,6 +79,10 @@ exports.getAllPGs = async (req, res) => {
                 p.number_of_floors,
                 p.is_active,
                 p.created_at,
+                p.manual_rooms_enabled,
+                p.manual_total_rooms,
+                p.manual_vacant_rooms,
+                ${REAL_VACANT_SQL} as real_vacant_rooms,
                 COALESCE((
                     SELECT COUNT(DISTINCT r.id) 
                     FROM floors f 
@@ -128,60 +180,11 @@ exports.getAllPGs = async (req, res) => {
             params.push(...amenityList, amenityList.length);
         }
 
-        query += ` GROUP BY p.id, p.name, p.location, p.rent, p.security_fee, p.number_of_floors, p.is_active, p.created_at`;
+        query += ` GROUP BY p.id, p.name, p.location, p.rent, p.security_fee, p.number_of_floors, p.is_active, p.created_at, p.manual_rooms_enabled, p.manual_total_rooms, p.manual_vacant_rooms`;
 
         const havingClauses = [];
 
-        if (status) {
-            if (status === 'vacant') {
-                havingClauses.push(` COALESCE((
-                    SELECT SUM(ro.occupied_count) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    JOIN room_occupancy ro ON r.id = ro.room_id
-                    WHERE f.pg_id = p.id
-                ), 0) = 0`);
-            } else if (status === 'full_occupied') {
-                havingClauses.push(` COALESCE((
-                    SELECT SUM(ro.occupied_count) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    JOIN room_occupancy ro ON r.id = ro.room_id
-                    WHERE f.pg_id = p.id
-                ), 0) >= COALESCE((
-                    SELECT SUM(r.capacity) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    WHERE f.pg_id = p.id
-                ), 0) 
-                AND COALESCE((
-                    SELECT SUM(r.capacity) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    WHERE f.pg_id = p.id
-                ), 0) > 0`);
-            } else if (status === 'partial_occupied') {
-                havingClauses.push(` COALESCE((
-                    SELECT SUM(ro.occupied_count) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    JOIN room_occupancy ro ON r.id = ro.room_id
-                    WHERE f.pg_id = p.id
-                ), 0) > 0 
-                AND COALESCE((
-                    SELECT SUM(ro.occupied_count) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    JOIN room_occupancy ro ON r.id = ro.room_id
-                    WHERE f.pg_id = p.id
-                ), 0) < COALESCE((
-                    SELECT SUM(r.capacity) 
-                    FROM floors f 
-                    JOIN rooms r ON f.id = r.floor_id AND r.is_active = 1 
-                    WHERE f.pg_id = p.id
-                ), 0)`);
-            }
-        }
+        // Status filtering happens after rows are shaped (so manual room counts are respected)
 
         if (min_rating) {
             havingClauses.push(` 
@@ -261,18 +264,9 @@ exports.getAllPGs = async (req, res) => {
             
             const totalCapacity = parseInt(pg.total_capacity) || 0;
             const totalOccupied = parseInt(pg.total_occupied) || 0;
-            
-            let statusText = 'Vacant';
-            if (totalCapacity > 0) {
-                if (totalOccupied === 0) {
-                    statusText = 'Vacant';
-                } else if (totalOccupied >= totalCapacity) {
-                    statusText = 'Full Occupied';
-                } else {
-                    statusText = 'Partially Occupied';
-                }
-            }
-            
+            const manualRooms = applyRoomDisplay(pg);
+            const statusText = statusFor(pg, totalCapacity, totalOccupied, manualRooms);
+
             if (statusText === 'Vacant') {
                 vacantCount++;
             }
@@ -291,11 +285,20 @@ exports.getAllPGs = async (req, res) => {
 
         connection.release();
 
+        let outRows = rows;
+        if (status) {
+            const want = { vacant: 'Vacant', full_occupied: 'Full Occupied', partial_occupied: 'Partially Occupied' }[status];
+            if (want) {
+                outRows = rows.filter(r => r.status_text === want);
+                vacantCount = outRows.filter(r => r.status_text === 'Vacant').length;
+            }
+        }
+
         return res.json({
             success: true,
-            count: rows.length,
+            count: outRows.length,
             vacant_count: vacantCount,
-            data: rows
+            data: outRows
         });
 
     } catch (error) {
@@ -328,6 +331,10 @@ exports.getPGDetails = async (req, res) => {
                 p.is_active,
                 p.created_at,
                 p.updated_at,
+                p.manual_rooms_enabled,
+                p.manual_total_rooms,
+                p.manual_vacant_rooms,
+                ${REAL_VACANT_SQL} as real_vacant_rooms,
                 -- ============================================================
                 -- FIXED: Combine ratings using CASE to avoid division by zero
                 -- ============================================================
@@ -395,20 +402,11 @@ exports.getPGDetails = async (req, res) => {
 
         const pg = pgRows[0];
 
-        const totalRooms = parseInt(pg.total_rooms) || 0;
         const totalCapacity = parseInt(pg.total_capacity) || 0;
         const totalOccupied = parseInt(pg.total_occupied) || 0;
-
-        let statusText = 'Vacant';
-        if (totalCapacity > 0) {
-            if (totalOccupied === 0) {
-                statusText = 'Vacant';
-            } else if (totalOccupied >= totalCapacity) {
-                statusText = 'Full Occupied';
-            } else {
-                statusText = 'Partially Occupied';
-            }
-        }
+        const manualRooms = applyRoomDisplay(pg);
+        const totalRooms = pg.total_rooms;
+        const statusText = statusFor(pg, totalCapacity, totalOccupied, manualRooms);
 
         pg.status_text = statusText;
         pg.occupancy_percentage = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
@@ -524,7 +522,9 @@ exports.getPGDetails = async (req, res) => {
             total_rooms: totalRooms,
             total_capacity: totalCapacity,
             total_occupied: totalOccupied,
-            available_spots: totalCapacity - totalOccupied,
+            available_spots: manualRooms ? pg.vacant_rooms : totalCapacity - totalOccupied,
+            vacant_rooms: pg.vacant_rooms,
+            rooms_manual: manualRooms,
             occupancy_percentage: totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0,
             status: statusText
         };

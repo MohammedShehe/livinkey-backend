@@ -22,7 +22,9 @@ const createBill = async (req, res) => {
             pg_id,
             room_id,
             previous_reading,
-            current_reading
+            current_reading,
+            inverter_previous_reading,
+            inverter_current_reading
         } = req.body;
 
         let selectedTenantIds = [];
@@ -71,10 +73,20 @@ const createBill = async (req, res) => {
             if (!tariff || !tariff.configured || !tariff.is_active) {
                 return res.status(400).json({ success: false, message: "No electricity formula is set for this PG yet. Ask a Super Admin to set it, or enter the amount manually." });
             }
-            const calc = Electricity.calculate(tariff, previous_reading, current_reading);
+            // Two-meter PGs (main + inverter) need all four readings.
+            const calc = Electricity.calculate(tariff, previous_reading, current_reading, {
+                inverterPrevious: inverter_previous_reading, inverterCurrent: inverter_current_reading
+            });
             billData.electricity_amount = calc.total;
+            billData.meter_mode = calc.meter_mode;
             billData.previous_reading = calc.previous;
             billData.current_reading = calc.current;
+            billData.main_units = calc.main_units;
+            if (calc.meter_mode === "dual") {
+                billData.inverter_previous_reading = calc.inverter_previous;
+                billData.inverter_current_reading = calc.inverter_current;
+                billData.inverter_units = calc.inverter_units;
+            }
             billData.units_consumed = calc.units;
             billData.electricity_rate = calc.effective_rate;
             billData.electricity_breakdown = JSON.stringify({ ...calc, tariff_mode: tariff.billing_mode });

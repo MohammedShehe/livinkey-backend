@@ -49,10 +49,10 @@ exports.calculate = async (req, res) => {
         if (!settings.configured || !settings.is_active) {
             return res.status(409).json({ success: false, code: "NO_TARIFF", message: "No electricity formula is set for this PG yet. A Super Admin can set it under PGs → Electricity formula." });
         }
-        const result = Electricity.calculate(settings, b.previous_reading, b.current_reading, { splitCount: b.split_count });
+        const result = Electricity.calculate(settings, b.previous_reading, b.current_reading, { splitCount: b.split_count, inverterPrevious: b.inverter_previous_reading, inverterCurrent: b.inverter_current_reading });
         res.json({ success: true, data: { pg_id: pgId, ...result } });
     } catch (e) {
-        if (/reading|lower|valid/i.test(e.message)) return res.status(400).json({ success: false, message: e.message });
+        if (/reading|lower|valid|meter/i.test(e.message)) return res.status(400).json({ success: false, message: e.message });
         console.error("Electricity calc:", e); res.status(500).json({ success: false, message: "Could not calculate the bill." });
     }
 };

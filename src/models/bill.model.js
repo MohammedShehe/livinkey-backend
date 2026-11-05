@@ -150,8 +150,10 @@ const createBill = async (connection, billData) => {
     // see exactly how the electricity amount was worked out.
     if (billData.current_reading !== undefined && billData.current_reading !== null) {
         await connection.execute(
-            `UPDATE bills SET previous_reading = ?, current_reading = ?, units_consumed = ?, electricity_rate = ?, electricity_breakdown = ? WHERE id = ?`,
-            [billData.previous_reading ?? null, billData.current_reading, billData.units_consumed ?? null, billData.electricity_rate ?? null, billData.electricity_breakdown ?? null, result.insertId]
+            `UPDATE bills SET previous_reading = ?, current_reading = ?, units_consumed = ?, electricity_rate = ?, electricity_breakdown = ?,
+                    meter_mode = ?, inverter_previous_reading = ?, inverter_current_reading = ?, inverter_units = ?, main_units = ? WHERE id = ?`,
+            [billData.previous_reading ?? null, billData.current_reading, billData.units_consumed ?? null, billData.electricity_rate ?? null, billData.electricity_breakdown ?? null,
+             billData.meter_mode || "single", billData.inverter_previous_reading ?? null, billData.inverter_current_reading ?? null, billData.inverter_units ?? null, billData.main_units ?? null, result.insertId]
         );
     }
     return result.insertId;
