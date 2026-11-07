@@ -1,155 +1,69 @@
 /**
- * WhatsApp Service - Twilio WhatsApp Business API
- * Production-ready
+ * WhatsApp (Twilio) – the first step of the delivery chain.
+ *
+ *   sendWhatsApp(to, { text, template })
+ *     - template + matching TWILIO_*_CONTENT_SID set -> approved Content Template (works any time)
+ *     - otherwise                                      -> free-form text (only delivered inside
+ *                                                         WhatsApp's 24-hour customer-service window;
+ *                                                         outside it Twilio reports a failure through
+ *                                                         the status callback and the chain falls
+ *                                                         through to SMS and then e-mail)
+ *
+ * Every send carries a statusCallback so a *late* failure (user not on WhatsApp, template not
+ * approved, 24h window closed ...) is noticed and the next channel is tried automatically.
  */
+const { getClient, config, statusCallbackUrl, withWhatsAppPrefix } = require("./twilio.client");
 
-const twilio = require("twilio");
+// Twilio Content SIDs are "HX" + 32 hex characters. A placeholder such as HXxxxxxxxx is ignored (with one warning)
+// instead of making every WhatsApp message fail.
+const warned = new Set();
+const contentSidFor = (envKey) => {
+    const v = String(process.env[envKey] || "").trim();
+    if (!v) return "";
+    if (/^HX[0-9a-fA-F]{32}$/.test(v)) return v;
+    if (!warned.has(envKey)) {
+        warned.add(envKey);
+        console.warn(`[whatsapp] ${envKey} is not a valid Twilio Content SID ("${v.slice(0, 6)}...") - sending free-form text instead.`);
+    }
+    return "";
+};
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM; // e.g. 'whatsapp:+14155238886'
+const buildPayload = (to, { text, template } = {}) => {
+    const cfg = config();
+    if (!cfg.whatsappFrom && !cfg.whatsappMessagingService) {
+        throw new Error("WhatsApp sender not configured (set TWILIO_WHATSAPP_FROM or TWILIO_WHATSAPP_MESSAGING_SERVICE_SID).");
+    }
+    const payload = { to: withWhatsAppPrefix(to), statusCallback: statusCallbackUrl() };
+    if (cfg.whatsappMessagingService) payload.messagingServiceSid = cfg.whatsappMessagingService;
+    else payload.from = cfg.whatsappFrom;
 
-let client = null;
-
-if (accountSid && authToken) {
-  client = twilio(accountSid, authToken);
-}
-
-/**
- * Send a free-form text message (only allowed inside 24-hour customer service window)
- */
-const sendTextMessage = async (to, body) => {
-  if (!client) {
-    throw new Error("Twilio client not configured. Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.");
-  }
-
-  const toNumber = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
-
-  const message = await client.messages.create({
-    from: whatsappFrom,
-    to: toNumber,
-    body: body,
-  });
-
-  return {
-    sid: message.sid,
-    status: message.status,
-    to: message.to,
-    from: message.from,
-    dateCreated: message.dateCreated,
-  };
+    const contentSid = template?.envKey ? contentSidFor(template.envKey) : "";
+    if (contentSid) {
+        payload.contentSid = contentSid;
+        payload.contentVariables = JSON.stringify(template.variables || {});
+        payload.__mode = "template";
+    } else {
+        if (!String(text || "").trim()) throw new Error("WhatsApp message body is empty.");
+        payload.body = text;
+        payload.__mode = "text";
+    }
+    return payload;
 };
 
 /**
- * Send a template message (required for business-initiated messages outside 24h window)
- * @param {string} to - Recipient phone in E.164 format (e.g. +919876543210)
- * @param {string} contentSid - Twilio Content Template SID
- * @param {object} contentVariables - Key-value variables for the template
+ * @returns {Promise<{sid,status,to,from,mode}>}
  */
-const sendTemplateMessage = async (to, contentSid, contentVariables = {}) => {
-  if (!client) {
-    throw new Error("Twilio client not configured. Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.");
-  }
-
-  const toNumber = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
-
-  const message = await client.messages.create({
-    from: whatsappFrom,
-    to: toNumber,
-    contentSid: contentSid,
-    contentVariables: JSON.stringify(contentVariables),
-  });
-
-  return {
-    sid: message.sid,
-    status: message.status,
-    to: message.to,
-    from: message.from,
-    dateCreated: message.dateCreated,
-  };
+const sendWhatsApp = async (to, content) => {
+    const client = getClient();
+    if (!client) throw new Error("Twilio is not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).");
+    const payload = buildPayload(to, content);
+    const mode = payload.__mode;
+    delete payload.__mode;
+    const m = await client.messages.create(payload);
+    return { sid: m.sid, status: m.status, to: m.to, from: m.from, mode };
 };
 
-/**
- * Send OTP via WhatsApp (Authentication template)
- * You must create and get approved an Authentication template in Twilio/Meta
- */
-const sendOTP = async (to, otp, purpose = "Login") => {
-  // Option 1: Using Content Template (recommended for production)
-  if (process.env.TWILIO_OTP_CONTENT_SID) {
-    return sendTemplateMessage(to, process.env.TWILIO_OTP_CONTENT_SID, {
-      1: otp,
-      2: purpose,
-    });
-  }
+/* ---- thin helper kept for older call sites ---- */
+const sendTextMessage = (to, body) => sendWhatsApp(to, { text: body });
 
-  // Option 2: Free-form (only works if user messaged you in last 24h)
-  const body = `🔐 *Livinkey ${purpose} Verification*\n\nYour OTP is: *${otp}*\n\nThis code is valid for 5 minutes.\nDo not share this code with anyone.`;
-  return sendTextMessage(to, body);
-};
-
-/**
- * Send Bill notification
- */
-const sendBillNotification = async (to, tenantName, billDetails) => {
-  if (process.env.TWILIO_BILL_CONTENT_SID) {
-    return sendTemplateMessage(to, process.env.TWILIO_BILL_CONTENT_SID, {
-      1: tenantName,
-      2: billDetails.amount || "",
-      3: billDetails.dueDate || "",
-      4: billDetails.billId || "",
-    });
-  }
-
-  const body = `📄 *New Bill Generated - Livinkey*\n\nHello ${tenantName},\n\nA new bill has been generated.\nAmount: ₹${billDetails.amount}\nDue Date: ${billDetails.dueDate}\nBill ID: ${billDetails.billId}\n\nPlease login to the app to view details and pay.`;
-  return sendTextMessage(to, body);
-};
-
-/**
- * Send Fine notification
- */
-const sendFineNotification = async (to, tenantName, fineDetails) => {
-  if (process.env.TWILIO_FINE_CONTENT_SID) {
-    return sendTemplateMessage(to, process.env.TWILIO_FINE_CONTENT_SID, {
-      1: tenantName,
-      2: fineDetails.amount || "",
-      3: fineDetails.reason || "",
-    });
-  }
-
-  const body = `⚠️ *Fine Notification - Livinkey*\n\nHello ${tenantName},\n\nA fine of ₹${fineDetails.amount} has been applied.\nReason: ${fineDetails.reason}\n\nPlease check the app for more details.`;
-  return sendTextMessage(to, body);
-};
-
-/**
- * Send custom admin message
- */
-const sendCustomMessage = async (to, title, message) => {
-  const body = `📢 *${title}*\n\n${message}\n\n— Livinkey Admin`;
-  return sendTextMessage(to, body);
-};
-
-/**
- * Send e-FRRO expiry alert
- */
-const sendEFRROExpiry = async (to, tenantName, daysLeft) => {
-  if (process.env.TWILIO_EFRRO_CONTENT_SID) {
-    return sendTemplateMessage(to, process.env.TWILIO_EFRRO_CONTENT_SID, {
-      1: tenantName,
-      2: String(daysLeft),
-    });
-  }
-
-  const body = `🛂 *e-FRRO Expiry Alert - Livinkey*\n\nHello ${tenantName},\n\nYour e-FRRO document is expiring in *${daysLeft} days*.\nPlease renew it at the earliest to avoid any issues.`;
-  return sendTextMessage(to, body);
-};
-
-module.exports = {
-  sendTextMessage,
-  sendTemplateMessage,
-  sendOTP,
-  sendBillNotification,
-  sendFineNotification,
-  sendCustomMessage,
-  sendEFRROExpiry,
-  client, // exported for advanced use
-};
+module.exports = { sendWhatsApp, sendTextMessage, buildPayload };

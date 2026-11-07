@@ -248,7 +248,8 @@ exports.getSystemHealth = async (req, res) => {
                 integrations: [
                     { key: "email", label: "Email (SMTP)", configured: has("EMAIL_HOST", "EMAIL_USER", "EMAIL_PASS"), detail: "OTP, bills and reminders" },
                     { key: "cloudinary", label: "Cloudinary storage", configured: has("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"), detail: "Documents, images and QR codes" },
-                    { key: "whatsapp", label: "WhatsApp (Twilio)", configured: has("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"), detail: "Primary notification channel" },
+                    { key: "whatsapp", label: "WhatsApp (Twilio)", configured: require("../services/twilio.client").isWhatsAppConfigured(), detail: "1st channel: OTPs, bills, reminders" },
+                    { key: "sms", label: "SMS (Twilio)", configured: require("../services/twilio.client").isSmsConfigured(), detail: "2nd channel, if WhatsApp fails" },
                     { key: "push", label: "Push notifications", configured: String(process.env.ENABLE_PUSH_NOTIFICATIONS).toLowerCase() === "true" && !!process.env.FIREBASE_PROJECT_ID, detail: "Mobile app alerts" },
                     { key: "gateway", label: "Payment gateway", configured: String(process.env.ENABLE_PAYMENT_GATEWAY).toLowerCase() === "true", detail: "Online payment links" },
                     { key: "upi", label: "UPI merchant", configured: has("MERCHANT_UPI_ID"), detail: "QR code payments" }

@@ -967,6 +967,18 @@ const checkAndSendDocumentReminders = async () => {
                 try {
                     await NotificationEventManager.onTenantDocumentReminder(tenant, docLabel);
                     notificationsSent++;
+                    // WhatsApp -> SMS -> e-mail, once a week (Monday) so tenants are not messaged every day
+                    if (new Date().getDay() === 1) {
+                        try {
+                            await messagingService.sendMessage({
+                                userId: tenant.id, userType: "tenant", name: tenant.full_name,
+                                type: "reminder", title: "Documents pending",
+                                body: `Please upload your pending document${missingDocs.length === 1 ? "" : "s"}: ${docLabel}.\nOpen the Livinkey app > Documents to upload.`,
+                            });
+                        } catch (msgErr) {
+                            console.error(`Document reminder message failed for ${tenant.full_name}:`, msgErr.message);
+                        }
+                    }
                     details.push({ tenant: tenant.full_name, missing: missingDocs.map(d => d.label) });
                 } catch (notifError) {
                     console.error(`Failed to send document reminder to ${tenant.full_name}:`, notifError.message);

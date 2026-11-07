@@ -259,7 +259,7 @@ exports.forgotPassword = async (req, res) => {
         const guest = guests[0];
 
         // Generate and send OTP
-        const { otp, hashedOTP, expiry } = await generateAndSendGuestOTP(guest, "Forgot Password");
+        const { otp, hashedOTP, expiry, delivery } = await generateAndSendGuestOTP(guest, "Forgot Password");
 
         const conn = await db.getConnection();
         await conn.execute(
@@ -270,7 +270,8 @@ exports.forgotPassword = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "OTP sent successfully to your registered email."
+            message: "OTP sent successfully to your registered contact.",
+            data: delivery
         });
 
     } catch (error) {

@@ -66,12 +66,12 @@ exports.login = async (req, res) => {
             });
         }
 
-        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Login");
+        const { otp, hashedOTP, expiry, delivery } = await generateAndSendOTP(admin, "Login");
 
         await Admin.updateOTP(admin.id, hashedOTP, expiry);
 
         return res.json(
-            new ApiResponse(true, "OTP sent successfully.")
+            new ApiResponse(true, "OTP sent successfully.", delivery)
         );
 
     } catch (error) {
@@ -182,13 +182,14 @@ exports.resendOTP = async (req, res) => {
             return res.json({ success: true, message: "If this email is registered, a verification code has been sent." });
         }
 
-        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Resend");
+        const { otp, hashedOTP, expiry, delivery } = await generateAndSendOTP(admin, "Resend");
 
         await Admin.updateOTP(admin.id, hashedOTP, expiry);
 
         return res.json({
             success: true,
-            message: "New OTP sent successfully."
+            message: "New OTP sent successfully.",
+            data: delivery
         });
 
     } catch (error) {
@@ -215,13 +216,14 @@ exports.forgotPassword = async (req, res) => {
             return res.json({ success: true, message: "If this email is registered, a verification code has been sent." });
         }
 
-        const { otp, hashedOTP, expiry } = await generateAndSendOTP(admin, "Forgot Password");
+        const { otp, hashedOTP, expiry, delivery } = await generateAndSendOTP(admin, "Forgot Password");
 
         await Admin.updateOTP(admin.id, hashedOTP, expiry);
 
         return res.json({
             success: true,
-            message: "OTP sent successfully."
+            message: "OTP sent successfully.",
+            data: delivery
         });
 
     } catch (error) {

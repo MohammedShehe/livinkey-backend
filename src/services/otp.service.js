@@ -1,6 +1,20 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const messagingService = require("./messaging.service");
+const { maskPhone, normalizePhone } = require("../utils/phone");
+
+/** Safe description of where the code went (shown to the user so they know where to look). */
+const describeDelivery = (user, sent) => {
+    const channel = sent?.channel || null;
+    let sent_to = null;
+    if (channel === "email" && user.email) {
+        const [local, domain] = String(user.email).split("@");
+        sent_to = `${local.slice(0, 2)}${"•".repeat(Math.max(local.length - 2, 2))}@${domain}`;
+    } else if (channel) {
+        sent_to = maskPhone(normalizePhone(user.phone, user.country_code));
+    }
+    return { channel, sent_to };
+};
 
 const generateOTP = () => {
     return crypto.randomInt(100000, 1000000).toString();
@@ -32,10 +46,10 @@ const generateAndSendOTP = async (admin, context = "Login") => {
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // WhatsApp primary + Email fallback
-    await messagingService.sendOTP(admin, otp, context);
+    // WhatsApp -> SMS -> Email
+    const sent = await messagingService.sendOTP(admin, otp, context);
 
-    return { otp, hashedOTP, expiry };
+    return { otp, hashedOTP, expiry, delivery: describeDelivery(admin, sent) };
 };
 
 // For Tenant OTP
@@ -56,10 +70,10 @@ const generateAndSendTenantOTP = async (tenant, context = "Forgot Password") => 
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // WhatsApp primary + Email fallback
-    await messagingService.sendOTP(tenant, otp, context);
+    // WhatsApp -> SMS -> Email
+    const sent = await messagingService.sendOTP(tenant, otp, context);
 
-    return { otp, hashedOTP, expiry };
+    return { otp, hashedOTP, expiry, delivery: describeDelivery(tenant, sent) };
 };
 
 // For Guest OTP
@@ -80,10 +94,10 @@ const generateAndSendGuestOTP = async (guest, context = "Forgot Password") => {
     const hashedOTP = await hashOTP(otp);
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // WhatsApp primary + Email fallback
-    await messagingService.sendOTP(guest, otp, context);
+    // WhatsApp -> SMS -> Email
+    const sent = await messagingService.sendOTP(guest, otp, context);
 
-    return { otp, hashedOTP, expiry };
+    return { otp, hashedOTP, expiry, delivery: describeDelivery(guest, sent) };
 };
 
 module.exports = {

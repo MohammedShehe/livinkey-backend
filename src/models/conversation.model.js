@@ -55,26 +55,26 @@ const findByPk = async (id) => {
     return rows[0] || null;
 };
 
-const findAndCountAll = async ({ where = {}, order = [], limit = 20, offset = 0 } = {}) => {
-    let sql = `SELECT * FROM conversations WHERE 1=1`;
-    let countSql = `SELECT COUNT(*) as total FROM conversations WHERE 1=1`;
+const LAST_MSG = (col) => `(SELECT m.${col} FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1)`;
+
+const findAndCountAll = async ({ where = {}, limit = 20, offset = 0 } = {}) => {
+    let cond = ` WHERE 1=1`;
     const params = [];
-    const countParams = [];
 
     if (where.is_archived !== undefined) {
-        sql += ` AND is_archived = ?`;
-        countSql += ` AND is_archived = ?`;
+        cond += ` AND c.is_archived = ?`;
         params.push(where.is_archived ? 1 : 0);
-        countParams.push(where.is_archived ? 1 : 0);
     }
-
-    // Simple search support
+    if (where.unread) cond += ` AND c.unread_count > 0`;
+    if (where.user_type && ["tenant", "guest", "admin", "unknown"].includes(where.user_type)) {
+        // unknown contacts (people who messaged us but are not in Livinkey) are stored with a negative user_id
+        if (where.user_type === "unknown") cond += ` AND c.user_id < 0`;
+        else { cond += ` AND c.user_type = ? AND c.user_id >= 0`; params.push(where.user_type); }
+    }
     if (where.search) {
-        sql += ` AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)`;
-        countSql += ` AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)`;
-        const s = `%${where.search}%`;
+        cond += ` AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)`;
+        const s = `%${String(where.search).replace(/[%_]/g, "\\$&")}%`;
         params.push(s, s, s);
-        countParams.push(s, s, s);
     }
 
     // mysql2 prepared LIMIT/OFFSET parameters can fail on some MySQL-compatible
@@ -82,15 +82,28 @@ const findAndCountAll = async ({ where = {}, order = [], limit = 20, offset = 0 
     // only these validated numeric values; all user-provided filters remain bound.
     const safeLimit = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 20));
     const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
-    sql += ` ORDER BY last_message_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 
+    const sql = `SELECT c.*,
+                   ${LAST_MSG("content")}     AS last_message,
+                   ${LAST_MSG("direction")}   AS last_direction,
+                   ${LAST_MSG("channel")}     AS last_channel,
+                   ${LAST_MSG("status")}      AS last_status,
+                   ${LAST_MSG("message_type")} AS last_type
+                 FROM conversations c${cond}
+                 ORDER BY c.last_message_at DESC, c.id DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
     const [rows] = await db.execute(sql, params);
-    const [countRows] = await db.execute(countSql, countParams);
+    const [countRows] = await db.execute(`SELECT COUNT(*) AS total FROM conversations c${cond}`, params);
 
-    return {
-        count: countRows[0].total,
-        rows,
-    };
+    return { count: countRows[0].total, rows };
+};
+
+/** Timestamp of the contact's latest inbound message (drives WhatsApp's 24-hour reply window). */
+const lastInboundAt = async (conversationId) => {
+    const [rows] = await db.execute(
+        `SELECT created_at FROM messages WHERE conversation_id = ? AND direction = 'inbound' ORDER BY created_at DESC, id DESC LIMIT 1`,
+        [conversationId]
+    );
+    return rows[0]?.created_at || null;
 };
 
 const update = async (id, data) => {
@@ -140,6 +153,7 @@ const getTotalUnread = async () => {
 };
 
 module.exports = {
+    lastInboundAt,
     getTotalUnread,
     create,
     findOne,

@@ -57,6 +57,27 @@ adminRouter.get(
     maintenanceController.getAdminStats
 );
 
+// RECENT FORWARD RECIPIENTS - must be registered before "/:id"
+adminRouter.get(
+    "/forward-recipients",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.getForwardRecipients
+);
+
+// FORWARD DETAILS TO ANY PHONE NUMBER (WhatsApp -> SMS) - Requires maintenance.edit permission
+adminRouter.post(
+    "/:id/forward",
+    permissionMiddleware("maintenance", "edit"),
+    maintenanceController.forwardRequest
+);
+
+// FORWARD HISTORY OF ONE REQUEST
+adminRouter.get(
+    "/:id/forwards",
+    permissionMiddleware("maintenance", "view"),
+    maintenanceController.getForwards
+);
+
 // GET REQUEST BY ID - Requires maintenance.view permission
 adminRouter.get(
     "/:id",

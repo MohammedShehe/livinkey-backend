@@ -121,7 +121,7 @@ class NotificationEventManager {
      */
     static async checkTenantStayExpiry() {
         const db = require('../config/db');
-        const { sendTextMessage } = require('../services/whatsapp.service');
+        const messagingService = require('../services/messaging.service');
         const { sendTenantStayExpiryEmail, sendAdminStayExpiryEmail } = require('../services/mail.service');
         try {
             const connection = await db.getConnection();
@@ -149,25 +149,25 @@ class NotificationEventManager {
                 dedupeConnection.release();
                 if (dedupeResult.affectedRows === 0) continue;
                 const message = `Hello ${tenant.full_name}, your agreed stay at ${tenant.pg_name || 'Livinkey'} will end in one month (${endDate}), as per your agreement. Please contact the Super Admin if you require an extension.`;
-                let tenantDelivered = false;
-                const tenantWhatsapp = String(tenant.international_phone || `${tenant.country_code || ''}${String(tenant.phone || '')}`).replace(/[^+\d]/g, '');
-                if (tenantWhatsapp) {
-                    try { await sendTextMessage(tenantWhatsapp, message); tenantDelivered = true; } catch (e) { console.error('Tenant stay WhatsApp failed:', tenant.id, e.message); }
-                }
-                if (!tenantDelivered && tenant.email) {
-                    try { await sendTenantStayExpiryEmail(tenant.email, tenant.full_name, tenant.pg_name, endDate); tenantDelivered = true; } catch (e) { console.error('Tenant stay email failed:', tenant.id, e.message); }
-                }
+                // WhatsApp -> SMS -> e-mail (the dedicated e-mail is used when the chain reaches e-mail right away)
+                try {
+                    await messagingService.sendMessage({
+                        userId: tenant.id, userType: 'tenant', phone: tenant.phone, countryCode: tenant.country_code,
+                        email: tenant.email, name: tenant.full_name, type: 'custom',
+                        title: 'Stay period ending soon', body: message,
+                        richEmail: () => sendTenantStayExpiryEmail(tenant.email, tenant.full_name, tenant.pg_name, endDate)
+                    });
+                } catch (e) { console.error('Tenant stay reminder failed on every channel:', tenant.id, e.message); }
 
                 for (const admin of admins) {
                     const adminMessage = `Tenant ${tenant.full_name}'s agreed stay at ${tenant.pg_name || 'Livinkey'} will end in one month (${endDate}). Contact the tenant regarding extension if required.`;
-                    let delivered = false;
-                    if (admin.phone) {
-                        const adminWhatsapp = String(admin.phone).replace(/[^+\d]/g, '');
-                        try { await sendTextMessage(adminWhatsapp, adminMessage); delivered = true; } catch (e) { console.error('Admin stay WhatsApp failed:', admin.id, e.message); }
-                    }
-                    if (!delivered && admin.email) {
-                        try { await sendAdminStayExpiryEmail(admin.email, admin.name, tenant.full_name, tenant.pg_name, endDate); delivered = true; } catch (e) { console.error('Admin stay email failed:', admin.id, e.message); }
-                    }
+                    try {
+                        await messagingService.sendMessage({
+                            userId: admin.id, userType: 'admin', phone: admin.phone, email: admin.email, name: admin.name,
+                            type: 'custom', title: 'Tenant stay ending soon', body: adminMessage,
+                            richEmail: () => sendAdminStayExpiryEmail(admin.email, admin.name, tenant.full_name, tenant.pg_name, endDate)
+                        });
+                    } catch (e) { console.error('Admin stay reminder failed on every channel:', admin.id, e.message); }
                 }
 
                 const messageData = NotificationService.generateNotificationMessages.tenantStayExpiry(tenant, endDate);

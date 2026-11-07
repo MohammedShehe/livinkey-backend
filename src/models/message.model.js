@@ -37,7 +37,12 @@ const findAll = async ({ where = {}, order = "ASC" } = {}) => {
         params.push(where.external_id);
     }
 
-    sql += ` ORDER BY created_at ${order === "DESC" ? "DESC" : "ASC"}`;
+    if (where.after_id) {
+        sql += ` AND id > ?`;
+        params.push(Number(where.after_id) || 0);
+    }
+
+    sql += ` ORDER BY created_at ${order === "DESC" ? "DESC" : "ASC"}, id ${order === "DESC" ? "DESC" : "ASC"}`;
 
     const [rows] = await db.execute(sql, params);
     return rows;
@@ -77,6 +82,14 @@ const update = async (id, data) => {
         fields.push("content = ?");
         params.push(data.content);
     }
+    if (data.channel !== undefined) {
+        fields.push("channel = ?");
+        params.push(data.channel);
+    }
+    if (data.external_id !== undefined) {
+        fields.push("external_id = ?");
+        params.push(data.external_id);
+    }
 
     if (fields.length === 0) return;
 
@@ -84,7 +97,29 @@ const update = async (id, data) => {
     await db.execute(`UPDATE messages SET ${fields.join(", ")} WHERE id = ?`, params);
 };
 
+const parseMetadata = (m) => {
+    if (!m) return {};
+    if (typeof m === "object") return m;
+    try { return JSON.parse(m); } catch { return {}; }
+};
+
+/** Only ever move a message "forward" (queued -> sent -> delivered -> read); failed can be set from anything but read/delivered. */
+const RANK = { queued: 0, sent: 1, delivered: 2, read: 3 };
+const advanceStatus = async (id, next, metadataPatch = null) => {
+    const row = await findOne({ id });
+    if (!row) return null;
+    const cur = row.status;
+    let status = next;
+    if (next !== "failed" && RANK[cur] !== undefined && RANK[next] !== undefined && RANK[next] < RANK[cur]) status = cur;
+    if (next === "failed" && (cur === "delivered" || cur === "read")) status = cur;
+    const meta = metadataPatch ? { ...parseMetadata(row.metadata), ...metadataPatch } : undefined;
+    await update(id, { status, ...(meta ? { metadata: meta } : {}) });
+    return { ...row, status };
+};
+
 module.exports = {
+    parseMetadata,
+    advanceStatus,
     create,
     findAll,
     findOne,

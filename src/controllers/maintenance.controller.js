@@ -317,6 +317,64 @@ const deleteRequestAdmin = async (req, res) => {
     }
 };
 
+
+// POST /api/maintenance/admin/:id/forward  { phone, country_code?, name?, note?, mark_in_progress? }
+const forwardRequest = async (req, res) => {
+    try {
+        const { phone, country_code, name, note, mark_in_progress } = req.body || {};
+        if (!phone || !String(phone).trim()) {
+            return res.status(400).json({ success: false, message: "Enter the phone number to send to." });
+        }
+        const result = await maintenanceService.forwardRequest(
+            req.params.id,
+            { phone, countryCode: country_code || null, name, note, markInProgress: mark_in_progress === true || mark_in_progress === "true" },
+            { id: req.admin?.id, name: req.admin?.name },
+            req
+        );
+        if (!result.ok) {
+            return res.status(502).json({
+                success: false,
+                message: "The details could not be delivered on WhatsApp or SMS. Check that the number is correct and can receive messages.",
+                data: result,
+            });
+        }
+        const via = result.channel === "sms" ? "SMS" : "WhatsApp";
+        return res.json({
+            success: true,
+            message: result.fallbackUsed && result.channel === "sms"
+                ? `WhatsApp wasn't available for that number, so the details were sent by ${via}.`
+                : `Details sent to ${result.to} by ${via}.`,
+            data: result,
+        });
+    } catch (error) {
+        const status = error.status || 500;
+        if (status >= 500) console.error("Forward maintenance error:", error.message);
+        return res.status(status).json({ success: false, message: status >= 500 ? "Could not forward the request right now." : error.message });
+    }
+};
+
+// GET /api/maintenance/admin/:id/forwards
+const getForwards = async (req, res) => {
+    try {
+        const data = await maintenanceService.getForwards(req.params.id);
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error("Get forwards error:", error.message);
+        return res.status(500).json({ success: false, message: "Could not load the forward history." });
+    }
+};
+
+// GET /api/maintenance/admin/forward-recipients
+const getForwardRecipients = async (req, res) => {
+    try {
+        const data = await maintenanceService.getRecentForwardRecipients();
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error("Forward recipients error:", error.message);
+        return res.status(500).json({ success: false, message: "Could not load recent recipients." });
+    }
+};
+
 module.exports = {
     createRequest,
     getMyRequests,
@@ -328,5 +386,8 @@ module.exports = {
     completeRequest,
     completeRequestByTenant,        // NEW
     checkPendingCompletionReminders, // NEW
-    deleteRequestAdmin
+    deleteRequestAdmin,
+    forwardRequest,
+    getForwards,
+    getForwardRecipients
 };

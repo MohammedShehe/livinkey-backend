@@ -1556,10 +1556,25 @@ const checkAndSendPaymentReminders = async () => {
         );
 
         let sent = 0;
+        const messaged = new Set(); // a tenant with several unpaid bills still gets ONE reminder message
         for (const tenant of tenants) {
             try {
                 await NotificationEventManager.onTenantPaymentReminder(tenant, tenant.days_until_due);
                 sent++;
+                // WhatsApp -> SMS -> e-mail
+                if (!messaged.has(tenant.id)) try {
+                    messaged.add(tenant.id);
+                    const due = Math.max((parseFloat(tenant.total_amount) || 0) - (parseFloat(tenant.paid_amount) || 0), 0);
+                    const days = Number(tenant.days_until_due);
+                    const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
+                    await messagingService.sendMessage({
+                        userId: tenant.id, userType: "tenant", name: tenant.full_name,
+                        type: "reminder", title: "Payment reminder",
+                        body: `Your next payment is due ${when}.${due > 0 ? ` Amount due: ${require("./messaging.templates").inr(due)}.` : ""}\nOpen the Livinkey app to see your bill and pay securely.`,
+                    });
+                } catch (msgErr) {
+                    console.error(`Payment reminder message failed for ${tenant.full_name}:`, msgErr.message);
+                }
             } catch (notifError) {
                 console.error(`Failed to send payment reminder to ${tenant.full_name}:`, notifError.message);
             }

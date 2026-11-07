@@ -5,6 +5,9 @@ const { uploadFile, deleteFile } = require("./upload.service");
 const NotificationEventManager = require("../utils/notification.events");
 const { sendMaintenanceCompletionReminder } = require("./mail.service");
 const firebase = require("../config/firebase");
+const messagingService = require("./messaging.service");
+const MaintenanceForward = require("../models/maintenance.forward.model");
+const { normalizePhone, maskPhone } = require("../utils/phone");
 
 const createMaintenanceRequest = async (tenantId, requestData, file = null) => {
     const connection = await db.getConnection();
@@ -295,21 +298,19 @@ const checkAndSendCompletionReminders = async () => {
                     );
                 }
 
-                // Also send email reminder as fallback
+                // WhatsApp -> SMS -> e-mail (the dedicated e-mail is used if the chain reaches e-mail right away)
                 try {
-                    const { sendMaintenanceCompletionReminder: sendReminderEmail } = require("./mail.service");
-                    await sendReminderEmail(
-                        request.tenant_email,
-                        request.tenant_name,
-                        {
-                            id: request.id,
-                            issue_type: request.issue_type,
-                            room_number: request.room_number,
-                            pg_name: request.pg_name
-                        }
-                    );
-                } catch (emailError) {
-                    console.error("Failed to send reminder email:", emailError);
+                    await messagingService.sendMessage({
+                        userId: request.tenant_id, userType: "tenant", name: request.tenant_name, email: request.tenant_email,
+                        type: "reminder", title: "Is your maintenance completed?",
+                        body: `Your ${request.issue_type} request (room ${request.room_number}) is in progress.\nIf the work is done, please mark it as completed in the Livinkey app.`,
+                        richEmail: () => sendMaintenanceCompletionReminder(
+                            request.tenant_email, request.tenant_name,
+                            { id: request.id, issue_type: request.issue_type, room_number: request.room_number, pg_name: request.pg_name }
+                        ),
+                    });
+                } catch (msgError) {
+                    console.error("Failed to send maintenance reminder message:", msgError.message);
                 }
 
                 // Mark reminder as sent
@@ -340,6 +341,85 @@ const checkAndSendCompletionReminders = async () => {
         connection.release();
     }
 };
+
+
+// ============================================================
+// Forward the details of a request to ANY phone number (plumber, electrician, caretaker ...).
+// Sent from the server over WhatsApp, falling back to SMS - never through the admin's own phone.
+// ============================================================
+const STATUS_LABELS = { pending: "Pending", in_progress: "In progress", completed: "Completed" };
+
+const forwardRequest = async (requestId, { phone, countryCode = null, name = null, note = null, markInProgress = false }, admin = {}, req = null) => {
+    const to = normalizePhone(phone, countryCode);
+    if (!to) {
+        throw Object.assign(new Error("Enter a valid phone number including the country code (for example +91 98765 43210)."), { status: 400 });
+    }
+
+    const request = await MaintenanceModel.getRequestById(requestId);
+    if (!request) throw Object.assign(new Error("Maintenance request not found"), { status: 404 });
+
+    // Accurate details: the tenant's international number and the PG the ROOM belongs to
+    const [[tenantRow]] = await db.execute(`SELECT country_code FROM tenants WHERE id = ? LIMIT 1`, [request.tenant_id]);
+    const tenantPhone = normalizePhone(request.tenant_phone, tenantRow?.country_code) || request.tenant_phone || null;
+    const [[roomRow]] = await db.execute(
+        `SELECT p.name AS pg_name FROM rooms r LEFT JOIN floors fl ON fl.id = r.floor_id LEFT JOIN pgs p ON p.id = fl.pg_id WHERE r.id = ? LIMIT 1`,
+        [request.room_id]
+    );
+
+    const cleanName = name ? String(name).trim().slice(0, 80) : null;
+    const cleanNote = note ? String(note).trim().slice(0, 300) : null;
+
+    const forwardId = await MaintenanceForward.create({ request_id: request.id, admin_id: admin.id || null, to_phone: to, to_name: cleanName, note: cleanNote });
+
+    const result = await messagingService.sendToNumber({
+        phone: to,
+        name: cleanName,
+        type: "maintenance_forward",
+        forwardId,
+        data: {
+            id: request.id,
+            issueType: request.issue_type,
+            pgName: roomRow?.pg_name || request.pg_name || null,
+            roomNumber: request.room_number,
+            tenantName: request.tenant_name,
+            tenantPhone,
+            serviceDate: request.service_date,
+            freeTime: request.free_time,
+            statusLabel: STATUS_LABELS[request.status] || request.status,
+            description: request.description,
+            imageUrl: request.image_url,
+            note: cleanNote,
+            senderName: admin.name || null,
+            recipientName: cleanName,
+        },
+    });
+
+    let statusUpdated = false;
+    let statusWarning = null;
+    if (result.ok && markInProgress && request.status === "pending") {
+        try {
+            await updateRequestStatus(request.id, "in_progress");
+            statusUpdated = true;
+        } catch (e) {
+            statusWarning = "The message was sent, but the request could not be marked In Progress.";
+        }
+    }
+
+    if (req) {
+        try {
+            const ActivityService = require("./activity.log.service");
+            ActivityService.adminAction(req, "maintenance_forwarded", "maintenance", {
+                entityType: "maintenance_request", entityId: request.id,
+                metadata: { to: maskPhone(to), channel: result.channel, ok: result.ok },
+            });
+        } catch { /* activity log is best-effort */ }
+    }
+
+    return { forward_id: forwardId, ...result, status_updated: statusUpdated, warning: statusWarning };
+};
+
+const getForwards = async (requestId) => MaintenanceForward.listByRequest(requestId);
+const getRecentForwardRecipients = async () => MaintenanceForward.recentRecipients();
 
 const deleteRequest = async (requestId) => {
     const connection = await db.getConnection();
@@ -386,5 +466,8 @@ module.exports = {
     updateRequestStatus,
     completeRequestByTenant,        // NEW
     checkAndSendCompletionReminders, // NEW
-    deleteRequest
+    deleteRequest,
+    forwardRequest,
+    getForwards,
+    getRecentForwardRecipients
 };
